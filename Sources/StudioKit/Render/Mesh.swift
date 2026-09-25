@@ -391,6 +391,96 @@ enum MeshFactory {
         return (vertices, indices)
     }
 
+    /// A piece moved into place: positions by `transform`, normals by its inverse
+    /// transpose. The transform mustn't mirror, or the winding would turn inside out.
+    static func placed(_ piece: ([Vertex], [UInt16]), _ transform: float4x4) -> ([Vertex], [UInt16]) {
+        let normals = Mat.normalMatrix(transform)
+        let vertices = piece.0.map { v -> Vertex in
+            let p = transform * Vec4(v.position, 1)
+            let direction = normals * v.normal
+            return Vertex(position: Vec3(p.x, p.y, p.z),
+                          normal: length(direction) > 1e-8 ? normalize(direction) : v.normal)
+        }
+        return (vertices, piece.1)
+    }
+
+    /// Several pieces as one mesh.
+    static func merged(_ pieces: [([Vertex], [UInt16])]) -> ([Vertex], [UInt16]) {
+        var vertices: [Vertex] = []
+        var indices: [UInt16] = []
+        for piece in pieces {
+            let base = UInt16(vertices.count)
+            vertices += piece.0
+            indices += piece.1.map { $0 + base }
+        }
+        return (vertices, indices)
+    }
+
+    /// `roundedBox` with texture coordinates on Roblox's clothing template: each face's
+    /// grid is mapped onto its region, the rounded rows included, so a shirt or pants
+    /// picture wraps the body part as it does in Roblox.
+    static func clothedBox(size: Vec3, radius: Float, regions: ClothingTemplate.Regions, steps: Int = 4)
+        -> (vertices: [Vertex], indices: [UInt32], uvs: [SIMD2<Float>]) {
+        let (vertices, indices) = roundedBox(size: size, radius: radius, steps: steps)
+        // `roundedBox` lays out each face as a grid of (2 × (steps + 1))² vertices, the
+        // faces in this order; the unrounded point is found again from the grid.
+        let half = size * 0.5
+        let faces: [SIMD3<Int>] = [SIMD3(0, 0, 1), SIMD3(0, 0, -1), SIMD3(1, 0, 0), SIMD3(-1, 0, 0),
+                                   SIMD3(0, 1, 0), SIMD3(0, -1, 0)]
+        let perFace = vertices.count / faces.count
+        var uvs: [SIMD2<Float>] = []
+        uvs.reserveCapacity(vertices.count)
+        for (index, vertex) in vertices.enumerated() {
+            let normal = faces[min(index / perFace, faces.count - 1)]
+            let n = Vec3(Float(normal.x), Float(normal.y), Float(normal.z))
+            // Onto the face's plane: the rounding only ever pulls a point inwards.
+            let p = simd_clamp(vertex.position, -half, half) * (Vec3(repeating: 1) - abs(n)) + n * half
+            uvs.append(ClothingTemplate.uv(p, normal: normal, half: half, region: regions[normal] ?? .zero))
+        }
+        return (vertices, indices.map(UInt32.init), uvs)
+    }
+
+    /// Where a face picture goes: a patch over the front of `head()`, following its
+    /// curve (the rounded rims included) a hair's breadth above it, with texture
+    /// coordinates from the top-left as the face is seen.
+    static func faceDecal(radius R: Float = 0.62, height: Float = 1.25, bevel: Float = 0.28,
+                          halfAngle: Float = 55 * .pi / 180, top: Float = 0.5, bottom: Float = -0.5,
+                          columns: Int = 16, rows: Int = 12)
+        -> (vertices: [Vertex], indices: [UInt32], uvs: [SIMD2<Float>]) {
+        let h = height * 0.5
+        var vertices: [Vertex] = [], uvs: [SIMD2<Float>] = [], indices: [UInt32] = []
+        for row in 0...rows {
+            let v = Float(row) / Float(rows)
+            let y = top + (bottom - top) * v
+            // The head's radius at this height, and how its surface leans there.
+            var r = R, lean: Float = 0
+            let rim = abs(y) - (h - bevel)
+            if rim > 0 {
+                let phi = asin(min(rim / bevel, 1))
+                r = R - bevel + bevel * cos(phi)
+                lean = y > 0 ? phi : -phi
+            }
+            for column in 0...columns {
+                let u = Float(column) / Float(columns)
+                // u = 0 is the character's right (+X), as a picture of a face is seen.
+                let theta = halfAngle - 2 * halfAngle * u
+                let out = Vec3(sin(theta), 0, -cos(theta))
+                let normal = normalize(out * cos(lean) + Vec3(0, sin(lean), 0))
+                vertices.append(Vertex(position: out * r + Vec3(0, y, 0) + normal * 0.006, normal: normal))
+                uvs.append(SIMD2(u, v))
+            }
+        }
+        let stride = UInt32(columns + 1)
+        for row in 0..<UInt32(rows) {
+            for column in 0..<UInt32(columns) {
+                let a = row * stride + column, b = a + stride
+                // Counter-clockwise as the face is seen (its left is +X).
+                indices += [a, b + 1, a + 1, a, b, b + 1]
+            }
+        }
+        return (vertices, indices, uvs)
+    }
+
     /// Large ground quad for the procedural grid.
     static func groundQuad(extent: Float = 2000) -> ([Vertex], [UInt16]) {
         let n = Vec3(0, 1, 0)

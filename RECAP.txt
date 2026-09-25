@@ -14,7 +14,7 @@ Everything is one Swift package. There is no Xcode on the build machine, only th
 HOW TO CHECK THAT EVERYTHING STILL WORKS
 
 Run all the automatic checks:  swift run StudioApp --selftest
-They must all pass before any change counts as done (1894 checks at the end of this session, all passing).
+They must all pass before any change counts as done (1943 checks at the end of this session, all passing).
 Build the two apps:  ./make_app.sh release
 AGENTS.md explains how the code is organised and the rules that are easy to break. Read it first.
 README.md is the guide for people using the apps.
@@ -208,6 +208,17 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Drawn with shadows and ray tracing like other parts. Meshes are drawn two-sided.
    Tested alone and with a host and a joined player (the joiner walks through a Precise arch on their own machine and sees a MeshPart a host script makes).
    New files: Model/MeshGeometry.swift, Model/TriangleSet.swift, Model/SceneModel+Mesh.swift, UI/MeshUI.swift, MeshSelfTest.swift.
+
+18. What characters wear, 2026-09-25.
+   Characters can wear a face, a shirt, pants and up to 10 accessories (hats, hair, glasses, scarf, medal, backpack, cape, belt and more).
+   Players choose theirs in the client's Character screen, which now has a 3D preview you can drag round and tabs for Colours, Face, Clothes and Accessories. It is saved, and other players see it in network games.
+   Places set theirs in Studio: StarterPlayer > Avatar, with a preview. A place can also use its own imported pictures (faces, shirts, pants) and 3D models (accessories, with where they go, colour, picture, offset, rotation and scale). The place's face, shirt and pants replace the player's where set, and its accessories are added. A tick box makes everyone wear only the place's look.
+   Shirts and pants use Roblox's classic clothing template (585 x 559), so real Roblox templates work.
+   The built-in catalog (12 accessories, 9 faces, 6 shirts, 5 pants) is drawn in code, so it needs no files.
+   Luau: Accessory (Instance.new, AddAccessory, Parent = character, MeshId, TextureID, Color, AccessoryType, Offset, Rotation, Scale), Shirt.ShirtTemplate, Pants.PantsTemplate, Head.face.Texture, HumanoidDescription (GetAppliedDescription, ApplyDescription), GetAccessories, RemoveAccessories. Wren has none of this yet.
+   Drawn with shadows and ray tracing, following the body as it moves, turns and falls.
+   Tested alone and with a host and a joined player: each sees the other's look, and a host script dressing the joined player works and reads back at once.
+   New files: Model/AvatarLook.swift, Model/AvatarCatalog.swift, Render/AvatarWardrobe.swift, UI/AvatarPreview.swift, UI/AvatarLookEditor.swift, WardrobeSelfTest.swift.
 
 
 THINGS TO KNOW

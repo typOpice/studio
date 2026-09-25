@@ -306,6 +306,9 @@ enum LuauAPI {
             method("Move", "direction, relativeToCamera", "()"), method("MoveTo", "position", "()"),
             method("TakeDamage", "amount", "()"), method("GetState", "", "EnumItem"),
             method("EquipTool", "tool", "()"), method("UnequipTools", "", "()"),
+            method("AddAccessory", "accessory", "()"), method("GetAccessories", "", "table"),
+            method("RemoveAccessories", "", "()"), method("GetAppliedDescription", "", "HumanoidDescription"),
+            method("ApplyDescription", "description", "()"),
             property("Sit", "boolean"), property("SeatPart", "Part"), property("Seated", "RBXScriptSignal"),
             method("ChangeState", "state", "boolean"), method("IsA", "className", "boolean"),
             property("Animator", "Animator"),
@@ -453,6 +456,33 @@ enum LuauAPI {
             property("Resumed", "RBXScriptSignal"), property("Loaded", "RBXScriptSignal"),
             method("Play", "", "()"), method("Stop", "", "()"), method("Pause", "", "()"),
             method("Resume", "", "()"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "Accessory": [
+            property("Name", "string"), property("AccessoryType", "EnumItem"), property("MeshId", "string"),
+            property("TextureID", "string"), property("Color", "Color3"), property("Offset", "Vector3"),
+            property("Rotation", "Vector3"), property("Scale", "number"), property("Parent", "Model"),
+            method("Destroy", "", "()"), method("Clone", "", "Accessory"), method("IsA", "className", "boolean")
+        ],
+        "Shirt": [
+            property("ShirtTemplate", "string"), property("Parent", "Model"),
+            method("Destroy", "", "()"), method("Clone", "", "Shirt"), method("IsA", "className", "boolean")
+        ],
+        "Pants": [
+            property("PantsTemplate", "string"), property("Parent", "Model"),
+            method("Destroy", "", "()"), method("Clone", "", "Pants"), method("IsA", "className", "boolean")
+        ],
+        "Decal": [
+            property("Texture", "string"), property("Parent", "Part"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "HumanoidDescription": [
+            property("Face", "string"), property("Shirt", "string"), property("Pants", "string"),
+            property("HatAccessory", "string"), property("HairAccessory", "string"), property("FaceAccessory", "string"),
+            property("NeckAccessory", "string"), property("ShouldersAccessory", "string"),
+            property("FrontAccessory", "string"), property("BackAccessory", "string"), property("WaistAccessory", "string"),
+            property("HeadColor", "Color3"), property("TorsoColor", "Color3"), property("LeftArmColor", "Color3"),
+            property("RightArmColor", "Color3"), property("LeftLegColor", "Color3"), property("RightLegColor", "Color3"),
+            method("Clone", "", "HumanoidDescription"), method("IsA", "className", "boolean")
         ],
         "SoundService": [
             method("GetChildren", "", "table"), method("FindFirstChild", "name", "Sound"),

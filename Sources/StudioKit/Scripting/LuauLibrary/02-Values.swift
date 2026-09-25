@@ -455,6 +455,7 @@ Enum = table.freeze({
 	AspectType = makeEnum("AspectType", { "FitWithinMaxSize", "ScaleWithParentSize" }),
 	DominantAxis = makeEnum("DominantAxis", { "Width", "Height" }),
 	CollisionFidelity = makeEnum("CollisionFidelity", { "Default", "Hull", "Box", "PreciseConvexDecomposition" }),
+	AccessoryType = makeEnum("AccessoryType", { "Hat", "Hair", "Face", "Neck", "Shoulder", "Front", "Back", "Waist" }),
 	MessageType = makeEnum("MessageType", { "MessageOutput", "MessageInfo", "MessageWarning", "MessageError" }),
 	Font = makeEnum("Font", {
 		"Legacy", "Arial", "ArialBold", "SourceSans", "SourceSansBold", "SourceSansLight", "Gotham", "GothamBold",

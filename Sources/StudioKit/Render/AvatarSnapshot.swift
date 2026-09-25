@@ -111,6 +111,69 @@ enum AvatarSnapshot {
         return true
     }
 
+    /// Outfits to show off the built-in catalog: face, shirt, pants and accessories.
+    static let sampleLooks: [AvatarLook] = {
+        func look(_ face: String, _ shirt: String, _ pants: String, _ accessories: [String]) -> AvatarLook {
+            var look = AvatarLook()
+            look.face = face.isEmpty ? "" : AvatarCatalog.prefix + face
+            look.shirt = shirt.isEmpty ? "" : AvatarCatalog.prefix + shirt
+            look.pants = pants.isEmpty ? "" : AvatarCatalog.prefix + pants
+            look.accessories = accessories.compactMap(AvatarAccessory.init(builtIn:))
+            return look
+        }
+        return [
+            look("", "Suit", "SuitPants", ["TopHat", "Medal"]),
+            look("Grin", "Hoodie", "Jeans", ["Cap", "Backpack"]),
+            look("Cool", "StripedTee", "Shorts", ["ShortHair"]),
+            look("Happy", "Plaid", "Joggers", ["Crown", "Cape", "Belt"]),
+            look("Wink", "Sweater", "BlackPants", ["Beanie", "Scarf"]),
+            look("Surprised", "Tee", "Jeans", ["PartyHat"]),
+        ]
+    }()
+
+    /// `StudioApp --render-looks out.png [ray] [back]`: the sample outfits side by side,
+    /// from the front (or the back).
+    static func renderLooks(to url: URL, technology: LightingTechnology, fromBehind: Bool = false,
+                            width: Int = 1800, height: Int = 800) -> Bool {
+        guard let device = MTLCreateSystemDefaultDevice() else { return false }
+        let model = SceneModel()
+        model.parts = []
+        model.scripts = []
+        model.lighting.technology = technology
+        let colors: [BodyColors] = sampleLooks.indices.map { index in
+            var colors = BodyColors()
+            let skins = [Vec3(0.96, 0.8, 0.22), Vec3(0.8, 0.56, 0.41), Vec3(0.49, 0.36, 0.27)]
+            let skin = skins[index % skins.count]
+            colors.head = skin; colors.leftArm = skin; colors.rightArm = skin
+            return colors
+        }
+        let avatars: [AvatarPose] = sampleLooks.enumerated().map { index, look in
+            var pose = AvatarPose(position: Vec3(Float(index) * 4.2 - 10.5, 0, 0), yaw: fromBehind ? 0 : .pi,
+                                  joints: poses()[0].pose.joints)
+            pose.colors = colors[index]
+            pose.look = look
+            return pose
+        }
+        var camera = Camera()
+        camera.target = Vec3(0, 2.9, 0)
+        camera.distance = 19
+        camera.yaw = fromBehind ? -.pi / 2 - 0.25 : .pi / 2 + 0.25
+        camera.pitch = 0.12
+        let source = Source(model: model, avatars: avatars, camera: camera)
+        let view = MTKView(frame: CGRect(x: 0, y: 0, width: width, height: height), device: device)
+        guard let renderer = Renderer(device: device, view: view, source: source),
+              let image = renderer.snapshot(width: width, height: height),
+              let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
+        else {
+            print("Could not render the looks.")
+            return false
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return false }
+        print("Wrote \(url.path) (\(renderer.drewRayTraced ? "ray traced" : "conventional"))")
+        return true
+    }
+
     /// `StudioApp --render-meshes out.png [ray]`: MeshParts made from 3D models written
     /// here — a torus with a checked picture on it, an arch and a cup with a block dropped
     /// in (Precise, so it lands inside) — simulated a moment and rendered.

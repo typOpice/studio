@@ -6,6 +6,19 @@ import Foundation
 struct PlayerProfile: Codable, Equatable {
     var name = "Player"
     var colors = BodyColors()
+    /// What they wear, from the built-in catalog only (a place's files stay there).
+    var look = AvatarLook()
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey { case name, colors, look }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Player"
+        colors = try c.decodeIfPresent(BodyColors.self, forKey: .colors) ?? BodyColors()
+        look = try c.decodeIfPresent(AvatarLook.self, forKey: .look) ?? AvatarLook()
+    }
 
     static let defaultsKey = "StudioPlayerProfile"
     static let longestName = 20
@@ -20,6 +33,7 @@ struct PlayerProfile: Codable, Equatable {
         guard let data = defaults.data(forKey: defaultsKey),
               var profile = try? JSONDecoder().decode(PlayerProfile.self, from: data) else { return PlayerProfile() }
         profile.name = tidy(profile.name)
+        profile.look = profile.look.builtInOnly
         return profile
     }
 
@@ -32,6 +46,7 @@ struct PlayerProfile: Codable, Equatable {
     func apply(to model: SceneModel, _ session: PlayController) {
         model.starterPlayer.bodyColors = colors
         session.playerName = Self.tidy(name)
+        session.playerLook = look.builtInOnly
     }
 
     /// Colours to choose from: a handful of Roblox's classic BrickColors.

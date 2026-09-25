@@ -54,6 +54,12 @@ struct StarterPlayerInspector: View {
 
                 Divider().overlay(Theme.stroke)
 
+                section("Avatar") {
+                    StarterPlayerAvatarSection(model: model)
+                }
+
+                Divider().overlay(Theme.stroke)
+
                 section("Camera") {
                     LabeledRow("Mode") {
                         Picker("", selection: Binding(

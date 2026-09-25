@@ -83,6 +83,7 @@ final class AnimationEditor: ObservableObject {
         guard isEditing else { return nil }
         var pose = AvatarPose(position: rigPosition ?? .zero, yaw: 0, joints: pose)
         pose.colors = model.starterPlayer.bodyColors
+        pose.look = model.starterPlayer.look
         pose.highlighted = selectedJoint?.bodyPart
         return pose
     }

@@ -14,6 +14,8 @@ local newAnimation
 -- The screen's GUI objects and chat, filled in by the GUI part: one table, declared here
 -- so Instance.new can make them.
 local gui = {}
+-- Accessories, Shirt, Pants and HumanoidDescription, filled in by the player part.
+local avatarKit = {}
 
 Instance = table.freeze({
 	new = function(className, parent)
@@ -22,6 +24,9 @@ Instance = table.freeze({
 		end
 		if className == "Animation" then
 			return newAnimation()
+		end
+		if avatarKit.classes ~= nil and avatarKit.classes[className] then
+			return avatarKit.new(className, parent)
 		end
 		if className == "Attachment" then
 			local partId = if parent ~= nil then partIdOf[parent] else nil

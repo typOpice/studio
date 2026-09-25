@@ -11,7 +11,7 @@ enum LAN {
     /// The Bonjour service type. It must also be in each app's `NSBonjourServices`.
     static let serviceType = "_studioplay._tcp"
     /// Bumped whenever the messages change; hosts refuse players on another version.
-    static let protocolVersion = 11
+    static let protocolVersion = 12
     /// How often each player says where they are.
     static let updatesPerSecond: Double = 20
     /// A scene is one message; this is far above any real one.
@@ -118,6 +118,8 @@ struct PlayerState: Codable, Equatable {
     var id: Int
     var name: String
     var colors: BodyColors
+    /// What they wear.
+    var look = AvatarLook()
     /// Where the feet are.
     var position: Vec3
     var yaw: Float

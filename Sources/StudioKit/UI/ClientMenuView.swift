@@ -141,7 +141,7 @@ struct ClientMenuView: View {
             .padding(.leading, 60)
 
             VStack(spacing: 14) {
-                BodyFigure(colors: session.profile.colors, unit: 34)
+                AvatarPreview(look: session.profile.look, colors: session.profile.colors, width: 240, height: 320)
                 Text(session.profile.name).font(.system(size: 16, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
@@ -156,6 +156,7 @@ struct MenuButton: View {
     let title: String
     let icon: String
     var prominent = false
+    var width: CGFloat = 290
     let action: () -> Void
 
     var body: some View {
@@ -166,7 +167,7 @@ struct MenuButton: View {
                 Spacer()
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
-            .frame(width: 290)
+            .frame(width: width)
             .background(RoundedRectangle(cornerRadius: 10)
                 .fill(prominent ? Theme.accent : Color.white.opacity(0.08)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.1), lineWidth: 1))
@@ -219,60 +220,194 @@ struct BodyFigure: View {
     }
 }
 
-/// Character customization: a name, and a colour for each body part.
+/// Character customization: a name, body colours, a face, clothes and accessories —
+/// the built-in catalog — shown on the character itself, which can be turned round.
 struct CharacterEditorView: View {
     @ObservedObject var session: ClientSession
     @State private var part = "Torso"
     @State private var name = ""
+    @State private var tab = CharacterEditorView.startingTab
+    /// The tab it opens on (the window snapshots show another).
+    static var startingTab = Tab.colours
+    /// The accessory whose colour the palette changes: the one last put on.
+    @State private var colouring: String?
+
+    enum Tab: String, CaseIterable, Identifiable {
+        case colours = "Colours", face = "Face", clothes = "Clothes", accessories = "Accessories"
+        var id: String { rawValue }
+    }
+
+    private var look: AvatarLook { session.profile.look }
 
     var body: some View {
-        HStack(spacing: 60) {
-            BodyFigure(colors: session.profile.colors, unit: 48, selected: part) { part = $0 }
+        HStack(alignment: .top, spacing: 48) {
+            VStack(spacing: 10) {
+                AvatarPreview(look: look, colors: session.profile.colors, width: 300, height: 420)
+                Text("Drag to turn").font(.system(size: 11)).foregroundStyle(.white.opacity(0.45))
+            }
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text("Character").font(.system(size: 30, weight: .bold))
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("NAME").font(.system(size: 10, weight: .bold)).tracking(1).foregroundStyle(.white.opacity(0.6))
+                    heading("NAME")
                     TextField("Player", text: $name, onCommit: commitName)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 260)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(part.uppercased()) COLOUR").font(.system(size: 10, weight: .bold)).tracking(1)
-                        .foregroundStyle(.white.opacity(0.6))
-                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 8), count: 6), spacing: 8) {
-                        ForEach(PlayerProfile.palette, id: \.name) { swatch in
-                            let chosen = session.profile.colors[part] == swatch.color
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill(Color(vec: swatch.color))
-                                .frame(width: 34, height: 34)
-                                .overlay(RoundedRectangle(cornerRadius: 7)
-                                    .stroke(chosen ? Color.white : Color.white.opacity(0.15), lineWidth: chosen ? 3 : 1))
-                                .onTapGesture { session.profile.colors[part] = swatch.color }
-                                .help(swatch.name)
-                        }
-                    }
-                    Text("Click a body part on the left, then a colour.")
-                        .font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                Picker("", selection: $tab) {
+                    ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 400)
+
+                Group {
+                    switch tab {
+                    case .colours: colours
+                    case .face: faces
+                    case .clothes: clothes
+                    case .accessories: accessories
+                    }
+                }
+                .frame(width: 420, height: 300, alignment: .topLeading)
 
                 HStack(spacing: 10) {
-                    MenuButton(title: "Done", icon: "checkmark", prominent: true) {
+                    MenuButton(title: "Done", icon: "checkmark", prominent: true, width: 140) {
                         commitName()
                         session.screen = .menu
                     }
-                    .frame(width: 140)
                     Button("Reset colours") { session.profile.colors = BodyColors() }
+                        .buttonStyle(.plain).foregroundStyle(.white.opacity(0.7))
+                    Button("Take everything off") { session.profile.look = AvatarLook() }
                         .buttonStyle(.plain).foregroundStyle(.white.opacity(0.7))
                 }
             }
         }
+        .padding(.top, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(.white)
         .background(MenuBackground())
         .onAppear { name = session.profile.name }
+    }
+
+    private func heading(_ text: String) -> some View {
+        Text(text).font(.system(size: 10, weight: .bold)).tracking(1).foregroundStyle(.white.opacity(0.6))
+    }
+
+    private func palette(chosen: Vec3?, pick: @escaping (Vec3) -> Void) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(30), spacing: 7), count: 8), spacing: 7) {
+            ForEach(PlayerProfile.palette, id: \.name) { swatch in
+                let isChosen = chosen == swatch.color
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(vec: swatch.color))
+                    .frame(width: 30, height: 30)
+                    .overlay(RoundedRectangle(cornerRadius: 6)
+                        .stroke(isChosen ? Color.white : Color.white.opacity(0.15), lineWidth: isChosen ? 3 : 1))
+                    .onTapGesture { pick(swatch.color) }
+                    .help(swatch.name)
+            }
+        }
+    }
+
+    /// A choice in a grid: a picture (or symbol), a name, and whether it's on.
+    private func tile(_ title: String, image: NSImage?, symbol: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Group {
+                    if let image {
+                        Image(nsImage: image).resizable().interpolation(.high)
+                    } else {
+                        Image(systemName: symbol).font(.system(size: 22))
+                    }
+                }
+                .frame(width: 48, height: 48)
+                Text(title).font(.system(size: 10)).lineLimit(1)
+            }
+            .frame(width: 72, height: 78)
+            .background(RoundedRectangle(cornerRadius: 9).fill(on ? Theme.accent.opacity(0.55) : Color.white.opacity(0.07)))
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(on ? Color.white : Color.white.opacity(0.1), lineWidth: on ? 2 : 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var grid: [GridItem] { Array(repeating: GridItem(.fixed(72), spacing: 8), count: 5) }
+
+    private var colours: some View {
+        HStack(alignment: .top, spacing: 24) {
+            BodyFigure(colors: session.profile.colors, unit: 26, selected: part) { part = $0 }
+            VStack(alignment: .leading, spacing: 8) {
+                heading("\(part.uppercased()) COLOUR")
+                palette(chosen: session.profile.colors[part]) { session.profile.colors[part] = $0 }
+                Text("Click a body part, then a colour.").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+            }
+        }
+    }
+
+    private var faces: some View {
+        LazyVGrid(columns: grid, alignment: .leading, spacing: 8) {
+            ForEach(AvatarCatalog.faces, id: \.id) { face in
+                let reference = face.id == AvatarCatalog.classicFace ? "" : AvatarCatalog.prefix + face.id
+                tile(face.name, image: AvatarThumbnails.face(reference),
+                     symbol: face.id == "None" ? "circle.slash" : "face.smiling", on: look.face == reference) {
+                    session.profile.look.face = reference
+                }
+            }
+        }
+    }
+
+    private var clothes: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                heading("SHIRT")
+                LazyVGrid(columns: grid, alignment: .leading, spacing: 8) {
+                    tile("None", image: nil, symbol: "circle.slash", on: look.shirt.isEmpty) { session.profile.look.shirt = "" }
+                    ForEach(AvatarCatalog.shirts, id: \.id) { shirt in
+                        let reference = AvatarCatalog.prefix + shirt.id
+                        tile(shirt.name, image: AvatarThumbnails.clothing(reference, pants: false), symbol: "tshirt",
+                             on: look.shirt == reference) { session.profile.look.shirt = reference }
+                    }
+                }
+                heading("PANTS")
+                LazyVGrid(columns: grid, alignment: .leading, spacing: 8) {
+                    tile("None", image: nil, symbol: "circle.slash", on: look.pants.isEmpty) { session.profile.look.pants = "" }
+                    ForEach(AvatarCatalog.pants, id: \.id) { pants in
+                        let reference = AvatarCatalog.prefix + pants.id
+                        tile(pants.name, image: AvatarThumbnails.clothing(reference, pants: true), symbol: "figure.walk",
+                             on: look.pants == reference) { session.profile.look.pants = reference }
+                    }
+                }
+            }
+        }
+    }
+
+    private var accessories: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            LazyVGrid(columns: grid, alignment: .leading, spacing: 8) {
+                ForEach(AvatarCatalog.accessories, id: \.id) { entry in
+                    let item = AvatarCatalog.prefix + entry.id
+                    let worn = look.accessories.contains { $0.item == item }
+                    tile(entry.name, image: nil, symbol: entry.icon, on: worn) {
+                        if worn {
+                            session.profile.look.accessories.removeAll { $0.item == item }
+                            if colouring == item { colouring = nil }
+                        } else if let accessory = AvatarAccessory(builtIn: entry.id),
+                                  look.accessories.count < AvatarLook.mostAccessories {
+                            session.profile.look.accessories.append(accessory)
+                            colouring = item
+                        }
+                    }
+                }
+            }
+            if let item = colouring, let index = look.accessories.firstIndex(where: { $0.item == item }) {
+                heading("\(look.accessories[index].name.uppercased()) COLOUR")
+                palette(chosen: look.accessories[index].color) { session.profile.look.accessories[index].color = $0 }
+            } else {
+                Text("Click to put something on or take it off. Up to \(AvatarLook.mostAccessories).")
+                    .font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+            }
+        }
     }
 
     private func commitName() {

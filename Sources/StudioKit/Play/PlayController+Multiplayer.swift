@@ -13,6 +13,7 @@ extension PlayController {
             let shown = shownRemote[remote.id] ?? (remote.position, remote.yaw)
             var other = AvatarPose(position: shown.position, yaw: shown.yaw, joints: remote.joints)
             other.colors = remote.colors
+            other.look = remote.look
             other.dead = remote.dead
             return other
         }
@@ -82,7 +83,7 @@ extension PlayController {
 
     /// This player's character as the others should see it.
     func networkState(name: String) -> PlayerState {
-        PlayerState(id: 0, name: name, colors: bodyColors, position: character.position,
+        PlayerState(id: 0, name: name, colors: bodyColors, look: look, position: character.position,
                     yaw: character.facingYaw, joints: currentJoints, dead: humanoid.isDead,
                     generation: characterGeneration, health: humanoid.health, maxHealth: humanoid.maxHealth,
                     walkSpeed: humanoid.walkSpeed, jumpPower: humanoid.jumpPower, state: humanoid.state.rawValue,
@@ -215,8 +216,12 @@ extension PlayController {
                 return .triple(size.x, size.y, size.z)
             default: return .nothing
             }
+        case "look.get":
+            guard let remote else { return AvatarLook().scriptValue }
+            let reported = remote.look.scriptValue
+            return pendingWrite("look", owner: owner, number: number, reported: reported) ?? reported
         case "humanoid.set", "humanoid.damage", "humanoid.move", "humanoid.moveTo", "humanoid.state",
-             "root.set", "body.set", "character.moveTo":
+             "root.set", "body.set", "character.moveTo", "look.set":
             // Only the host runs the scene's scripts, so only the host sends these on.
             guard current, !worldFromHost, let forward = forwardToPlayer else {
                 return name == "humanoid.state" ? .bool(false) : .nothing
@@ -357,6 +362,17 @@ extension PlayController {
         case "root.set":
             guard key == "position", arguments.count >= 3, arguments[2].asTriple != nil else { return }
             writes = [("root.position", arguments[2])]
+        case "look.set":
+            // What they'll wear once their game has it: the change made to what they
+            // wear now (or to the last change still on its way).
+            guard arguments.count >= 3 else { return }
+            var look = remote.look
+            if let pending = pendingWrite("look", owner: owner, number: number, reported: remote.look.scriptValue),
+               let known = AvatarLook(scriptValue: pending) {
+                look = known
+            }
+            guard look.set(key, arguments[2]) else { return }
+            writes = [("look", look.scriptValue)]
         default:
             return
         }

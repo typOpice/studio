@@ -65,6 +65,11 @@ final class PlayController: ViewportSource, PlayerBridge {
     /// player's profile before `start()`.
     var playerName = "Player"
     var bodyTransparency: [String: Float] = [:]
+    /// The player's own look, from their profile: the client sets it before `start()`.
+    /// Studio's play test has none, so characters wear StarterPlayer's.
+    var playerLook: AvatarLook?
+    /// What this character wears now; scripts may change it.
+    var look = AvatarLook()
 
     var gravity: Float = CharacterController.gravity
     var respawnTime: Float
@@ -203,6 +208,7 @@ final class PlayController: ViewportSource, PlayerBridge {
                               joints: currentJoints,
                               hidden: camera.isFirstPerson)
         pose.colors = bodyColors
+        pose.look = look
         pose.transparency = bodyTransparency
         pose.dead = humanoid.isDead
         return [pose] + remoteAvatars
@@ -568,6 +574,7 @@ final class PlayController: ViewportSource, PlayerBridge {
         animationPlayer.removeAll()
         humanoid = Humanoid(settings: settings)
         bodyColors = settings.bodyColors
+        look = settings.look.worn(by: playerLook, playersWearOwn: settings.playersWearOwnLook)
         bodyTransparency = [:]
         lastReportedRunSpeed = 0
         character.chooseSpawn(in: model.parts)

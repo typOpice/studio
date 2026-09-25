@@ -16,6 +16,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         /// A MeshPart with a TextureID.
         let textured: MTLRenderPipelineState
         let texturedBlend: MTLRenderPipelineState
+        /// A body part in a shirt or pants.
+        let clothed: MTLRenderPipelineState
+        let clothedBlend: MTLRenderPipelineState
     }
     private var litPipelines: [Bool: LitPipelines] = [:]
     /// This frame's variant.
@@ -63,6 +66,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// The avatar's meshes, built at the body parts' real sizes.
     private var avatarMeshes: [String: Mesh] = [:]
     private var faceMesh: Mesh!
+    /// Accessories, clothes and face pictures.
+    private var wardrobe: AvatarWardrobe!
 
     unowned var source: ViewportSource
     private(set) var viewportSize = SIMD2<Float>(1, 1)
@@ -107,6 +112,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             return nil
         }
         buildMeshes()
+        guard let wardrobe = AvatarWardrobe(device: device, queue: queue) else { return nil }
+        self.wardrobe = wardrobe
+        rayMeshes += wardrobe.accessorySources
         if rayTracingSupported {
             rayTracing = RayTracingScene(device: device, meshes: rayMeshes)
             if rayTracing == nil { NSLog("Ray tracing unavailable: acceleration structures failed to build") }
@@ -201,7 +209,11 @@ final class Renderer: NSObject, MTKViewDelegate {
                 textured: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_textured",
                                            blending: false, rayTraced: rayTraced),
                 texturedBlend: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_textured",
-                                                blending: true, rayTraced: rayTraced))
+                                                blending: true, rayTraced: rayTraced),
+                clothed: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_clothed",
+                                          blending: false, rayTraced: rayTraced),
+                clothedBlend: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_clothed",
+                                               blending: true, rayTraced: rayTraced))
         }
         lit = litPipelines[false]
         flatPipeline = try makePipeline(vertex: "scene_vertex", fragment: "flat_fragment", blending: false)
@@ -715,6 +727,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             where (avatar.transparency[name] ?? 0) < 0.5 {
                 if let mesh = avatarMeshes[name] { casters.append((mesh, matrix)) }
             }
+            for worn in accessories(of: avatar, model: model) where (avatar.transparency[worn.part] ?? 0) < 0.5 {
+                casters.append((worn.mesh, worn.matrix))
+            }
         }
         return casters
     }
@@ -760,6 +775,10 @@ final class Renderer: NSObject, MTKViewDelegate {
                                        color: avatar.colors[name] ?? Vec3(repeating: 0.6),
                                        shading: Vec4(0.22, 22, 0, 0), mask: RayTracingScene.maskSolid))
             }
+            for worn in accessories(of: avatar, model: model) where (avatar.transparency[worn.part] ?? 0) < 0.5 {
+                instances.append(.init(mesh: worn.rayName, transform: worn.matrix, color: worn.accessory.color,
+                                       shading: Vec4(0.22, 22, 0, 0), mask: RayTracingScene.maskSolid))
+            }
         }
         return instances
     }
@@ -793,7 +812,11 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// A MeshPart's mesh on the GPU, made the first time it's drawn — and handed to the
     /// ray tracer too; nil for other parts, and for a mesh whose file is missing.
     private func assetMesh(for part: Part) -> Mesh? {
-        guard let asset = part.mesh?.asset, let geometry = MeshLibrary.shared.geometry(asset) else { return nil }
+        part.mesh?.asset.flatMap(assetMesh)
+    }
+
+    private func assetMesh(_ asset: UUID) -> Mesh? {
+        guard let geometry = MeshLibrary.shared.geometry(asset) else { return nil }
         if let known = assetMeshes[asset] { return known }
         let vertices = zip(geometry.positions, geometry.normals).map { Vertex(position: $0, normal: $1) }
         guard let mesh = Mesh(device: device, vertices: vertices, indices: geometry.indices, uvs: geometry.uvs) else {
@@ -809,8 +832,11 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     /// A MeshPart's TextureID as a texture, loaded once per picture.
     private func texture(for part: Part, model: SceneModel) -> MTLTexture? {
-        guard let name = part.mesh?.textureId, !name.isEmpty,
-              let asset = model.asset(named: name), asset.kind == .image else { return nil }
+        texture(named: part.mesh?.textureId ?? "", model: model)
+    }
+
+    private func texture(named name: String, model: SceneModel) -> MTLTexture? {
+        guard !name.isEmpty, let asset = model.asset(named: name), asset.kind == .image else { return nil }
         if let known = assetTextures[asset.id], known.size == asset.data.count { return known.texture }
         let loaded = try? MTKTextureLoader(device: device).newTexture(data: asset.data, options: [
             .SRGB: false, .generateMipmaps: true, .origin: MTKTextureLoader.Origin.topLeft,
@@ -950,10 +976,18 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// by `AvatarPose.partTransforms`.
     private func drawAvatar(_ encoder: MTLRenderCommandEncoder, avatar: AvatarPose) {
         encoder.setDepthStencilState(depthDefault)
+        let model = source.model
         for (name, matrix) in avatar.partTransforms() {
             let transparency = min(max(avatar.transparency[name] ?? 0, 0), 1)
-            guard transparency < 0.999, let mesh = avatarMeshes[name],
-                  let pipeline = transparency > 0 ? sceneBlendPipeline : scenePipeline else { continue }
+            guard transparency < 0.999, var mesh = avatarMeshes[name],
+                  var pipeline = transparency > 0 ? sceneBlendPipeline : scenePipeline, let lit else { continue }
+            // In clothes: the body part with the template's coordinates, and the picture.
+            if let clothes = wardrobe.clothing(for: avatar.look, part: name, model: model),
+               let clothed = wardrobe.clothedMesh(name) {
+                mesh = clothed
+                pipeline = transparency > 0 ? lit.clothedBlend : lit.clothed
+                encoder.setFragmentTexture(clothes, index: 3)
+            }
             encoder.setRenderPipelineState(pipeline)
 
             var draw = DrawUniforms()
@@ -969,13 +1003,86 @@ final class Renderer: NSObject, MTKViewDelegate {
             submit(encoder, mesh: mesh, uniforms: &draw)
 
             if name == "Head" {
-                var face = DrawUniforms()
-                face.model = matrix
-                face.normalMatrix = draw.normalMatrix
-                face.color = Vec4(0.08, 0.08, 0.1, 1 - transparency)
-                face.shading = Vec4(0.5, 40, 0, 0)
-                submit(encoder, mesh: faceMesh, uniforms: &face)
+                drawFace(encoder, look: avatar.look, matrix: matrix, transparency: transparency, model: model)
             }
+        }
+        drawAccessories(encoder, avatar: avatar, model: model)
+    }
+
+    /// The classic smile as shapes, or a face picture on the front of the head.
+    private func drawFace(_ encoder: MTLRenderCommandEncoder, look: AvatarLook, matrix: float4x4,
+                          transparency: Float, model: SceneModel) {
+        var face = DrawUniforms()
+        face.model = matrix
+        face.normalMatrix = Mat.normalMatrix(matrix)
+        if look.face.isEmpty {
+            guard let pipeline = transparency > 0 ? sceneBlendPipeline : scenePipeline else { return }
+            encoder.setRenderPipelineState(pipeline)
+            face.color = Vec4(0.08, 0.08, 0.1, 1 - transparency)
+            face.shading = Vec4(0.5, 40, 0, 0)
+            submit(encoder, mesh: faceMesh, uniforms: &face)
+            return
+        }
+        guard let picture = wardrobe.texture(look.face, model: model), let lit else { return }
+        encoder.setRenderPipelineState(lit.texturedBlend)
+        encoder.setFragmentTexture(picture, index: 3)
+        face.color = Vec4(1, 1, 1, 1 - transparency)
+        face.shading = Vec4(0.3, 20, 0, 0)
+        submit(encoder, mesh: wardrobe.faceDecal, uniforms: &face)
+    }
+
+    /// An accessory ready to draw: its mesh (built in or imported), where it goes, what
+    /// the ray tracer knows its mesh as, and the body part it hangs from.
+    private struct WornAccessory {
+        let accessory: AvatarAccessory
+        let part: String
+        let mesh: Mesh
+        let matrix: float4x4
+        let rayName: String
+        let imported: Bool
+    }
+
+    private func accessories(of avatar: AvatarPose, model: SceneModel) -> [WornAccessory] {
+        guard !avatar.look.accessories.isEmpty else { return [] }
+        var meshes: [String: (Mesh, String, Bool)] = [:]
+        let placed = avatar.accessoryTransforms { accessory -> Vec3?? in
+            if let id = AvatarCatalog.builtIn(accessory.item) {
+                guard let mesh = self.wardrobe.accessoryMeshes[id] else { return nil }
+                meshes[accessory.id] = (mesh, AvatarWardrobe.rayName(id), false)
+                return .some(nil)
+            }
+            guard let asset = model.asset(named: accessory.item), asset.kind == .mesh,
+                  let geometry = MeshLibrary.shared.geometry(asset.id), let mesh = self.assetMesh(asset.id) else { return nil }
+            meshes[accessory.id] = (mesh, "mesh:\(asset.id.uuidString)", true)
+            return .some(geometry.nativeSize)
+        }
+        return placed.compactMap { worn in
+            guard let (mesh, rayName, imported) = meshes[worn.accessory.id] else { return nil }
+            return WornAccessory(accessory: worn.accessory, part: worn.part, mesh: mesh, matrix: worn.matrix,
+                                 rayName: rayName, imported: imported)
+        }
+    }
+
+    private func drawAccessories(_ encoder: MTLRenderCommandEncoder, avatar: AvatarPose, model: SceneModel) {
+        guard let lit else { return }
+        for worn in accessories(of: avatar, model: model) {
+            let transparency = min(max(avatar.transparency[worn.part] ?? 0, 0), 1)
+            guard transparency < 0.999 else { continue }
+            var pipeline = transparency > 0 ? lit.blend : lit.opaque
+            if worn.imported, worn.mesh.uvBuffer != nil, let picture = texture(named: worn.accessory.textureId, model: model) {
+                pipeline = transparency > 0 ? lit.texturedBlend : lit.textured
+                encoder.setFragmentTexture(picture, index: 3)
+            }
+            encoder.setRenderPipelineState(pipeline)
+            // Imported models can be wound either way: both sides are drawn.
+            if worn.imported { encoder.setCullMode(.none) }
+            var draw = DrawUniforms()
+            draw.model = worn.matrix
+            draw.normalMatrix = Mat.normalMatrix(worn.matrix)
+            draw.color = Vec4(worn.accessory.color, 1 - transparency)
+            draw.shading = Vec4(0.3, 28, 0, 0)
+            submit(encoder, mesh: worn.mesh, uniforms: &draw)
+            if worn.imported { encoder.setCullMode(.back) }
         }
     }
 

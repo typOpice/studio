@@ -25,11 +25,18 @@ protocol PlayerBridge: AnyObject {
 /// Property names are compared case-insensitively, so Wren's `position` and
 /// Luau's `Position` reach the same thing.
 enum PlayerHost {
-    static let namespaces: Set<String> = ["player", "humanoid", "root", "body", "input", "track", "physics",
+    static let namespaces: Set<String> = ["player", "humanoid", "root", "body", "look", "input", "track", "physics",
                                           "character", "players", "gui", "chat", "backpack", "seat"]
 
     /// Calls whose first argument is a character's number — which may be another player's.
-    static let characterNamespaces: Set<String> = ["humanoid", "root", "body", "track", "character"]
+    static let characterNamespaces: Set<String> = ["humanoid", "root", "body", "track", "character", "look"]
+
+    /// A built-in accessory's type and colour, for a script that names it: `{type, {r, g, b}}`.
+    static func catalogEntry(_ arguments: [ScriptValue]) -> ScriptValue {
+        guard let reference = arguments.first?.asString, AvatarCatalog.builtIn(reference) != nil,
+              let entry = AvatarCatalog.accessory(reference) else { return .nothing }
+        return .list([.string(entry.type.rawValue), .triple(entry.color.x, entry.color.y, entry.color.z)])
+    }
 
     /// Answers when there is no play session: no character, nothing held down.
     static func withoutPlayer(_ name: String, _ arguments: [ScriptValue]) -> ScriptValue {
@@ -43,6 +50,8 @@ enum PlayerHost {
         case "character.alive": return .bool(false)
         case "character.name", "players.name": return .string("Player")
         case "character.owner": return .number(-1)
+        case "look.catalog": return catalogEntry(arguments)
+        case "look.get": return AvatarLook().scriptValue
         case "players.character": return .number(0)
         case "input.down": return .bool(false)
         case "input.mousebehavior": return .string("Default")
@@ -267,6 +276,19 @@ extension PlayController {
                 break
             }
             return .nothing
+
+        // MARK: what the character wears
+        case "look.catalog":
+            return PlayerHost.catalogEntry(arguments)
+
+        case "look.get":
+            return look.scriptValue
+
+        case "look.set":
+            // [generation, key, value]: `face`, `shirt` or `pants` and a reference, or
+            // `accessories` and the whole list.
+            guard current, arguments.count >= 3, let key = arguments[1].asString else { return .bool(false) }
+            return .bool(look.set(key, arguments[2]))
 
         // MARK: input
         case "input.down":

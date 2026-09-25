@@ -186,6 +186,11 @@ enum PanelSnapshot {
             } else {
                 model.selectedAsset = arch
             }
+        case "avatar":
+            // StarterPlayer dressed: a top hat and suit for everyone, the hat opened up.
+            session.showWorld()
+            model.starterPlayer.look = AvatarSnapshot.sampleLooks[0]
+            model.selectStarterPlayer()
         case "newscript":
             // What someone sees on adding a script to a part.
             let platform = model.parts.first { $0.name == "Platform" } ?? model.parts[0]
@@ -196,7 +201,7 @@ enum PanelSnapshot {
             session.openScript(script, line: 3)
         }
         // The Mesh section is far down Properties: a taller window shows it.
-        let size = NSRect(x: 0, y: 0, width: 1400, height: state == "mesh" ? 1500 : 880)
+        let size = NSRect(x: 0, y: 0, width: 1400, height: state == "avatar" ? 2500 : state == "mesh" ? 1500 : 880)
         let hosting = NSHostingView(rootView: ContentView(model: model, session: session))
         hosting.frame = size
         let window = NSWindow(contentRect: size, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -250,7 +255,7 @@ enum PanelSnapshot {
         return (music, logo)
     }
 
-    /// `--render-client menu|character|join|chat out.png`: a client screen, drawn off
+    /// `--render-client menu|character|faces|clothes|outfit|join|chat out.png`: a client screen, drawn off
     /// screen like `renderWindow`, for a player called Robin with a red torso. `chat` is
     /// a game in progress with the default chat open: its screen GUI over a plain sky,
     /// since the 3D view doesn't draw off screen.
@@ -263,8 +268,12 @@ enum PanelSnapshot {
         let session = ClientSession(defaults: defaults)
         session.profile.name = "Robin"
         session.profile.colors.torso = Vec3(0.77, 0.16, 0.11)
+        session.profile.look = AvatarSnapshot.sampleLooks[1]
         switch screen {
         case "character": session.screen = .character
+        case "outfit", "faces", "clothes":
+            session.screen = .character
+            CharacterEditorView.startingTab = screen == "faces" ? .face : screen == "clothes" ? .clothes : .accessories
         case "join": session.screen = .join
         case "chat":
             session.play()

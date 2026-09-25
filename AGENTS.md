@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 1894 checks — THE test suite, ~50–70s
+swift run StudioApp --selftest       # 1943 checks — THE test suite, ~50–70s
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
 ./make_app.sh release                # produce Studio.app and StudioClient.app
@@ -130,6 +130,7 @@ listed in §9.
 | `RunModeSelfTest.swift` | Studio's Run mode: no player (no character, no StarterPlayer scripts, no LocalPlayer), the editor keeping input, scripts and physics running on the editor's frames, Stop restoring; events still reaching scripts (part-to-part Touched, a Sound's Ended) |
 | `AudioSelfTest.swift` | Pictures and sounds (WAV and PNG made in memory): importing (kinds, refusals, unique names, references, rename, undo, saving); a sound file imported from disk, the place saved through `SceneDocument`, the file deleted, the place reopened, played and hosted for a joiner; Models saving their Sounds and files, and inserting them (brought, shared, renamed with Sounds and scripts following, undone); decoding and mono mixdown, fading with distance; a part's Sounds deleted and copied with it; the Luau Sound/SoundService API against a `RecordingOutput` (3D position, volume, TimePosition, Pause/Resume, Ended once, Looped, PlaybackSpeed, reach, Stop, Destroy, a Sound made in Studio playing at start, read-only and typed properties, LocalScript Sounds kept local through task.spawn and events); an ImageLabel drawing its picture (rendered and read back); the StarterGui preview's pictures; a host's Sounds heard by a joiner (same part, stopping, ending) while each machine's LocalScript Sounds stay its own |
 | `MeshSelfTest.swift` | MeshParts (OBJ, STL and PLY made in memory): decoding (triangles, size, texture coordinates, hard edges kept when a file has no normals, squeezed into the unit cube, the hull and its volume, a broken file refused); inserting (size, on the ground, too-big models rescaled, fidelity and picture undoable, Reset Size, saving, old files); an arch clicked through its opening whatever it collides as, and walked into by each CollisionFidelity (Precise lets a capsule stand in the opening, Hull and Box push it out, pillars push sideways, turned); Jolt with a cup (a block lands inside a Precise one, on top of a Hull or Box one) and an unanchored MeshPart resting and weighing its hull; drawn plain, textured and ray traced and read back; the Luau MeshPart API (Instance.new, ClassName, IsA, MeshId → MeshSize, TextureID, CollisionFidelity, the errors, Clone); saved Models carrying models and pictures and renaming a clash; a joiner getting the models, walking through a Precise arch, and seeing a host script's MeshPart |
+| `WardrobeSelfTest.swift` | What characters wear: every catalog accessory's mesh (sane size, wound outwards), faces and clothing pictures (sizes, a tee's sleeves, shorts to the knee); Roblox's clothing template on the torso, arms and hands, the face patch; a place's and a player's looks combined (own look kept or not, ten at most, built-in only for players), saving, old files, renaming a picture (and undo); accessories hung from their attachments, turning, nodding and lying down with the body, imported models by their anchor; drawn and read back (shirt over pants, pants, a top hat, a face picture in place of the smile, ray traced); in play (StarterPlayer over the player's look, afresh each character, the Animation Editor's rig); the Luau API (Accessory, AddAccessory, parenting, Shirt, Pants, Head.face, errors, GetAppliedDescription, Destroy, ApplyDescription with body colours, RemoveAccessories); the profile (kept, old profiles, applied); two players seeing each other's looks and a host script dressing a joined player, read back at once |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -226,6 +227,15 @@ Sources/StudioKit/
                                  MeshGeometry (a model decoded by Model I/O into the unit cube,
                                  with its hull) and MeshLibrary (decoded once per asset)
   Model/TriangleSet.swift        triangles with a BVH: ray casts and closest points to a segment
+  Model/AvatarLook.swift         AvatarLook (face, shirt, pants, accessories), AvatarAccessory,
+                                 AccessoryType (attachments), combining a place's and a player's,
+                                 `look.*` values, `AvatarPose.accessoryTransforms`
+  Model/AvatarCatalog.swift      the built-in accessories (meshes from shapes), faces and clothing
+                                 (drawn in code), and ClothingTemplate (Roblox's 585 × 559 layout)
+  Render/AvatarWardrobe.swift    accessory meshes, clothed body parts, the face patch, and pictures
+                                 as textures for the renderer
+  UI/AvatarPreview.swift         the avatar drawn alone (a still frame per change), thumbnails
+  UI/AvatarLookEditor.swift      StarterPlayer's Avatar section
   Model/SceneModel+Mesh.swift    inserting MeshParts and editing their mesh settings
   UI/MeshUI.swift                importing models, the ribbon's Mesh button, the Mesh section
   Play/Audio.swift               AudioOutput (SpeakerOutput: AVAudioEngine; RecordingOutput for
@@ -288,10 +298,11 @@ Sources/StudioKit/
   UI/AnimationEditorView.swift the Animation tab: toolbar, KeyframeTimeline, JointInspector
   UI/LightingView.swift       Lighting inspector, a part's PointLight editor, RenderCapabilities
   UI/PanelSnapshot.swift      `--render-panel animation|inspector|explorer|ribbon out.png`,
-                              `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture|mesh|meshasset out.png`
+                              `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture|mesh|meshasset|avatar out.png`
                               (whole window),
-                              `--render-client menu|character|join|chat out.png`;
-                              `--render-meshes out.png [ray]` (AvatarSnapshot) draws MeshParts
+                              `--render-client menu|character|faces|clothes|outfit|join|chat out.png`;
+                              `--render-meshes out.png [ray]` (AvatarSnapshot) draws MeshParts;
+                              `--render-looks out.png [ray] [back]` the sample outfits
   UI/Theme.swift          colours, NumericField, VectorEditor
 ```
 
@@ -848,7 +859,7 @@ Roughly ordered by how much time they will cost you.
     with newlines and runs them as a single chunk, so a part may use any `local` from an
     earlier part and none from a later one; moving code between parts can break that
     silently only at run time (the Luau suite catches it). **A chunk has at most 200
-    locals at its top level, and the whole library shares them: 138 are used.** Past
+    locals at its top level, and the whole library shares them: 151 are used.** Past
     200 nothing compiles, so `ScriptSelfTest` fails at 190 — before then, gather related
     locals into a table instead of adding more, as `gui`, `cframeMath`, `lights`,
     `constraintKit`, `easings`, `randoms`, `tweens` and `otherPlayers` do. A renamed
@@ -861,7 +872,7 @@ Roughly ordered by how much time they will cost you.
     `remoteCharacterCall` (PlayController+Multiplayer.swift): reads answer from the
     player's last `PlayerState` (velocity and MoveDirection included); writes
     (`humanoid.set`/`damage`/`move`/`moveTo`/`state`, `root.set`, `body.set`,
-    `character.moveTo`) go to that player as `.call` and run there as their own call.
+    `character.moveTo`, `look.set`) go to that player as `.call` and run there as their own call.
     The host also keeps each write in `pendingRemoteWrites` — Health clamped and damage
     taken off as the player's Humanoid will — and answers reads with it until the
     player's report agrees, their character changes, or 0.5 s pass, so a script reads
@@ -1021,6 +1032,26 @@ Roughly ordered by how much time they will cost you.
     `task.cancel` also takes it off every signal's `waiting` — and `__studio_kill_scope`
     drops deferred threads of a character's scope like sleeping ones. task's arguments
     are checked with `taskSeconds`/`taskThread` (Roblox's messages).
+
+94. **What a character wears is an `AvatarLook`, owned by the machine that runs the
+    character.** `PlayController.look` is set at each spawn from
+    `StarterPlayerSettings.look.worn(by: playerLook, …)` — `playerLook` is the client
+    profile's, built-in things only, since a place's imported files don't travel with
+    the player — and rides in every `PlayerState` (so others draw it; `LAN.protocolVersion`
+    went to 12 for it). Scripts read and write it through `look.get`/`look.set` (the
+    whole look as `{face, shirt, pants, {accessory…}}`; `set` takes one key), which for
+    another player go to them as `.call` with a pending write (invariant 77). The Luau
+    Accessory, Shirt, Pants, face Decal and HumanoidDescription (`avatarKit`, in the
+    player part) are views of that value, never objects of their own: a worn accessory is
+    its entry's id. Accessories hang from R6 attachments (`AccessoryType.attachment`) via
+    `AvatarPose.accessoryTransforms`: a built-in one is made at its real size around the
+    attachment point; an imported model is the unit-cube MeshGeometry stretched to its
+    native size and placed by the type's `anchor`. Clothes use the classic template: the
+    clothed body parts are `MeshFactory.clothedBox` (the same rounded boxes as the plain
+    body, with UVs per face region) drawn with `scene_fragment_clothed`, which lays the
+    premultiplied picture over the body colour; pants and shirt are layered into one
+    texture for the torso. A face picture is drawn on `faceDecal` instead of the classic
+    shape face (look.face `""`); `builtin://None` draws neither.
 
 93. **A MeshPart is a block with `Part.mesh` set, and its model is unit-sized.**
     `part.shape` stays `.block` (the fallback when the model can't be read), so switches
@@ -1215,6 +1246,13 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   corners; models over 500,000 triangles are refused; MeshId must name an imported
   model (`studio://Name`), not a Roblox asset id; no `SpecialMesh`, no
   `RenderFidelity`; Wren has no MeshPart API.
+- **What characters wear:** R6 only (no layered clothing, no 3D clothing, no packages or
+  body scaling); accessories have no Handle part — `Offset`, `Rotation` and `Scale`
+  stand in for its attachment — and don't collide or touch; one texture per imported
+  accessory; T-shirt graphics (ShirtGraphic) and Decals other than the face aren't
+  there; a player's own look is built-in things only (they can't bring their own
+  files); HumanoidDescription covers the look and body colours, not scale or
+  animations. Luau only.
 - **Run mode is Studio-only:** it has no player and no network side, so it has no
   multiplayer test; a scene script that needs `Players.LocalPlayer` gets nil there, as
   on a Roblox server.
@@ -1241,7 +1279,7 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   `Vector3.zero.Unit` is zero, not NaN.
 - **Scripts run only during play**, one fresh VM per language per session.
 - **The player:** one local player; the character's parts are not in `workspace`; no
-  accessories or `HumanoidDescription`; the body parts cannot be resized; states are
+  `HumanoidDescription` beyond what it wears and its body colours; the body parts cannot be resized; states are
   Running/Jumping/Freefall/Landed/Flying/Dead/Seated/Climbing/Swimming (no Ragdoll,
   PlatformStanding, Physics); seats are parts only (no VehicleSeat); climbing is on
   TrussParts only, not on ladders built of parts. StarterPlayer scripts are Luau-only.

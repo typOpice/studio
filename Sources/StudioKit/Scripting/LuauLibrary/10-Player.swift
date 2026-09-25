@@ -140,6 +140,10 @@ local function makeCharacter(generation)
 			if held ~= nil and held.Name == key then
 				return held
 			end
+			local worn = avatarKit.child(generation, key)
+			if worn ~= nil then
+				return worn
+			end
 			raise(string.format("%s is not a valid member of Model \"Player\"", tostring(key)), 2)
 		end,
 		__newindex = function(_, key)
@@ -166,7 +170,10 @@ local function makeCharacter(generation)
 			return part
 		end
 		local held = toolKit.held(generation)
-		return if held ~= nil and held.Name == name then held else nil
+		if held ~= nil and held.Name == name then
+			return held
+		end
+		return avatarKit.child(generation, name)
 	end
 
 	function modelMethods.FindFirstChild(_, name)
@@ -190,6 +197,9 @@ local function makeCharacter(generation)
 		if held ~= nil then
 			table.insert(children, held)
 		end
+		for _, worn in avatarKit.children(generation) do
+			table.insert(children, worn)
+		end
 		return children
 	end
 
@@ -199,7 +209,7 @@ local function makeCharacter(generation)
 		elseif className == "Tool" then
 			return toolKit.held(generation)
 		end
-		return nil
+		return avatarKit.ofClass(generation, className)
 	end
 
 	function modelMethods.IsA(_, className)
@@ -287,6 +297,8 @@ local function makeCharacter(generation)
 		checkSelf(self, "Instance", "UnequipTools")
 		invoke("backpack.unequip", generation)
 	end
+
+	avatarKit.humanoidMethods(humanoidMethods, generation)
 
 	function humanoidMethods.TakeDamage(self, amount)
 		checkSelf(self, "Instance", "TakeDamage")
@@ -444,6 +456,12 @@ local function makeCharacter(generation)
 					return invoke("body.get", generation, partName, "transparency")
 				elseif key == "Size" then
 					return toVector(invoke("body.get", generation, partName, "size"))
+				elseif key == "face" and partName == "Head" then
+					return avatarKit.face(generation)
+				elseif key == "FindFirstChild" then
+					return function(_, name)
+						return if name == "face" and partName == "Head" then avatarKit.face(generation) else nil
+					end
 				elseif key == "IsA" then
 					return function(_, className)
 						return className == "Part" or className == "BasePart" or className == "Instance"
@@ -486,6 +504,622 @@ characterFor = function(generation)
 		characters[generation] = record
 	end
 	return record
+end
+
+--------------------------------------------------------------------------------
+-- What characters wear: Accessories, a Shirt and Pants, the face, HumanoidDescription
+--
+-- The look lives in the host, as `look.get`/`look.set` see it: {face, shirt, pants,
+-- {accessory…}}, each accessory {id, name, item, type, texture, colour, offset,
+-- rotation, scale}. An Accessory Luau holds is that entry: worn, it reads and writes
+-- the character's; not worn (new, or taken off), it keeps its own copy.
+
+do
+	local accessoryState = setmetatable({}, { __mode = "k" })
+	-- Worn accessories' proxies by character and id, so the same one comes back.
+	local wornProxies = {}
+	local clothingProxies = {}
+	local faceProxies = {}
+	local serial = 0
+	local slotTypes = {
+		HatAccessory = "Hat", HairAccessory = "Hair", FaceAccessory = "Face", NeckAccessory = "Neck",
+		ShouldersAccessory = "Shoulder", FrontAccessory = "Front", BackAccessory = "Back", WaistAccessory = "Waist",
+	}
+	local slotOrder = { "HatAccessory", "HairAccessory", "FaceAccessory", "NeckAccessory", "ShouldersAccessory",
+		"FrontAccessory", "BackAccessory", "WaistAccessory" }
+	local colorSlots = { HeadColor = "Head", TorsoColor = "Torso", LeftArmColor = "Left Arm",
+		RightArmColor = "Right Arm", LeftLegColor = "Left Leg", RightLegColor = "Right Leg" }
+	local templateKey = { Shirt = "ShirtTemplate", Pants = "PantsTemplate" }
+	local noFace = "builtin://None"
+	local classicFace = "builtin://Smile"
+
+	local function look(generation)
+		return invoke("look.get", generation) or { "", "", "", {} }
+	end
+
+	local function newId()
+		serial += 1
+		return string.format("lua-%d-%d", serial, math.random(1, 1e9))
+	end
+
+	local function findEntry(generation, id)
+		for index, entry in look(generation)[4] do
+			if entry[1] == id then
+				return entry, index
+			end
+		end
+		return nil
+	end
+
+	local function setAccessories(generation, list)
+		invoke("look.set", generation, "accessories", list)
+	end
+
+	-- The entry an Accessory stands for now: the character's, while it is worn.
+	local function current(state)
+		if state.generation ~= nil then
+			local entry = findEntry(state.generation, state.entry[1])
+			if entry ~= nil and invoke("character.alive", state.generation) then
+				state.entry = entry
+			else
+				state.generation = nil
+			end
+		end
+		return state.entry
+	end
+
+	local function update(state, field, value)
+		local entry = table.clone(current(state))
+		entry[field] = value
+		state.entry = entry
+		if state.generation ~= nil then
+			local list = look(state.generation)[4]
+			for index, existing in list do
+				if existing[1] == entry[1] then
+					list[index] = entry
+				end
+			end
+			setAccessories(state.generation, list)
+		end
+	end
+
+	local function takeOff(state)
+		if state.generation == nil then
+			return
+		end
+		local list = {}
+		for _, existing in look(state.generation)[4] do
+			if existing[1] ~= state.entry[1] then
+				table.insert(list, existing)
+			end
+		end
+		setAccessories(state.generation, list)
+		local proxies = wornProxies[state.generation]
+		if proxies ~= nil then
+			proxies[state.entry[1]] = nil
+		end
+		state.generation = nil
+	end
+
+	local accessoryMethods = {}
+	local accessoryMeta
+
+	local function wrapAccessory(entry, generation)
+		if generation ~= nil then
+			local proxies = wornProxies[generation]
+			if proxies == nil then
+				proxies = {}
+				wornProxies[generation] = proxies
+			end
+			local known = proxies[entry[1]]
+			if known ~= nil then
+				return known
+			end
+		end
+		local proxy = setmetatable({}, accessoryMeta)
+		typeTags[proxy] = "Instance"
+		accessoryState[proxy] = { entry = entry, generation = generation }
+		if generation ~= nil then
+			wornProxies[generation][entry[1]] = proxy
+		end
+		return proxy
+	end
+
+	local function wear(state, proxy, generation)
+		if state.generation == generation then
+			return
+		end
+		takeOff(state)
+		local list = look(generation)[4]
+		if #list >= 10 then
+			raise("A character wears at most 10 accessories", 3)
+		end
+		local entry = table.clone(state.entry)
+		entry[1] = newId()
+		state.entry = entry
+		table.insert(list, entry)
+		setAccessories(generation, list)
+		state.generation = generation
+		wornProxies[generation] = wornProxies[generation] or {}
+		wornProxies[generation][entry[1]] = proxy
+	end
+
+	local accessoryFields = {
+		Name = { index = 2, kind = "string" },
+		MeshId = { index = 3, kind = "string" },
+		TextureID = { index = 5, kind = "string" },
+		Scale = { index = 9, kind = "number" },
+	}
+
+	accessoryMeta = {
+		__index = function(self, key)
+			local state = accessoryState[self]
+			local entry = current(state)
+			local field = accessoryFields[key]
+			if field ~= nil then
+				return entry[field.index]
+			elseif key == "ClassName" then
+				return "Accessory"
+			elseif key == "AccessoryType" then
+				return Enum.AccessoryType[entry[4]]
+			elseif key == "Color" then
+				return toColor(entry[6])
+			elseif key == "Offset" then
+				return toVector(entry[7])
+			elseif key == "Rotation" then
+				return toVector(entry[8])
+			elseif key == "Parent" then
+				local record = if state.generation ~= nil then characterFor(state.generation) else nil
+				return record and record.model
+			end
+			local method = accessoryMethods[key]
+			if method ~= nil then
+				return method
+			end
+			raise(string.format("%s is not a valid member of Accessory \"%s\"", tostring(key), entry[2]), 2)
+		end,
+		__newindex = function(self, key, value)
+			local state = accessoryState[self]
+			local field = accessoryFields[key]
+			if field ~= nil then
+				expect(value, field.kind, key)
+				update(state, field.index, value)
+				if key == "MeshId" then
+					-- A built-in accessory comes with where it goes and its colour.
+					local catalog = invoke("look.catalog", value)
+					if catalog ~= nil then
+						update(state, 4, catalog[1])
+						update(state, 6, catalog[2])
+					end
+				end
+			elseif key == "AccessoryType" then
+				local name = enumName(value, "AccessoryType")
+				if name == nil or rawget(Enum.AccessoryType, name) == nil then
+					raise("Unable to assign property AccessoryType. EnumItem expected, got " .. typeof(value), 2)
+				end
+				update(state, 4, name)
+			elseif key == "Color" then
+				expect(value, "Color3", key)
+				update(state, 6, { value[1], value[2], value[3] })
+			elseif key == "Offset" or key == "Rotation" then
+				expect(value, "Vector3", key)
+				update(state, if key == "Offset" then 7 else 8, { value[1], value[2], value[3] })
+			elseif key == "Parent" then
+				if value == nil then
+					takeOff(state)
+				elseif isCharacterModel[value] ~= nil then
+					wear(state, self, isCharacterModel[value])
+				else
+					raise("An Accessory can only be parented to a character", 2)
+				end
+			else
+				raise(string.format("%s is not a valid member of Accessory", tostring(key)), 2)
+			end
+		end,
+		__tostring = function(self)
+			return current(accessoryState[self])[2]
+		end,
+		__metatable = LOCKED,
+	}
+
+	function accessoryMethods.Destroy(self)
+		checkSelf(self, "Instance", "Destroy")
+		takeOff(accessoryState[self])
+	end
+
+	accessoryMethods.Remove = accessoryMethods.Destroy
+
+	function accessoryMethods.Clone(self)
+		checkSelf(self, "Instance", "Clone")
+		return wrapAccessory(table.clone(current(accessoryState[self])), nil)
+	end
+
+	function accessoryMethods.IsA(_, className)
+		return className == "Accessory" or className == "Accoutrement" or className == "Instance"
+	end
+
+	function accessoryMethods.GetChildren()
+		return {}
+	end
+
+	function accessoryMethods.FindFirstChild()
+		return nil
+	end
+
+	-- Shirt and Pants: a character wears one of each, the picture on its template.
+
+	local clothingState = setmetatable({}, { __mode = "k" })
+	local clothingMeta
+	local function lookKey(className)
+		return if className == "Shirt" then 2 else 3
+	end
+
+	local function wrapClothing(className, template, generation)
+		if generation ~= nil then
+			local proxies = clothingProxies[generation]
+			if proxies ~= nil and proxies[className] ~= nil then
+				return proxies[className]
+			end
+		end
+		local proxy = setmetatable({}, clothingMeta)
+		typeTags[proxy] = "Instance"
+		clothingState[proxy] = { className = className, template = template, generation = generation }
+		if generation ~= nil then
+			clothingProxies[generation] = clothingProxies[generation] or {}
+			clothingProxies[generation][className] = proxy
+		end
+		return proxy
+	end
+
+	local function clothingCurrent(state)
+		if state.generation ~= nil then
+			local worn = look(state.generation)[lookKey(state.className)]
+			-- One put on with no picture yet is still on, as in Roblox.
+			if (worn ~= "" or state.template == "") and invoke("character.alive", state.generation) then
+				state.template = worn
+			else
+				state.generation = nil
+			end
+		end
+		return state.template
+	end
+
+	local function clothingOff(state)
+		if state.generation ~= nil then
+			invoke("look.set", state.generation, string.lower(state.className), "")
+			local proxies = clothingProxies[state.generation]
+			if proxies ~= nil then
+				proxies[state.className] = nil
+			end
+			state.generation = nil
+		end
+	end
+
+	clothingMeta = {
+		__index = function(self, key)
+			local state = clothingState[self]
+			if key == "Name" or key == "ClassName" then
+				return state.className
+			elseif key == templateKey[state.className] then
+				return clothingCurrent(state)
+			elseif key == "Parent" then
+				clothingCurrent(state)
+				local record = if state.generation ~= nil then characterFor(state.generation) else nil
+				return record and record.model
+			elseif key == "Destroy" or key == "Remove" then
+				return function(object)
+					checkSelf(object, "Instance", key)
+					clothingOff(clothingState[object])
+				end
+			elseif key == "Clone" then
+				return function(object)
+					local from = clothingState[object]
+					return wrapClothing(from.className, clothingCurrent(from), nil)
+				end
+			elseif key == "IsA" then
+				return function(_, className)
+					return className == state.className or className == "Clothing" or className == "Instance"
+				end
+			end
+			raise(string.format("%s is not a valid member of %s", tostring(key), state.className), 2)
+		end,
+		__newindex = function(self, key, value)
+			local state = clothingState[self]
+			if key == templateKey[state.className] then
+				expect(value, "string", key)
+				clothingCurrent(state)
+				state.template = value
+				if state.generation ~= nil then
+					invoke("look.set", state.generation, string.lower(state.className), value)
+				end
+			elseif key == "Parent" then
+				if value == nil then
+					clothingCurrent(state)
+					clothingOff(state)
+				elseif isCharacterModel[value] ~= nil then
+					local generation = isCharacterModel[value]
+					invoke("look.set", generation, string.lower(state.className), state.template)
+					state.generation = generation
+					clothingProxies[generation] = clothingProxies[generation] or {}
+					clothingProxies[generation][state.className] = self
+				else
+					raise(string.format("A %s can only be parented to a character", state.className), 2)
+				end
+			else
+				raise(string.format("Unable to assign property %s of %s", tostring(key), state.className), 2)
+			end
+		end,
+		__tostring = function(self)
+			return clothingState[self].className
+		end,
+		__metatable = LOCKED,
+	}
+
+	-- The face: the Head's Decal named "face".
+
+	local function faceOf(generation)
+		local worn = look(generation)[1]
+		if worn == noFace then
+			return nil
+		end
+		local known = faceProxies[generation]
+		if known ~= nil then
+			return known
+		end
+		local decal = setmetatable({}, {
+			__index = function(_, key)
+				if key == "Name" then
+					return "face"
+				elseif key == "ClassName" then
+					return "Decal"
+				elseif key == "Texture" then
+					local face = look(generation)[1]
+					return if face == "" then classicFace else face
+				elseif key == "Parent" then
+					local record = characterFor(generation)
+					return record and record.parts.Head
+				elseif key == "Destroy" or key == "Remove" then
+					return function()
+						invoke("look.set", generation, "face", noFace)
+						faceProxies[generation] = nil
+					end
+				elseif key == "IsA" then
+					return function(_, className)
+						return className == "Decal" or className == "Instance"
+					end
+				end
+				raise(string.format("%s is not a valid member of Decal \"face\"", tostring(key)), 2)
+			end,
+			__newindex = function(_, key, value)
+				if key ~= "Texture" then
+					raise(string.format("Unable to assign property %s of Decal", tostring(key)), 2)
+				end
+				expect(value, "string", key)
+				invoke("look.set", generation, "face", if value == classicFace then "" else value)
+			end,
+			__tostring = function()
+				return "face"
+			end,
+			__metatable = LOCKED,
+		})
+		typeTags[decal] = "Instance"
+		faceProxies[generation] = decal
+		return decal
+	end
+
+	-- HumanoidDescription: a whole look (and body colours) in one object.
+
+	local descriptionMeta = {}
+	local descriptionFields = {}
+	local descriptionMethods = {}
+
+	local function newDescription()
+		local fields = { Face = "", Shirt = "", Pants = "", Name = "HumanoidDescription" }
+		for _, slot in slotOrder do
+			fields[slot] = ""
+		end
+		for key in colorSlots do
+			fields[key] = color(163 / 255, 162 / 255, 165 / 255)
+		end
+		local description = setmetatable({}, descriptionMeta)
+		typeTags[description] = "Instance"
+		descriptionFields[description] = fields
+		return description
+	end
+
+	descriptionMeta.__index = function(self, key)
+		local fields = descriptionFields[self]
+		if fields[key] ~= nil then
+			return fields[key]
+		elseif key == "ClassName" then
+			return "HumanoidDescription"
+		elseif key == "Parent" then
+			return nil
+		end
+		local method = descriptionMethods[key]
+		if method ~= nil then
+			return method
+		end
+		raise(string.format("%s is not a valid member of HumanoidDescription", tostring(key)), 2)
+	end
+	descriptionMeta.__newindex = function(self, key, value)
+		local fields = descriptionFields[self]
+		if colorSlots[key] ~= nil then
+			expect(value, "Color3", key)
+		elseif fields[key] ~= nil then
+			expect(value, "string", key)
+		else
+			raise(string.format("%s is not a valid member of HumanoidDescription", tostring(key)), 2)
+		end
+		fields[key] = value
+	end
+	descriptionMeta.__tostring = function()
+		return "HumanoidDescription"
+	end
+	descriptionMeta.__metatable = LOCKED
+
+	function descriptionMethods.IsA(_, className)
+		return className == "HumanoidDescription" or className == "Instance"
+	end
+
+	function descriptionMethods.Clone(self)
+		local copy = newDescription()
+		for key, value in descriptionFields[self] do
+			descriptionFields[copy][key] = value
+		end
+		return copy
+	end
+
+	-- Hooks for the character, its Humanoid and Instance.new.
+
+	avatarKit.classes = { Accessory = true, Shirt = true, Pants = true, HumanoidDescription = true }
+
+	function avatarKit.new(className, parent)
+		local object
+		if className == "Accessory" then
+			object = wrapAccessory({ newId(), "Accessory", "", "Hat", "", { 0.8, 0.8, 0.8 }, { 0, 0, 0 },
+				{ 0, 0, 0 }, 1 }, nil)
+		elseif className == "HumanoidDescription" then
+			return newDescription()
+		else
+			object = wrapClothing(className, "", nil)
+		end
+		if parent ~= nil then
+			object.Parent = parent
+		end
+		return object
+	end
+
+	-- A character's child by name: an accessory, its Shirt or its Pants.
+	-- The Shirt or Pants a character has on: one with a picture, or one put on without.
+	local function clothingOn(generation, className, worn)
+		if worn ~= "" then
+			return wrapClothing(className, worn, generation)
+		end
+		local known = clothingProxies[generation] and clothingProxies[generation][className]
+		if known ~= nil and clothingState[known].generation == generation and clothingState[known].template == "" then
+			return known
+		end
+		return nil
+	end
+
+	function avatarKit.child(generation, name)
+		local worn = look(generation)
+		if name == "Shirt" or name == "Pants" then
+			local found = clothingOn(generation, name, worn[lookKey(name)])
+			if found ~= nil then
+				return found
+			end
+		end
+		for _, entry in worn[4] do
+			if entry[2] == name then
+				return wrapAccessory(entry, generation)
+			end
+		end
+		return nil
+	end
+
+	function avatarKit.children(generation)
+		local worn = look(generation)
+		local list = {}
+		for _, entry in worn[4] do
+			table.insert(list, wrapAccessory(entry, generation))
+		end
+		for _, className in { "Shirt", "Pants" } do
+			local found = clothingOn(generation, className, worn[lookKey(className)])
+			if found ~= nil then
+				table.insert(list, found)
+			end
+		end
+		return list
+	end
+
+	function avatarKit.ofClass(generation, className)
+		if className == "Shirt" or className == "Pants" then
+			return avatarKit.child(generation, className)
+		elseif className == "Accessory" or className == "Accoutrement" then
+			local entry = look(generation)[4][1]
+			return entry and wrapAccessory(entry, generation)
+		end
+		return nil
+	end
+
+	avatarKit.face = faceOf
+
+	function avatarKit.humanoidMethods(methods, generation)
+		function methods.AddAccessory(self, accessory)
+			checkSelf(self, "Instance", "AddAccessory")
+			local state = accessoryState[accessory]
+			if state == nil then
+				raise("AddAccessory expects an Accessory, got " .. typeof(accessory), 2)
+			end
+			wear(state, accessory, generation)
+		end
+
+		function methods.GetAccessories(self)
+			checkSelf(self, "Instance", "GetAccessories")
+			local list = {}
+			for _, entry in look(generation)[4] do
+				table.insert(list, wrapAccessory(entry, generation))
+			end
+			return list
+		end
+
+		function methods.RemoveAccessories(self)
+			checkSelf(self, "Instance", "RemoveAccessories")
+			setAccessories(generation, {})
+			wornProxies[generation] = {}
+		end
+
+		function methods.GetAppliedDescription(self)
+			checkSelf(self, "Instance", "GetAppliedDescription")
+			local description = newDescription()
+			local fields = descriptionFields[description]
+			local worn = look(generation)
+			fields.Face = if worn[1] == "" then classicFace else worn[1]
+			fields.Shirt = worn[2]
+			fields.Pants = worn[3]
+			for _, slot in slotOrder do
+				local items = {}
+				for _, entry in worn[4] do
+					if entry[4] == slotTypes[slot] then
+						table.insert(items, entry[3])
+					end
+				end
+				fields[slot] = table.concat(items, ",")
+			end
+			for key, part in colorSlots do
+				fields[key] = toColor(invoke("body.get", generation, part, "color"))
+			end
+			return description
+		end
+
+		function methods.ApplyDescription(self, description)
+			checkSelf(self, "Instance", "ApplyDescription")
+			local fields = descriptionFields[description]
+			if fields == nil then
+				raise("ApplyDescription expects a HumanoidDescription, got " .. typeof(description), 2)
+			end
+			invoke("look.set", generation, "face", if fields.Face == classicFace then "" else fields.Face)
+			invoke("look.set", generation, "shirt", fields.Shirt)
+			invoke("look.set", generation, "pants", fields.Pants)
+			local list = {}
+			for _, slot in slotOrder do
+				for item in string.gmatch(fields[slot], "[^,%s]+") do
+					local catalog = invoke("look.catalog", item)
+					local name = string.match(item, "([^/]+)$") or item
+					table.insert(list, { newId(), name, item, slotTypes[slot], "",
+						if catalog ~= nil then catalog[2] else { 0.8, 0.8, 0.8 }, { 0, 0, 0 }, { 0, 0, 0 }, 1 })
+				end
+			end
+			setAccessories(generation, list)
+			wornProxies[generation] = {}
+			for key, part in colorSlots do
+				local value = fields[key]
+				invoke("body.set", generation, part, "color", { value[1], value[2], value[3] })
+			end
+		end
+	end
 end
 
 local localPlayerMethods = {}

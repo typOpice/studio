@@ -142,7 +142,12 @@ extension SceneModel {
     func renameAsset(_ id: UUID, to name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, let index = assets.firstIndex(where: { $0.id == id }) else { return }
-        commit("Renamed") { assets[index].name = Self.unique(trimmed, among: assets.filter { $0.id != id }.map(\.name)) }
+        commit("Renamed") {
+            let old = assets[index].reference
+            assets[index].name = Self.unique(trimmed, among: assets.filter { $0.id != id }.map(\.name))
+            // What characters wear follows the file.
+            starterPlayer.look.rename(old, to: assets[index].reference)
+        }
     }
 
     func deleteAsset(_ id: UUID) {

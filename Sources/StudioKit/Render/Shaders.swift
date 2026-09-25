@@ -199,6 +199,21 @@ fragment float4 scene_fragment_textured(RasterTextured in [[stage_in]],
     return float4(lit.rgb, lit.a * texel.a);
 }
 
+// A body part in clothes: the picture laid over the body colour where it is opaque,
+// as Roblox's shirts and pants are.
+fragment float4 scene_fragment_clothed(RasterTextured in [[stage_in]],
+                                       constant FrameUniforms &frame [[buffer(1)]],
+                                       constant DrawUniforms &draw [[buffer(2)]]
+                                       STUDIO_LIGHTING_PARAMS,
+                                       texture2d<float> meshTexture [[texture(3)]])
+{
+    constexpr sampler picture(filter::linear, mip_filter::linear, address::clamp_to_edge);
+    float4 texel = meshTexture.sample(picture, in.uv);
+    float3 base = mix(draw.color.rgb, texel.rgb / max(texel.a, 0.001), texel.a);
+    return studio_scene_color(in.worldPosition, in.normal, in.clipPosition.xy, base,
+                              frame, draw, STUDIO_LIGHTING_ARGS);
+}
+
 // Flat-shaded pass used for gizmo handles and selection outlines.
 fragment float4 flat_fragment(RasterData in [[stage_in]],
                               constant FrameUniforms &frame [[buffer(1)]],

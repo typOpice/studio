@@ -17,6 +17,8 @@ struct AvatarPose {
     var joints = AvatarJoints()
     var hidden = false
     var colors = BodyColors()
+    /// What it wears: face, shirt, pants and accessories.
+    var look = AvatarLook()
     /// Per body part, by Roblox name; 1 hides the part.
     var transparency: [String: Float] = [:]
     /// Lying on the ground.

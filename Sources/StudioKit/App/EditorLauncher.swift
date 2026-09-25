@@ -463,6 +463,14 @@ public enum StudioEditor {
             exit(AvatarSnapshot.renderScene(to: URL(fileURLWithPath: path), technology: technology,
                                             clockTime: clock) ? 0 : 1)
         }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-looks") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let path = arguments.first ?? "looks.png"
+            let technology: LightingTechnology = arguments.contains { $0.lowercased().hasPrefix("ray") }
+                ? .rayTraced : .conventional
+            exit(AvatarSnapshot.renderLooks(to: URL(fileURLWithPath: path), technology: technology,
+                                            fromBehind: arguments.contains("back")) ? 0 : 1)
+        }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-meshes") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])
             let path = arguments.first ?? "meshes.png"

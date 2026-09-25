@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-1894 headless checks covering shader compilation, uniform struct layout, mesh winding,
+1943 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -59,7 +59,7 @@ scene), the Luau, Wren and Metal lexers and completion engines, script-editor ca
 and input handling, the render loop, surface and full-screen shaders (rendered on
 the GPU and read back), collision, the player camera and the character controller,
 the screen GUI and chat, pictures and sounds (through a recorder, so nothing plays
-aloud), MeshParts and their collision, and two clients playing together over loopback.
+aloud), MeshParts and their collision, what characters wear, and two clients playing together over loopback.
 
 ## The player character
 
@@ -71,7 +71,8 @@ In the Explorer, **StarterPlayer** holds:
 
 - **its settings** (click it): the template every character starts from — WalkSpeed,
   JumpPower or JumpHeight, MaxHealth, MaxSlopeAngle, AutoRotate, six body colours,
-  camera mode and zoom limits, respawn time. Saved with the scene.
+  what characters wear (see *What characters wear*), camera mode and zoom limits,
+  respawn time. Saved with the scene.
 - **StarterPlayerScripts**: run once, for the player. Holds the default
   `ControlScript` (movement, jump, Shift sprint) and `ChatScript`
   (the chat window, see *Screen GUI and chat*).
@@ -100,6 +101,70 @@ humanoid.StateChanged:Connect(function(old, new)
 	end
 end)
 ```
+
+### What characters wear
+
+A character can wear a **face**, a **shirt** and **pants**, and up to ten
+**accessories** — hats, hair, glasses, a scarf, a backpack, a cape and so on. They
+come from two places:
+
+- **The player**, in the client's **Character** screen: colours, a face, a shirt,
+  pants and accessories from the built-in catalog, on a 3D preview you can drag round.
+  It's kept between launches, and other players in a network game see it.
+- **The place**, in Studio: click **StarterPlayer** and use its **Avatar** section.
+  As well as the built-in things, a place can use its own imported pictures (faces,
+  shirts, pants) and 3D models (accessories — set where each goes, its colour, picture,
+  offset, rotation and scale). The place's face, shirt and pants replace the player's
+  where it sets them, and its accessories are added to theirs. Untick **Players wear
+  their own look too** to dress everyone the same.
+
+Shirts and pants are pictures on Roblox's classic **clothing template** (585 × 559), so
+real Roblox shirt and pants templates work as they are. Where a picture is clear, the
+body colour shows through (the built-in shorts stop at the knee).
+
+The built-in catalog, as scripts name it:
+
+| Kind | Items (`builtin://…`) |
+| --- | --- |
+| Accessories | `TopHat`, `Cap`, `Crown`, `PartyHat`, `Beanie`, `ShortHair`, `Glasses`, `Scarf`, `Medal`, `Backpack`, `Cape`, `Belt` |
+| Faces | `Smile` (the classic), `Grin`, `Wink`, `Surprised`, `Cool`, `Sleepy`, `Happy`, `Angry`, `None` |
+| Shirts | `Tee`, `StripedTee`, `Hoodie`, `Plaid`, `Suit`, `Sweater` |
+| Pants | `Jeans`, `BlackPants`, `Shorts`, `SuitPants`, `Joggers` |
+
+Scripts dress characters the Roblox way:
+
+```lua
+-- StarterCharacterScripts/PartyTime
+local character = script.Parent
+local humanoid = character:WaitForChild("Humanoid")
+
+local hat = Instance.new("Accessory")
+hat.Name = "PartyHat"
+hat.MeshId = "builtin://PartyHat"      -- or "studio://MyHat", an imported model
+hat.Color = Color3.fromRGB(80, 200, 255)
+humanoid:AddAccessory(hat)              -- or hat.Parent = character
+
+local shirt = Instance.new("Shirt")
+shirt.ShirtTemplate = "studio://TeamShirt"
+shirt.Parent = character
+character.Head.face.Texture = "builtin://Grin"
+
+-- A whole look at once:
+local outfit = Instance.new("HumanoidDescription")
+outfit.HatAccessory = "builtin://Crown"
+outfit.Shirt = "builtin://Suit"
+outfit.TorsoColor = Color3.new(0.1, 0.1, 0.1)
+humanoid:ApplyDescription(outfit)
+```
+
+`Accessory` has `Name`, `AccessoryType` (`Enum.AccessoryType`: Hat, Hair, Face, Neck,
+Shoulder, Front, Back, Waist), `MeshId`, `TextureID`, `Color`, and — in place of a
+Handle and its attachment — `Offset`, `Rotation` (degrees) and `Scale`. A built-in
+`MeshId` brings its own type and colour. The character's `GetChildren`,
+`FindFirstChild` and `FindFirstChildOfClass` see its accessories, `Shirt` and `Pants`;
+the Humanoid has `AddAccessory`, `GetAccessories`, `RemoveAccessories`,
+`GetAppliedDescription` and `ApplyDescription`. A host script dressing a joined player
+works too. Luau only.
 
 ### Lighting
 
@@ -345,8 +410,9 @@ ball and renders the result.
 
 StudioClient opens on a **main menu**: Play, Host on your network, Join a game,
 Character and Quit (a scene sent from Studio with "Open in Client" is played straight
-away). **Character** sets your name and a colour for each body part; it is saved and
-used in every scene you play — scripts see it as `player.Name`. **Main Menu** (⌘L)
+away). **Character** sets your name, a colour for each body part, and what you wear —
+a face, shirt, pants and accessories (see *What characters wear*), on a 3D preview; it
+is saved and used in every scene you play — scripts see the name as `player.Name`. **Main Menu** (⌘L)
 leaves a game.
 
 **Local network play.** Host on your network advertises the game over Bonjour, so

@@ -77,11 +77,19 @@ struct StarterPlayerSettings: Codable, Equatable {
     /// otherwise; players always collide with parts.
     var playersCollide = true
 
+    /// What every character wears: a face, shirt, pants and accessories.
+    var look = AvatarLook()
+    /// Whether players also wear their own look (from the client's character editor):
+    /// the place's face, shirt and pants replace theirs where set, and its accessories
+    /// are added to theirs. Off, everyone wears only the place's.
+    var playersWearOwnLook = true
+
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case bodyColors, walkSpeed, jumpPower, useJumpPower, jumpHeight, maxHealth, maxSlopeAngle,
-             autoRotate, cameraMode, cameraMinZoomDistance, cameraMaxZoomDistance, respawnTime, playersCollide
+             autoRotate, cameraMode, cameraMinZoomDistance, cameraMaxZoomDistance, respawnTime, playersCollide,
+             look, playersWearOwnLook
     }
 
     init(from decoder: Decoder) throws {
@@ -100,5 +108,7 @@ struct StarterPlayerSettings: Codable, Equatable {
         cameraMaxZoomDistance = try c.decodeIfPresent(Float.self, forKey: .cameraMaxZoomDistance) ?? d.cameraMaxZoomDistance
         respawnTime = try c.decodeIfPresent(Float.self, forKey: .respawnTime) ?? d.respawnTime
         playersCollide = try c.decodeIfPresent(Bool.self, forKey: .playersCollide) ?? d.playersCollide
+        look = try c.decodeIfPresent(AvatarLook.self, forKey: .look) ?? d.look
+        playersWearOwnLook = try c.decodeIfPresent(Bool.self, forKey: .playersWearOwnLook) ?? d.playersWearOwnLook
     }
 }

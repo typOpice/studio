@@ -345,7 +345,8 @@ enum LANSelfTest {
 
     /// A host and a player in one game over loopback, in a world the caller builds. The
     /// default controls are off, so tests can steer the characters.
-    static func twoPlayers(_ build: (SceneModel) -> Void) -> (host: ClientSession, player: ClientSession)? {
+    static func twoPlayers(_ build: (SceneModel) -> Void, looks: (host: AvatarLook, player: AvatarLook)? = nil)
+        -> (host: ClientSession, player: ClientSession)? {
         let model = SceneModel()
         model.parts = []
         model.scripts = []
@@ -360,11 +361,13 @@ enum LANSelfTest {
         build(model)
         let hosting = ClientSession(model: model, defaults: freshDefaults().0)
         hosting.profile.name = "Robin"
+        if let looks { hosting.profile.look = looks.host }
         hosting.hostOnLAN(advertise: false)
         guard let host = hosting.host, wait(until: { host.port != nil }),
               let port = host.port.flatMap(NWEndpoint.Port.init(rawValue:)) else { return nil }
         let joining = ClientSession(defaults: freshDefaults().0)
         joining.profile.name = "Sam"
+        if let looks { joining.profile.look = looks.player }
         joining.join(LANGame(name: host.gameName, txt: LANGame.txt(sceneName: "Test", players: 0),
                              endpoint: .hostPort(host: loopback, port: port)))
         wait { joining.screen == .playing }
