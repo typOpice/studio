@@ -213,15 +213,14 @@ enum ShaderSource {
                                           sampler sceneSampler,
                                           constant ScreenUniforms &screenParams)
         {
-            // Read any other pixel of the scene, for blurs and edge detection.
-            auto sample = [&](float2 coord) -> float3 {
-                return sceneTexture.sample(sceneSampler, coord).rgb;
-            };
-            (void)sample;
+            // Read any other pixel of the scene, for blurs and edge detection: sample(uv).
+            // A macro, not a lambda — Metal has no lambdas, and newer compilers say so.
+            #define sample(coord) (sceneTexture.sample(sceneSampler, (coord)).rgb)
 
         \(bindings)
         #line 1 "shader"
         \(body)
+        #undef sample
         }
 
         fragment float4 \(screenFragmentFunctionName)(ScreenVertex in [[stage_in]],

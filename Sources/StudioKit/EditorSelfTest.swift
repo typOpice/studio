@@ -24,7 +24,10 @@ enum EditorSelfTest {
     /// sends to whatever text has the keyboard. Without them the keys did nothing at all.
     private static func testCopyAndPaste(_ check: Checker) {
         print("\nScript editor: copy and paste")
-        let menu = EditorAppDelegate().makeMainMenu()
+        // Kept alive while the menu is read: its items' targets are weak references to it.
+        let delegate = EditorAppDelegate()
+        defer { withExtendedLifetime(delegate) {} }
+        let menu = delegate.makeMainMenu()
         let items = menu.items.compactMap(\.submenu).flatMap(\.items)
         for (name, action, key) in [("Cut", #selector(NSText.cut(_:)), "x"),
                                     ("Copy", #selector(NSText.copy(_:)), "c"),

@@ -82,28 +82,38 @@ private struct GuiEditOverlay: View {
         let chosen = placed.first { $0.id == selected }
         let hovering = placed.first { $0.id == editor.hovered && $0.id != selected }
         ZStack(alignment: .topLeading) {
-            Color.clear
-                .contentShape(Rects(rects: targets(placed, chosen)))
-                .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                    .onChanged { value in
-                        editor.viewScale = layout.scale
-                        if !pressing {
-                            pressing = true
-                            editor.begin(at: layout.toScreen(value.startLocation))
+            // One see-through target per GUI object and handle, and nothing else: the
+            // press and the pointer are taken only there, so everywhere else reaches the
+            // world. (Hover tracking claims its view's whole frame, so each target has
+            // its own rather than one layer over everything.)
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(targets(placed, chosen).enumerated()), id: \.offset) { _, rect in
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .frame(width: max(rect.width, 1), height: max(rect.height, 1))
+                        .offset(x: rect.minX, y: rect.minY)
+                        .onContinuousHover(coordinateSpace: .named(Self.space)) { phase in
+                            editor.viewScale = layout.scale
+                            switch phase {
+                            case .active(let point): editor.hover(at: layout.toScreen(point))
+                            case .ended: editor.hover(at: nil)
+                            }
                         }
-                        editor.drag(to: layout.toScreen(value.location))
-                    }
-                    .onEnded { _ in
-                        pressing = false
-                        editor.end()
-                    })
-                .onContinuousHover { phase in
-                    editor.viewScale = layout.scale
-                    switch phase {
-                    case .active(let point): editor.hover(at: layout.toScreen(point))
-                    case .ended: editor.hover(at: nil)
-                    }
                 }
+            }
+            .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
+                .onChanged { value in
+                    editor.viewScale = layout.scale
+                    if !pressing {
+                        pressing = true
+                        editor.begin(at: layout.toScreen(value.startLocation))
+                    }
+                    editor.drag(to: layout.toScreen(value.location))
+                }
+                .onEnded { _ in
+                    pressing = false
+                    editor.end()
+                })
             Group {
                 if let hovering {
                     let rect = layout.toView(GuiEditController.visible(hovering))
@@ -120,7 +130,10 @@ private struct GuiEditOverlay: View {
             .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .coordinateSpace(name: Self.space)
     }
+
+    private static let space = "guiEditOverlay"
 
     /// Where presses are taken: on what's drawn, and on the selection's handles.
     private func targets(_ placed: [GuiStore.Placed], _ chosen: GuiStore.Placed?) -> [CGRect] {
@@ -173,16 +186,5 @@ private struct GuiEditOverlay: View {
             path.addLine(to: end)
         }
         .stroke(Color(red: 1, green: 0.3, blue: 0.75), style: StrokeStyle(lineWidth: 1, dash: [5, 3]))
-    }
-}
-
-/// Several rectangles as one shape: where the GUI tab takes presses.
-private struct Rects: Shape {
-    let rects: [CGRect]
-
-    func path(in _: CGRect) -> Path {
-        var path = Path()
-        for rect in rects { path.addRect(rect) }
-        return path
     }
 }

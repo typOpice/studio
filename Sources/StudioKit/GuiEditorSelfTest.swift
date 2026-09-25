@@ -151,12 +151,13 @@ enum GuiEditorSelfTest {
     // MARK: - Drawing
 
     private static func render(_ store: GuiStore, size: CGSize = CGSize(width: 700, height: 400)) -> NSBitmapImageRep? {
-        MainActor.assumeIsolated {
+        let image: CGImage? = MainActor.assumeIsolated {
             let renderer = ImageRenderer(content: GuiLayer(store: store, interactive: false)
                 .frame(width: size.width, height: size.height))
             renderer.scale = 1
-            return renderer.cgImage.map(NSBitmapImageRep.init(cgImage:))
+            return renderer.cgImage
         }
+        return image.map(NSBitmapImageRep.init(cgImage:))
     }
 
     private static func pixel(_ bitmap: NSBitmapImageRep?, _ x: Int, _ y: Int) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {

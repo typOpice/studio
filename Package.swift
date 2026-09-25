@@ -8,6 +8,7 @@ let package = Package(
         .executable(name: "StudioApp", targets: ["StudioApp"]),
         .executable(name: "StudioClient", targets: ["StudioClient"])
     ],
+    // Swift 5 language mode throughout: the tools version (5.9) sets it, no flags needed.
     targets: [
         // Wren 0.4.0, vendored verbatim under Sources/CWren (MIT) — the secondary language.
         .target(
@@ -60,20 +61,17 @@ let package = Package(
         .target(
             name: "StudioKit",
             dependencies: ["CLuau", "CWren", "CJolt"],
-            path: "Sources/StudioKit",
-            swiftSettings: [.unsafeFlags(["-swift-version", "5"])]
+            path: "Sources/StudioKit"
         ),
         .executableTarget(
             name: "StudioApp",
             dependencies: ["StudioKit"],
-            path: "Sources/StudioApp",
-            swiftSettings: [.unsafeFlags(["-swift-version", "5"])]
+            path: "Sources/StudioApp"
         ),
         .executableTarget(
             name: "StudioClient",
             dependencies: ["StudioKit"],
-            path: "Sources/StudioClient",
-            swiftSettings: [.unsafeFlags(["-swift-version", "5"])]
+            path: "Sources/StudioClient"
         )
     ]
 )

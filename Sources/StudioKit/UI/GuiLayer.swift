@@ -175,8 +175,9 @@ private struct GuiElement: View {
     @ViewBuilder private func tinted(_ picture: some View) -> some View {
         if let gradient = placed.gradient {
             picture
-                .overlay(linear(gradient) { Color(vec: GuiObject.sample(gradient.gradientColor, at: $0)) }
-                    .blendMode(.multiply))
+                .overlay(Rectangle()
+                    .fill(linear(gradient) { Color(vec: GuiObject.sample(gradient.gradientColor, at: $0)) })
+                    .blendMode(BlendMode.multiply))
                 .compositingGroup()
                 .mask { picture }
                 .mask { linear(gradient) { Color.white.opacity(Double(1 - GuiObject.sample(gradient.gradientTransparency, at: $0))) } }
