@@ -1,0 +1,12 @@
+# Build output
+.build/
+.swiftpm/
+*.xcodeproj/
+DerivedData/
+
+# Built apps and their zips (make_app.sh makes them)
+*.app/
+*.zip
+
+# macOS
+.DS_Store

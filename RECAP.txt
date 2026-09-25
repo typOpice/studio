@@ -1,0 +1,210 @@
+STUDIO PROJECT RECAP
+Last updated: 2026-09-24 (end of the session)
+
+
+WHAT THIS IS
+
+A Roblox Studio style 3D game maker for macOS, written in Swift and Metal.
+There are two apps: Studio.app (the editor) and StudioClient.app (the player / game client).
+Scripts are written in Luau (the main language, like Roblox) or Wren (a second language that gets new features later).
+Physics is Jolt Physics. Luau, Wren and Jolt are included as source code in the project.
+Everything is one Swift package. There is no Xcode on the build machine, only the command line tools.
+
+
+HOW TO CHECK THAT EVERYTHING STILL WORKS
+
+Run all the automatic checks:  swift run StudioApp --selftest
+They must all pass before any change counts as done (1855 checks at the end of this session, all passing).
+Build the two apps:  ./make_app.sh release
+AGENTS.md explains how the code is organised and the rules that are easy to break. Read it first.
+README.md is the guide for people using the apps.
+CLAUDE.md is a short note for the AI assistant.
+
+
+WHAT WAS BUILT BEFORE THIS SESSION
+
+The editor: parts (block, sphere, cylinder, wedge), move/scale/rotate tools with snapping, undo and redo, saving and opening scenes, saving and inserting models.
+Scripting in Luau with a Roblox-like API, and in Wren. Custom shaders in Metal for parts and for the whole screen.
+The player character: a Humanoid driven by scripts, a default ControlScript and Health script, StarterPlayer settings, respawning.
+Touched and TouchEnded events, CanCollide and CanTouch.
+A better looking avatar with walk, jump, fall, fly and death animations.
+An Animation Editor with a timeline and keyframes, and AnimationTrack for scripts.
+Lighting: conventional shadows and ray traced lighting, point lights, sky, fog, time of day.
+Models and Folders (the Explorer is a tree) and CFrame.
+Real physics for unanchored parts using Jolt.
+Welds and joints: hinge, ball socket, rope, spring, slider, with motors and servos. Squashed spheres and cylinders collide with their true shape.
+
+
+WHAT WAS DONE IN THIS SESSION (2026-09-22 and 2026-09-23)
+
+1. Weld tool: pick Weld, click part A, click part B, and they are welded. The tool stays on for more pairs. Escape turns it off.
+   If two or more parts are already selected when you pick Weld, they are all welded at once (good for a brick wall). This can be turned off in the Physics tab.
+   The same click-two-parts tool works for hinge, ball socket, rope, spring and prismatic joints. Unjoin removes joints from selected parts.
+
+2. The ribbon at the top was split into tabs: Home, Model, Physics, Script, View. Undo, redo, play and client buttons stay at the top right.
+
+3. Scripts and shaders open in tabs that fill the middle of the window, like Roblox Studio. The World tab switches back to the 3D view.
+   The Output console is always along the bottom. Clicking an error in it opens the script at that line.
+   The code editor got line numbers, find (Cmd F), its own undo per tab, and Cmd Z / Cmd A / Cmd Backspace now act on the text instead of the world.
+   Fixed a bug where undoing a part move also threw away code typed since.
+
+4. Jump fix: tapping Space no longer jumps a second time when you land. Holding Space still keeps jumping. Jump pads still work.
+
+5. Copy, cut and paste (Cmd C, Cmd X, Cmd V) now work in the script editor and text fields. They were missing from the menu.
+
+6. Maintenance:
+   New scripts now start with code that fits where they were made (in a part, a Model, a Folder, Script Service, StarterPlayerScripts, StarterCharacterScripts, or Wren). Every template and every "try this" line in it is tested.
+   Fixed: the usual Roblox pattern for handling the player's character ran twice for the first character.
+   Fixed: after the player died an invisible body stayed standing where they died.
+   Fixed: a damaged scene file with repeated ids could crash the game when Play was pressed. Files are repaired when opened.
+   Fixed three keyboard shortcuts that were used twice. Clear Output is now Cmd K, Full Screen is Ctrl Cmd F.
+   Removed unused code and a compiler warning, corrected out of date notes in the docs.
+
+
+7. Local network (LAN) multiplayer, first stage:
+   In the client, "Host on your network" advertises the game on the local network using Bonjour.
+   Another Mac on the same network sees it under "Join a game" without typing an address.
+   Joining sends the player's name and colours to the host. The host sends back its scene, and the joiner plays that scene.
+   Both sides see a list of who is in the game, and notice when someone leaves or the host stops.
+   A player on a different version is turned away with a message.
+   Checked for real over the network connection on this machine (loopback), and Bonjour advertising and finding were checked by hand.
+   UPDATE: players now see each other. Every player sends where their character is, which way it faces, its pose and whether it is dead, 20 times a second. The host passes everyone's on to everyone. Each client draws the other players in their own colours with their name above their head, gliding smoothly between updates. The protocol version is now 2, so both copies must be the new build.
+   UPDATE 2: the two worlds are now one. The host runs the scene's scripts and physics and sends what changes (parts moving, falling or made by scripts, lighting, shader settings) 20 times a second. A joining player no longer runs the scene's scripts or physics; they see the host's. Someone joining mid-game gets the world as it is then.
+   Players now bump into each other, and parts land on and stop against every player. A map can turn player-to-player collisions off: in Studio, select StarterPlayer and untick "Players collide".
+   Bugs found and fixed while doing this (they affected single player too): parts dropped on a player who was moving fell straight through them (a collision filter in the Jolt glue code); and with two or more players, a moving part could freeze because its new position was never read back.
+   UPDATE 3: the host's scripts now see every player. Players:GetPlayers lists everyone, Players.PlayerAdded and PlayerRemoving fire, each player has their own Character and CharacterAdded, and GetPlayerFromCharacter works. A joined player touching a part fires Touched on the host, so kill bricks, coins, speed pads and teleporters work for everyone. When a host script changes a joined player's Health, WalkSpeed or position, the change is sent to that player's game, which runs their character; the host then reads back what that player reports.
+   NOT DONE YET: a joined player nudges crates rather than pushing them properly, and host scripts cannot play animations on other players' characters.
+
+8. The client (StudioClient.app) now opens on a main menu: Play, Host on your network, Join a game, Character, Quit.
+   A scene sent from Studio with "Open in Client" still goes straight into play.
+   Character screen: pick a name and a colour for each body part (head, torso, arms, legs) from a palette.
+   It is saved between launches and used in every scene played. Scripts see the name as player.Name.
+   While playing, a Menu button at the top (or Cmd L) goes back to the menu.
+
+9. Code clean-up for future work (nothing players see changed):
+   The Luau library (all of the Roblox-style API, about 4000 lines of Luau in one Swift file) is now split into files by topic in Sources/StudioKit/Scripting/LuauLibrary (14 files now, with the GUI part), numbered in the order they run. The joined text is exactly what it was before.
+   The Swift side of the scripting calls was one 470 line switch. It is now one file per area: ScriptRuntime+Parts, +Tree, +Joints, +Lighting, +Shaders, +Animations.
+   SceneModel was split the same way: SceneModel+Scripts, +Shaders, +Animations, +StarterScene. Four copies of the "make a unique name" code became one.
+   The multiplayer parts of the play session are in PlayController+Multiplayer.swift.
+   New checks: every call the Luau and Wren libraries make to Swift has a handler (catches typos between the two sides), and a warning check for Luau's limit of 200 top level locals in the library (138 are used now after phase 0 of the plan, so there are about 60 left before it would stop compiling; AGENTS.md says what to do).
+   AGENTS.md has a new "Where to look first" table at the top for new agents.
+
+10. Screen GUI and chat.
+   First a basic GUI system like Roblox's, then the chat built from it, so the chat is not hard coded.
+   GUI: scripts can make ScreenGui, Frame, TextLabel, TextButton, TextBox, UICorner and UIPadding, place them with UDim2 and AnchorPoint, and put them in player.PlayerGui. Buttons fire MouseButton1Click and Activated. A TextBox takes typing (CaptureFocus, ReleaseFocus, Focused, FocusLost with enterPressed). While typing, keys go into the box and not to the character.
+   Chat: press / (or click the chat bar), type, press Return. Escape cancels. Everyone in the game sees "Name: message". There is no filter. Messages are at most 200 characters. It also says when someone joins or leaves.
+   The chat is a normal Luau script called ChatScript in StarterPlayerScripts, like ControlScript. It can be opened, copied and changed (Edit a Copy), or turned off for a game.
+   Scripts can use TextChatService: MessageReceived, and TextChannels.RBXGeneral:SendAsync(text).
+   Over the network, a player's message goes to the host, which sends it to everyone else under the name that player joined with. The protocol version is now 5, so all copies must be the new build.
+   Tested alone and with a host and a joiner over the network connection on this machine: typing / and a message on one side shows it on the other, both ways.
+   New files: Sources/StudioKit/Play/Gui.swift, Sources/StudioKit/Play/PlayController+Gui.swift, Sources/StudioKit/UI/GuiLayer.swift, Sources/StudioKit/Scripting/LuauLibrary/09-Gui.swift, Sources/StudioKit/GuiSelfTest.swift.
+   A picture of the chat can be made with:  swift run StudioApp --render-client chat chat.png
+   NOT DONE YET: no images, scrolling frames or list layouts in the GUI, no GUIs made in the editor (only by scripts), no chat commands or chat bubbles, and a text box can only add or delete at the end. Wren has no GUI yet.
+
+11. Plan phases 0 and A (see PLAN.txt), 2026-09-23.
+   Phase 0: the Luau library now uses 138 of its 200 top level names instead of 177, by grouping helpers into tables (CFrame maths, point lights, joints, random numbers, easing). Nothing visible changed.
+   Tweens: TweenService:Create and TweenInfo.new work like Roblox. Play, Pause, Cancel, PlaybackState, Completed, delay, repeat and reverse. Works on parts (position, colour, transparency, CFrame and so on) and on the GUI (UDim2 positions and sizes). A tween on the host reaches joined players.
+   Run mode in Studio: press F8 (or the gear button next to Play). The scene's scripts and physics run with no player and the editor camera stays in control. Stop puts the scene back. Scripts see no LocalPlayer, like a Roblox server.
+   Multiplayer: host scripts now read how fast a joined player is moving and which way they are heading. When a host script changes a joined player (Health, WalkSpeed, position) and reads it straight back, it gets the new value at once. Welds and joints made or changed by host scripts now reach joined players.
+   Shaders can have 16 parameters instead of 8.
+   The network protocol version is now 7, so every copy must be the new build.
+   New test files: TweenSelfTest.swift and RunModeSelfTest.swift. New multiplayer checks in LANSelfTest.swift.
+
+12. Plan phases F, H, B, E, G and C (see PLAN.txt), 2026-09-24. Protocol version is now 11.
+   F: host scripts can play animations on joined players; everyone sees each other's animations.
+   H: Tools. Make one in the Explorer (+ > New Tool), Move to StarterPack, and every player gets it. Hotbar at the bottom (1-9, click, Backspace drops). Touching a tool on the ground picks it up. Sword fights work between host and joined players.
+   B: Roblox-style mouse: free pointer in third person, right-drag to look, first person captures it. ClickDetector (tick it in a part's Properties). Player:GetMouse(), MouseBehavior. "X joined the game" no longer shows for people already there.
+   E: moving platforms carry you, moving walls and thrown crates push you, Seats (tick Seat on a part), Truss climbing (Insert > Truss), swimming in Water material parts. Joined players push crates like the host.
+   G: split view (Cmd backslash or the button right of the tabs) and several screen effects at once (tick each; right-click Move Up/Down for order).
+   C: GUI: ScrollingFrame, UIListLayout, BillboardGui, ImageLabel/ImageButton (images come with D), AutomaticSize, TextScaled, fonts, text outlines, a movable caret with copy/paste. Chat scrolls back 100 messages and shows bubbles over heads. StarterGui: make GUIs in Studio (+ > New ScreenGui), edit in Properties, preview over the viewport, LocalScripts inside run for each player.
+   D: pictures and sounds. Import them in the Explorer (+ > Import Picture or Sound, or drop files on Assets). They are kept inside the scene file and sent to joined players. Scripts name them "studio://Name".
+      ImageLabel and ImageButton show pictures (Image = "studio://Logo"), in play and in the StarterGui preview in Studio.
+      Sound and SoundService like Roblox: SoundId, Volume, Looped, PlaybackSpeed, RollOffMaxDistance, TimePosition, Playing, IsPlaying, IsPaused, IsLoaded, TimeLength, Play, Stop, Pause, Resume, Destroy, and the Played, Ended, Stopped, Paused, Resumed events.
+      A Sound in a part is heard from that part in 3D and fades with distance. One in SoundService is heard everywhere. Right-click a part for Add Sound, or SoundService for New Sound, and set it up in Properties (including "Plays when the game starts"). Properties can also show a picture or play a sound.
+      Multiplayer: the host's sounds are heard by everyone from the same place. A sound made by a LocalScript (for example a button click) is only heard on that player's own machine, on the host too.
+      Fixed: in Run mode (F8) no events reached scripts, so part-to-part Touched never fired there. Now it does.
+      Fixed: deleting a part now deletes its sounds, and duplicating a part copies them.
+      Tests never play sound out loud: they use a recorder instead of the speakers.
+      New files: Play/Audio.swift, Model/SceneModel+Assets.swift, Scripting/ScriptRuntime+Sounds.swift, UI/AssetInspector.swift, AudioSelfTest.swift.
+      Pictures of the new panels:  swift run StudioApp --render-window sounds sounds.png  (or picture)
+      The Luau library now uses 145 of its 200 top level names.
+      Saving: an uploaded sound (or picture) is copied into the place, and saving the place saves the file inside the .studioscene file. The original file can be deleted; opening the place again, playing it in the client, or hosting it for other players all still have the sound. Tested exactly that way.
+      Saving a Model (a selection) now also saves its Sounds and the sound files they play. Inserting it into another place brings the files along; if that place already has a different file with the same name, the Model's one is renamed and its Sounds and scripts are pointed at it.
+      The Import dialog now only offers pictures and sounds.
+
+New files from steps 7 and 8:
+   Sources/StudioKit/Network/LAN.swift (all the network code)
+   Sources/StudioKit/App/ClientSession.swift (what the client is doing: screens, profile, play, host, join)
+   Sources/StudioKit/UI/ClientMenuView.swift (menu, character editor, join list)
+   Sources/StudioKit/Model/PlayerProfile.swift (the saved name and colours)
+   Sources/StudioKit/LANSelfTest.swift (the checks for all of the above)
+   make_app.sh now adds the local network permission text and the Bonjour service name to both apps.
+
+Pictures of the new screens can be made with:
+   swift run StudioApp --render-client menu client-menu.png
+   swift run StudioApp --render-client character client-character.png
+   swift run StudioApp --render-window script window.png
+
+
+NEXT STEPS (SUGGESTED ORDER)
+
+PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI and chat, Roblox features, editor). Start there.
+
+1. Let joined players push crates as hard as the host does.
+2. Let host scripts play animations on other players' characters, and show each player's custom animations to the others.
+3. Test with two Macs on the same network. The first time, macOS asks for permission to use the local network. Allow it.
+4. Character customization could grow: faces, shirts, hats, a 3D preview that turns around.
+5. More GUI: ImageLabel, ScrollingFrame, UIListLayout, making GUIs in the editor (StarterGui), chat bubbles over heads.
+6. Older ideas not done yet: sounds, ClickDetector and ProximityPrompt, tools, a Run mode in Studio (physics without the player), Wren catching up with Luau features.
+
+13. GUI tools and polish, 2026-09-24.
+   A new GUI tab in the ribbon (between Model and Physics) for making StarterGui:
+      Insert: ScreenGui, Frame, Text, Button, TextBox, Image, ImageButton, Scrolling. It goes inside the selected Frame or ScreenGui, next to anything else selected, or into the first ScreenGui (made if there is none). A new Image shows the first picture in the scene.
+      Modifiers: Corner, Padding, Stroke, Gradient, List, Grid, Aspect, Size Limit, Text Limit. Ones the selected object already has are highlighted, and clicking one selects it instead of adding a second.
+      Arrange: align to the parent's left, centre, right, top, middle or bottom; Fill the parent; Front and Back (ZIndex); Duplicate (Cmd D); Delete.
+      Units: To Scale and To Pixels, which change Position and Size without moving the object.
+      Preview: see the GUI on a Phone (landscape or portrait), Tablet, Laptop or 1080p screen, framed in the view; a snap grid (1, 4, 8, 16 px); guides.
+   With the GUI tab open you can click GUI objects in the view to select them, drag to move, drag the handles to resize, and nudge with the arrow keys (Shift for 10 px). While dragging it snaps to the parent's and other objects' edges and centres and shows pink guide lines. A drag is one undo step. Clicks that are not on the GUI still go to the world.
+   New GUI classes, in scripts and in Studio: UIStroke (outlines), UIGradient (with ColorSequence and NumberSequence), UIGridLayout, UIAspectRatioConstraint, UISizeConstraint, UITextSizeConstraint. They are saved with the scene and every player gets them in their copy of StarterGui (tested with a host and a joined player).
+   The Properties panel for GUI objects now has sections (Layout, Appearance, Text...), X and Y rows for positions and sizes, a line saying where the object shows on the previewed screen and how big it is, one-click buttons to add common modifiers, and a gradient editor.
+   Also: Delete and Cmd D work on a selected GUI object (and Delete on a selected Sound or picture); GUI objects have FindFirstChildOfClass and FindFirstChildWhichIsA; a script setting a GUI property to a value out of range now gets an error instead of nothing happening.
+   New files: Interaction/GuiEditController.swift, UI/GuiRibbon.swift, UI/GuiPreviewView.swift, UI/GuiKinds.swift, GuiEditorSelfTest.swift.
+   Pictures:  swift run StudioApp --render-window guitab guitab.png  (or guigradient)
+
+14. Esc deselects everything, 2026-09-24.
+   Pressing Esc anywhere in the Studio window (even while typing in a box or with the Explorer focused) now clears every selection: parts, GUI objects, Sounds, pictures and sounds in Assets, scripts, shaders, joints, Lighting, StarterPlayer, and it puts away an armed weld or joint tool. The animation open in the Animation tab stays open while that tab is showing. Edit > Deselect All (Shift Cmd D) does the same. In a play test Esc still belongs to the game.
+   Also fixed the cause of things staying selected: each kind of thing had its own selection, so clicking empty space cleared the parts but an older GUI object, Sound or script selection came back in the Explorer and Properties. Now selecting one thing lets go of the others, and clicking empty space in the world selects nothing at all.
+   Found while testing: on this Mac, Apple's Network framework started refusing connections to 127.0.0.1 ("Can't assign requested address") while ::1 and plain sockets still worked, probably because of a VPN or network tool (there is an extra loopback address, 127.115.162.25). That made the multiplayer tests time out. They now connect to "localhost" instead, which works either way. Real LAN play is not affected: it joins by the address Bonjour finds.
+   New file: SelectionSelfTest.swift.
+
+15. No built-in play GUI, 2026-09-24.
+   Everything a player sees in play is now GUI objects in the scene. The old hard-coded overlays are gone: the editor's play-test panel (PLAY TEST label, controls, position and fps, health bar, Stop button) and the client's HUD (stats, controls card, script output card, health bar, crosshair, click hint). Stop is the ribbon's button (Cmd P), as in Roblox Studio.
+   In their place a new scene has StarterGui > PlayerHud, an ordinary ScreenGui: health bar, respawn countdown, position/speed/state/fps, the controls list (H hides it), a crosshair in first person, and a script output window (` shows it, and it counts errors). A LocalScript, HudScript, drives it. It can be restyled in the GUI tab, edited, or deleted.
+   Fly (F) and respawn (R) moved out of the ControlScript into a LocalScript in PlayerHud called FlyAndRespawn. The client's Player menu no longer has Respawn, Toggle Fly or Script Output (they bypassed the scripts). A scene without the HUD has no F, R or output window.
+   New Luau API: LogService (MessageOut, GetLogHistory, Enum.MessageType), so the output window can be a GUI. In first person UserInputService.MouseBehavior reads LockCenter, as in Roblox, which is how the crosshair knows.
+   Old scene files get the HUD when opened. If you delete it and save, it stays deleted. StarterGui right-click > Insert Default HUD puts it back. An old scene with its own edited ControlScript (which still has F and R) gets the HUD without FlyAndRespawn so the keys don't fire twice.
+   In Studio the HUD shows over the world while editing, like any StarterGui. View > GUI (or the GUI tab's Show) hides it.
+   Kept as app chrome: the client's top bar with the Menu button (the way out of a game) and other players' name tags.
+   Tested alone and with a host and a joined player (each has their own HUD; R and F only affect the player who pressed them).
+   New files: Model/DefaultHud.swift, HudSelfTest.swift.
+
+16. The task library finished, 2026-09-24.
+   task.defer now runs in the same frame, once the code running now is done (it used to wait for the next frame). A deferred function can defer more; a script that defers itself forever doesn't freeze the game.
+   task.cancel now works wherever the thread is waiting, including on an event's :Wait(). Before, the event firing later printed a "cannot resume dead coroutine" error. It refuses, with a clear message, to cancel the thread that is running, and cancelling a finished thread does nothing.
+   task.wait, spawn, delay, defer and cancel check their arguments and give Roblox's error messages (for example "invalid argument #1 to 'wait' (number expected, got string)").
+   The old globals now behave like Roblox's: wait() waits at least 1/30 s and returns the game time as a second value, delay() is never sooner than 1/30 s, and spawn() starts its function a frame later instead of immediately.
+   task.synchronize and task.desynchronize exist. There are no Actors, so everything runs in series and they carry straight on.
+   Threads due at the same moment now wake in the order they went to sleep, as in Roblox.
+   Tested alone and on a host and a joined player.
+   Fixed after: the chat window sat 84 points down, below the old built-in panel in the corner; with that panel gone it left a gap. It now sits 16 points in from the top-left corner.
+
+
+THINGS TO KNOW
+
+To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app
+Host in one copy and join from the other.
+AGENTS.md now says every new feature must be tested in multiplayer. LANSelfTest.testSeeingEachOther is the example to copy.
+
+Studio.app.zip and StudioClient.app.zip in the project folder are the latest builds.
+If a check fails after a change, the output of the self test says which one and why.
+The project folder is a scratch workspace of the Claude app. Move it somewhere you choose if you want to keep it.

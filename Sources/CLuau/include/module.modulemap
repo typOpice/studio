@@ -1,0 +1,4 @@
+module CLuau {
+    header "studio_luau.h"
+    export *
+}

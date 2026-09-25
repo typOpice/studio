@@ -1,0 +1,4 @@
+module CWren {
+    header "wren.h"
+    export *
+}

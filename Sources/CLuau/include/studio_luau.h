@@ -1,0 +1,94 @@
+// A small C surface over Luau, so Swift can drive the VM without C++ interop.
+//
+// Deliberately thin: pushing and reading values is done through the Lua stack the
+// same way the rest of the world writes Lua bindings, and everything above that —
+// marshalling, error formatting, the object model — lives in Swift.
+#ifndef STUDIO_LUAU_H
+#define STUDIO_LUAU_H
+
+#include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct StudioLua StudioLua;
+
+/// Value kinds, matching Lua's own type tags for the ones we care about.
+enum {
+    STUDIO_LUA_NIL = 0,
+    STUDIO_LUA_BOOLEAN = 1,
+    STUDIO_LUA_NUMBER = 2,
+    STUDIO_LUA_STRING = 3,
+    STUDIO_LUA_TABLE = 4,
+    STUDIO_LUA_FUNCTION = 5,
+    STUDIO_LUA_OTHER = 6
+};
+
+/// Called for every `__studio_invoke(...)`. Arguments are on the stack at 1..argc;
+/// push results and return how many were pushed.
+typedef int (*StudioInvokeFn)(void *context, StudioLua *vm, int argc);
+
+StudioLua *studio_lua_new(void *context, StudioInvokeFn invoke);
+void studio_lua_free(StudioLua *vm);
+
+/// Freezes the standard libraries so scripts cannot redefine them.
+void studio_lua_sandbox(StudioLua *vm);
+
+/// Aborts any script that runs longer than this. 0 disables the limit.
+void studio_lua_set_timeout(StudioLua *vm, double seconds);
+
+/// Compiles and runs a chunk to completion. `environment` names a table created with
+/// studio_lua_make_environment, or NULL for the shared globals. Returns 0 on
+/// success; the message is in studio_lua_last_error.
+int studio_lua_run(StudioLua *vm, const char *chunkName, const char *source,
+                   const char *environment);
+
+/// Compiles a chunk and hands the resulting function to the global Luau function
+/// `__studio_spawn`, which runs it inside a coroutine so it may yield. Returns 0 if
+/// it compiled and `__studio_spawn` returned true.
+int studio_lua_spawn(StudioLua *vm, const char *chunkName, const char *source,
+                     const char *environment);
+
+/// Per-script globals: a table whose misses fall through to the shared globals.
+/// Kept in the registry rather than the globals table, which is read-only once
+/// the VM is sandboxed.
+void studio_lua_make_environment(StudioLua *vm, const char *name);
+void studio_lua_drop_environment(StudioLua *vm, const char *name);
+
+/// Calls a global function with a single number argument. Returns 0 on success.
+int studio_lua_call_number(StudioLua *vm, const char *name, double argument);
+
+const char *studio_lua_last_error(StudioLua *vm);
+
+/// Bytes the VM currently holds, for reporting.
+size_t studio_lua_memory(StudioLua *vm);
+
+// MARK: - Stack access, used from inside an invoke callback
+
+int studio_lua_type(StudioLua *vm, int index);
+int studio_lua_top(StudioLua *vm);
+double studio_lua_to_number(StudioLua *vm, int index);
+int studio_lua_to_boolean(StudioLua *vm, int index);
+/// Valid until the value is popped; copy it straight away.
+const char *studio_lua_to_string(StudioLua *vm, int index);
+int studio_lua_length(StudioLua *vm, int index);
+/// Pushes t[n] (1-based) from the table at `index`.
+void studio_lua_get_index(StudioLua *vm, int index, int n);
+/// Pushes t[key] from the table at `index`.
+void studio_lua_get_field(StudioLua *vm, int index, const char *key);
+void studio_lua_pop(StudioLua *vm, int count);
+
+void studio_lua_push_nil(StudioLua *vm);
+void studio_lua_push_number(StudioLua *vm, double value);
+void studio_lua_push_boolean(StudioLua *vm, int value);
+void studio_lua_push_string(StudioLua *vm, const char *value);
+void studio_lua_push_table(StudioLua *vm, int arrayCount);
+/// Pops a value and stores it as t[n] in the table just below it.
+void studio_lua_set_index(StudioLua *vm, int n);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

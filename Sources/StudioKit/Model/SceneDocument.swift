@@ -1,0 +1,230 @@
+import Foundation
+import Combine
+import UniformTypeIdentifiers
+import simd
+
+/// A saved selection: parts plus their scripts, Sounds and the pictures and sounds they
+/// use, positioned relative to a pivot so the creation can be dropped anywhere in another
+/// scene.
+struct ModelFile: Codable {
+    var name: String
+    var pivot: Vec3
+    var state: SceneState
+}
+
+/// Tracks which file the scene belongs to and whether it has unsaved changes.
+final class SceneDocument: ObservableObject {
+    static let sceneExtension = "studioscene"
+    static let modelExtension = "studiomodel"
+
+    static var sceneType: UTType { UTType(filenameExtension: sceneExtension) ?? .json }
+    static var modelType: UTType { UTType(filenameExtension: modelExtension) ?? .json }
+
+    @Published private(set) var url: URL?
+    @Published private(set) var savedRevision: Int
+
+    private unowned let model: SceneModel
+
+    init(model: SceneModel) {
+        self.model = model
+        self.savedRevision = model.revision
+    }
+
+    var isDirty: Bool { model.revision != savedRevision }
+
+    var displayName: String {
+        url?.deletingPathExtension().lastPathComponent ?? "Untitled"
+    }
+
+    var windowTitle: String {
+        "Studio — \(displayName)\(isDirty ? " (edited)" : "")"
+    }
+
+    // MARK: - Whole scenes
+
+    func save(to destination: URL) throws {
+        try model.encodeScene().write(to: destination, options: .atomic)
+        url = destination
+        savedRevision = model.revision
+        NSDocumentControllerNoteRecent(destination)
+        model.statusText = "Saved \(destination.lastPathComponent)"
+    }
+
+    func open(_ source: URL) throws {
+        try model.loadScene(from: Data(contentsOf: source))
+        url = source
+        savedRevision = model.revision
+        NSDocumentControllerNoteRecent(source)
+        model.statusText = "Opened \(source.lastPathComponent)"
+    }
+
+    func reset() {
+        model.clearScene()
+        url = nil
+        savedRevision = model.revision
+    }
+
+    /// A sensible default filename for a save panel.
+    var suggestedFileName: String {
+        url?.lastPathComponent ?? "Creation.\(Self.sceneExtension)"
+    }
+
+    // MARK: - Models (a saved selection)
+
+    func modelData(name: String) throws -> Data? {
+        // Every selected subtree: its parts, Models, Folders and scripts. The roots are
+        // saved as if they sat in the Workspace.
+        let roots = model.selectionRoots
+        var ids = Set(roots)
+        for root in roots { ids.formUnion(model.descendants(of: root).map(\.id)) }
+        var parts = model.parts.filter { ids.contains($0.id) }
+        var groups = model.groups.filter { ids.contains($0.id) }
+        guard !parts.isEmpty else { return nil }
+        for i in parts.indices where roots.contains(parts[i].id) { parts[i].parentID = nil }
+        for i in groups.indices where roots.contains(groups[i].id) { groups[i].parentID = nil }
+        let scripts = model.scripts.filter { $0.parentID.map(ids.contains) ?? false }
+        let attachments = model.attachments.filter { ids.contains($0.parentID) }
+        let attachmentIDs = Set(attachments.map(\.id))
+        let constraints = model.constraints.filter { c in
+            let ends = c.kind == .weld ? [c.part0, c.part1] : [c.attachment0, c.attachment1]
+            return ends.allSatisfy { $0.map { ids.contains($0) || attachmentIDs.contains($0) } ?? false }
+        }
+        let pivot = parts.reduce(Vec3.zero) { $0 + $1.position } / Float(parts.count)
+        // Its Sounds, and the files they play or its scripts name, so it sounds the same anywhere.
+        let sounds = model.sounds.filter { !$0.local && ($0.parentID.map(ids.contains) ?? false) }
+        let played = Set(sounds.compactMap { model.asset(named: $0.soundId)?.id })
+        let sources = scripts.map(\.source)
+        let assets = model.assets.filter { asset in
+            played.contains(asset.id) || sources.contains { $0.contains(asset.reference) }
+        }
+
+        let file = ModelFile(name: name, pivot: pivot,
+                             state: SceneState(parts: parts, scripts: scripts, groups: groups,
+                                               attachments: attachments, constraints: constraints,
+                                               assets: assets, sounds: sounds))
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(file)
+    }
+
+    /// Inserts a saved creation, re-identified so it never clashes with what is already there.
+    @discardableResult
+    func insertModel(from data: Data, at destination: Vec3) throws -> Int {
+        let file = try JSONDecoder().decode(ModelFile.self, from: data)
+        // Every id is replaced as it goes in, but two sharing one would get the same new one.
+        let incoming = file.state.repairingDuplicateIDs()
+        let offset = destination - file.pivot
+
+        var remapped: [UUID: UUID] = [:]
+        var newParts: [Part] = []
+        var newSelection: Set<UUID> = []
+        for original in incoming.parts { remapped[original.id] = UUID() }
+        for original in incoming.groups { remapped[original.id] = UUID() }
+        for original in incoming.attachments { remapped[original.id] = UUID() }
+        var left: [String] = []
+
+        model.commit("Inserted \(file.name)") {
+            // Its pictures and sounds: one already here with the same bytes is used as it
+            // is; a different one under a name that's taken comes in renamed, and what
+            // names it — its Sounds, its scripts — follows.
+            var reference: [UUID: String] = [:]
+            var renamed: [String: String] = [:]
+            for original in incoming.assets {
+                if let same = model.assets.first(where: { $0.data == original.data && $0.kind == original.kind }) {
+                    reference[original.id] = same.reference
+                    if same.reference != original.reference { renamed[original.reference] = same.reference }
+                    continue
+                }
+                guard model.assets.reduce(original.data.count, { $0 + $1.data.count }) <= SceneAsset.largestTotal else {
+                    left.append(original.name)
+                    continue
+                }
+                var asset = original
+                if model.asset(id: asset.id) != nil { asset.id = UUID() }
+                asset.name = SceneModel.unique(original.name, among: model.assets.map(\.name))
+                model.assets.append(asset)
+                reference[original.id] = asset.reference
+                if asset.name != original.name { renamed[original.reference] = asset.reference }
+            }
+            for original in incoming.sounds {
+                guard let parent = original.parentID.flatMap({ remapped[$0] }) else { continue }
+                var sound = original
+                sound.id = UUID()
+                sound.parentID = parent
+                let key = original.soundId.hasPrefix("studio://") ? String(original.soundId.dropFirst(9)) : original.soundId
+                if let asset = incoming.assets.first(where: { $0.name == key || $0.id.uuidString == key }),
+                   let now = reference[asset.id] {
+                    sound.soundId = now
+                }
+                model.sounds.append(sound)
+            }
+
+            for original in incoming.groups {
+                var group = original
+                group.id = remapped[original.id]!
+                group.parentID = original.parentID.flatMap { remapped[$0] }
+                group.primaryPartID = original.primaryPartID.flatMap { remapped[$0] }
+                model.groups.append(group)
+                if group.parentID == nil { newSelection.insert(group.id) }
+            }
+            for original in incoming.parts {
+                var part = original
+                part.id = remapped[original.id]!
+                part.parentID = original.parentID.flatMap { remapped[$0] }
+                part.name = model.uniqueName(base: original.name)
+                part.position += offset
+                newParts.append(part)
+                if part.parentID == nil { newSelection.insert(part.id) }
+            }
+            model.parts.append(contentsOf: newParts)
+
+            for original in incoming.attachments {
+                guard let parent = remapped[original.parentID] else { continue }
+                var attachment = original
+                attachment.id = remapped[original.id]!
+                attachment.parentID = parent
+                model.attachments.append(attachment)
+            }
+            for original in incoming.constraints {
+                var constraint = original
+                constraint.id = UUID()
+                constraint.parentID = original.parentID.flatMap { remapped[$0] }
+                constraint.part0 = original.part0.flatMap { remapped[$0] }
+                constraint.part1 = original.part1.flatMap { remapped[$0] }
+                constraint.attachment0 = original.attachment0.flatMap { remapped[$0] }
+                constraint.attachment1 = original.attachment1.flatMap { remapped[$0] }
+                model.constraints.append(constraint)
+            }
+
+            for original in incoming.scripts {
+                var script = original
+                script.id = UUID()
+                script.name = model.uniqueScriptName(base: original.name)
+                script.parentID = original.parentID.flatMap { remapped[$0] }
+                for (old, new) in renamed {
+                    for quote in ["\"", "'"] {
+                        script.source = script.source.replacingOccurrences(of: quote + old + quote, with: quote + new + quote)
+                    }
+                }
+                model.scripts.append(script)
+            }
+
+            model.selection = newSelection
+        }
+        if !left.isEmpty {
+            model.statusText = "Inserted \(file.name), but not \(left.joined(separator: ", ")): "
+                + "the scene's pictures and sounds would be over \(SceneAsset.largestTotal >> 20) MB."
+        }
+        return newParts.count
+    }
+}
+
+/// Small shim so the model layer does not import AppKit directly.
+private func NSDocumentControllerNoteRecent(_ url: URL) {
+    RecentDocuments.note?(url)
+}
+
+enum RecentDocuments {
+    /// Set by the app layer, which owns AppKit.
+    static var note: ((URL) -> Void)?
+}

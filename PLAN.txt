@@ -1,0 +1,130 @@
+STUDIO WORK PLAN
+Written 2026-09-23. Covers what was asked for: multiplayer gaps (3), GUI and chat next layer (4), Roblox features (5), editor (7).
+Not in this plan: the two-Mac test (1), Wren catching up (6). Two of the small fixes from item 2 are included because the work below depends on them (phase 0 and phase B).
+
+HOW TO START A SESSION
+Say: "Read RECAP.txt, PLAN.txt and AGENTS.md, then do phase X of the plan."
+Do the phases in order. Each phase is sized to fit in one session or less.
+When a phase is done, mark it DONE in this file and add what changed to RECAP.txt.
+
+RULES FOR EVERY STEP (from AGENTS.md)
+- swift run StudioApp --selftest must pass (1650 checks now). Add checks for everything new.
+- Every new feature gets a multiplayer test: one client hosts, another joins over loopback (copy LANSelfTest.testChat or testOneWorld). Check the feature on both sides.
+- Any change to LANMessage, PlayerState or SceneDelta: bump LAN.protocolVersion (11 now).
+- Luau first. Wren gets it later, not in this plan.
+- Update README.md, AGENTS.md (repo map, invariants, test table, known limitations) and the check count in CLAUDE.md.
+- Finish with ./make_app.sh release and zip both apps.
+
+
+DECISIONS TO CONFIRM AT THE START (recommended answer first)
+D1. Mouse during play: make it work like Roblox. In third person the pointer stays visible and free, right-drag turns the camera, and clicks hit the GUI or the world. First person locks the pointer. (The other option is to keep the pointer captured and click at the screen centre.) Phase B depends on this.
+D2. Images and sounds: store imported files inside the scene file, so they travel to joiners with the scene. (The other option is to keep them as files next to the scene, which LAN joining would then have to send separately.)
+D3. Swimming: parts with a new Water material act as water. (The other option is to skip swimming until there is terrain.)
+D4. Chat bubbles over heads: on by default, as in Roblox, and a game can turn them off.
+
+
+PHASE 0. MAKE ROOM IN THE LUAU LIBRARY (small, do first) -- DONE 2026-09-23: 177 down to 138.
+The library uses 177 of Luau's 200 top-level locals, and the check warns at 190. Phases C to E add many classes.
+- Move helper locals into tables, the way gui, Enum and CFrame already work. Aim for under 150.
+- Only Scripting/LuauLibrary/*.swift changes. The existing tests prove nothing broke.
+
+
+PHASE A. QUICK WINS -- DONE 2026-09-23 (all six; protocol now 7). Next: phase B.
+A1. TweenService:Create (item 5).
+  TweenInfo.new(time, easingStyle, easingDirection, repeatCount, reverses, delayTime).
+  TweenService:Create(instance, info, goals) returns a Tween with Play, Pause, Cancel, PlaybackState and Completed.
+  Tweens numbers, Vector3, Color3, CFrame and UDim2, so it works on parts and on the GUI.
+  Write it in pure Luau on Heartbeat, using the easing that TweenService:GetValue already has.
+  Multiplayer: a host tween on a part reaches joiners through SceneDelta with no extra work. Test that.
+A2. Run mode in Studio (item 5).
+  A Run button (F8) runs scene scripts and physics with no character, and the editor camera stays in control. Stop restores the scene.
+  Add a spawnsPlayer: false option to PlayController and use it from EditorSession.
+A3. Other players' velocity (item 3).
+  Add velocity to PlayerState, which the owning player already knows, and bump the protocol.
+  remoteCharacterCall then answers root AssemblyLinearVelocity, Humanoid MoveDirection and Player.Velocity properly.
+A4. Host writes read back at once (item 3).
+  When a host script sets a joined player's Health or WalkSpeed, remember the value in the host's remote-character code (remoteCharacterCall) and return it to reads until that player's next PlayerState shows it, or for 0.5 s at most.
+  Test: set it, then read it on the same line, on the host.
+A5. Welds and joints sent to joiners (item 3).
+  Add attachments and constraints to SceneDelta (compare them, send the changes, apply them). Joiners then see and query joints correctly.
+A6. More shader parameters (item 7).
+  Go from 8 to 16 floats per shader. Update ShaderSource, the uniform struct mirrors and the parameter list in the UI.
+  The uniform layout test pins the struct, so update it too. Old scenes must still load.
+
+
+PHASE B. MOUSE AND CLICKING (needs D1) -- DONE 2026-09-24 (Roblox-style mouse chosen).
+B1. Roblox-style mouse, as in D1. This also fixes GUI buttons not being clickable during play.
+  The pointer is captured in first person only. Esc still frees it.
+  UserInputService.MouseBehavior and Player:GetMouse() (Hit, Target, Button1Down) come with it.
+B2. ClickDetector (item 5).
+  A child of a part, with MaxActivationDistance. Fires MouseClick(player) and MouseHoverEnter/Leave(player).
+  A click ray-casts from the pointer, using the editor's picking code.
+  Multiplayer: as in Roblox, MouseClick fires on the host. A joiner's click goes to the host as a new LANMessage .click(partID), and the host fires it with that player.
+  Test: the joiner clicks a button part and a host script sees "clicked by Sam".
+B3. Fix "X joined the game" appearing for people already in the game when you join (from item 2). A PlayerAdded fired before the first sync should not be announced by ChatScript.
+
+
+PHASE C. GUI NEXT LAYER (item 4) -- DONE 2026-09-24 (C9, images, done with D).
+C1. Layout pieces: LayoutOrder on every GUI object, UIListLayout (FillDirection, Padding, SortOrder, alignment), ClipsDescendants, and AutomaticSize (Y) for wrapped text. Measure text in GuiStore.layout.
+C2. ScrollingFrame: CanvasSize, CanvasPosition, ScrollBarThickness and ScrollingDirection.
+  The scroll wheel over a GUI scrolls it instead of zooming the camera, so route it in StudioMTKView.scrollWheel.
+C3. Text: TextYAlignment, TextScaled, Font (map a handful of Enum.Font names to system fonts), TextStrokeColor3 and TextStrokeTransparency (outlines make chat readable on bright skies).
+C4. TextBox editing: a caret you can move (left/right, Home/End), CursorPosition, Cmd V paste, Cmd A select all, and TextEditable.
+  Cmd keys while typing must go to the box, not the menu. See StudioMTKView.keyDown.
+C5. Chat rewrite in ChatScript: messages in a ScrollingFrame with a UIListLayout, wrapped lines of any length, and the wheel scrolls back through history.
+C6. BillboardGui: a GUI shown above a part or a character's head (Adornee, StudsOffset, Size, AlwaysOnTop, MaxDistance), placed on screen each frame the way name tags are now.
+C7. Chat bubbles (D4): ChatScript makes a BillboardGui bubble over the speaker's head for about 8 s, for every player including joined ones.
+  A setting on TextChatService turns them off. Multiplayer test: the host sees the bubble over the joiner's head.
+C8. StarterGui in the editor (the biggest GUI step).
+  A StarterGui folder in the Explorer holds ScreenGuis made and edited in Studio, with Properties panel editing, undo and saving.
+  They are drawn over the editor's viewport while selected.
+  At play they are copied into each player's PlayerGui (ResetOnSpawn copies them again on respawn), and scripts inside them run as LocalScripts.
+  The data model needs a Codable record for a GUI object saved in the scene. Scripts reach them by name through PlayerGui:WaitForChild.
+C9. ImageLabel and ImageButton (after D1 in phase D): Image, ImageColor3, ImageTransparency and ScaleType.
+
+
+PHASE D. ASSETS AND SOUND (items 4 and 5, needs D2) -- DONE 2026-09-24 (protocol 11). Also done: Run mode now delivers events to scripts. Sounds made by LocalScripts stay local, on the host too.
+D1. An asset store in the scene. An Assets folder in the Explorer takes PNG, JPG, WAV, MP3 and M4A files (import button and drag and drop), stored in the scene file with a size limit.
+  Scripts name an asset "studio://name". Joiners get assets with the scene in the welcome message.
+D2. ImageLabel and ImageButton (C9).
+D3. Sound: SoundId, Volume, Looped, PlaybackSpeed, Playing, TimePosition, Play/Stop/Pause/Resume, and the Ended and Loaded events.
+  A sound in a part is 3D (AVAudioEngine with an environment node, listener at the camera). A sound in SoundService or the workspace is flat.
+  Multiplayer: a sound played by a host script is heard by everyone, so add sound play/stop to SceneDelta. A sound played by a player's own script is local only.
+  Test on both sides, with a fake audio output in tests so no sound plays.
+
+
+PHASE E. CHARACTER AND PHYSICS (items 3 and 5) -- DONE 2026-09-24 (protocol 9).
+E1. Parts push the character: moving and dynamic parts push the player out of the way, and standing on a moving part carries you along (moving platforms).
+  This goes in CharacterController.step (push out along the contact normal, add the velocity of the part underfoot).
+  Tests: a thrown crate knocks the player, a wall moved by a script pushes them, and a sliding platform carries them. Repeat for a joined player.
+E2. Joined players push crates as hard as the host (item 3).
+  On the host, give remote capsules the same weighted push the local player gets, using the velocity from A3.
+  Test: the same crate moves about the same distance when the host or the joiner walks into it.
+E3. Seats: a Seat part. Touching it sits the character (Humanoid.Sit, SeatPart, the Seated event, a sitting pose), and Space gets up. Other players see them sitting.
+E4. Climbing: a TrussPart shape that can be climbed, with a Climbing state, climb speed and animation.
+E5. Swimming (D3): Water material volumes, buoyancy, a Swimming state and animation.
+
+
+PHASE F. ANIMATIONS ACROSS PLAYERS (item 3) -- DONE 2026-09-24 (F1 already worked; test added. F2 done.)
+F1. First check whether custom animations already show to other players. PlayerState sends currentJoints, which may already include the blended tracks. Write the test: a joiner plays the Wave animation and the host sees the arm move. Fix if it fails.
+F2. Host scripts playing animations on a joined player's character. Forward LoadAnimation and the track calls (play, stop, adjust speed and weight) to that player, like other writes (invariant 77). The host keeps a handle for each track, and reads (IsPlaying, TimePosition) come back in PlayerState.
+
+
+PHASE G. EDITOR (item 7) -- DONE 2026-09-24 (protocol 10).
+G1. Split view: the World and one script or shader tab side by side, toggled with Cmd backslash.
+  The viewport's hide logic (showsWorld) and keyboard routing must follow whichever side has focus: Delete in the code must never delete parts.
+  Test it in DocumentTabsSelfTest like the existing hidden-viewport checks.
+G2. Several screen effects at once: an ordered chain of screen shaders (ping-pong textures in the Renderer's effect pass), in Explorer order.
+  In Luau, Screen:GetShaders() and each shader's Enabled. Keep Screen.Shader working as "the first one".
+  Test by rendering two effects (invert, then greyscale) and reading the pixels back.
+
+
+PHASE H. TOOLS (item 5, largest, last) -- DONE 2026-09-24 (protocol 8).
+H1. Tool, StarterPack and Backpack. A tool has a Handle part held in the right hand, which follows the arm each frame, and fires Equipped, Unequipped and Activated (click).
+  The hotbar is a core script (BackpackScript) built from GUI objects, with keys 1 to 9, like ChatScript.
+H2. Multiplayer: PlayerState carries the equipped tool, so others see it in the player's hand. Activated on a joiner is sent to the host, where tool scripts run.
+
+
+ROUGH SIZE
+Phase 0: small. A: medium (six small parts). B: medium. C: large (C8 alone is a session). D: large. E: large. F: small to medium. G: medium. H: large.
+Suggested order if usage is short: 0, A, B, C1 to C7, G, E1 and E2, F, then D, C8, E3 to E5 and H.
