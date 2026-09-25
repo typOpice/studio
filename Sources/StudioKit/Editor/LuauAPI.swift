@@ -137,6 +137,23 @@ enum LuauAPI {
     ]
 
     /// Reached on an instance: properties with `.`, methods with `:`.
+    /// What every part has; a MeshPart adds its model's.
+    private static let partMembers: [CompletionItem] = [
+            property("Name", "string"), property("Position", "Vector3"), property("Size", "Vector3"),
+            property("Orientation", "Vector3"), property("Color", "Color3"),
+            property("Transparency", "number"), property("Anchored", "boolean"), property("Locked", "boolean"),
+            property("Material", "EnumItem"), property("Shape", "EnumItem"), property("ClassName", "string"),
+            property("Parent", "Workspace"), property("Shader", "Shader"),
+            property("CanCollide", "boolean"), property("CanTouch", "boolean"),
+            property("Occupant", "Humanoid"), property("Disabled", "boolean"), property("ClickDetector", "ClickDetector"),
+            property("Touched", "RBXScriptSignal"), property("TouchEnded", "RBXScriptSignal"),
+            property("PointLight", "PointLight"),
+            method("FindFirstChildOfClass", "className", "PointLight"),
+            method("Destroy", "", "()"), method("Clone", "", "Part"), method("IsA", "className", "boolean"),
+            method("GetFullName", "", "string"), method("FindFirstChild", "name", "Instance"),
+            method("GetChildren", "", "table")
+    ]
+
     static let instanceMembers: [String: [CompletionItem]] = [
         "UDim": [property("Scale", "number"), property("Offset", "number")],
         "UDim2": [property("X", "UDim"), property("Y", "UDim"), property("Width", "UDim"), property("Height", "UDim")],
@@ -227,20 +244,10 @@ enum LuauAPI {
             property("R", "number"), property("G", "number"), property("B", "number"),
             method("Lerp", "goal, alpha", "Color3"), method("ToHSV", "", "number"), method("ToHex", "", "string")
         ],
-        "Part": [
-            property("Name", "string"), property("Position", "Vector3"), property("Size", "Vector3"),
-            property("Orientation", "Vector3"), property("Color", "Color3"),
-            property("Transparency", "number"), property("Anchored", "boolean"), property("Locked", "boolean"),
-            property("Material", "EnumItem"), property("Shape", "EnumItem"), property("ClassName", "string"),
-            property("Parent", "Workspace"), property("Shader", "Shader"),
-            property("CanCollide", "boolean"), property("CanTouch", "boolean"),
-            property("Occupant", "Humanoid"), property("Disabled", "boolean"), property("ClickDetector", "ClickDetector"),
-            property("Touched", "RBXScriptSignal"), property("TouchEnded", "RBXScriptSignal"),
-            property("PointLight", "PointLight"),
-            method("FindFirstChildOfClass", "className", "PointLight"),
-            method("Destroy", "", "()"), method("Clone", "", "Part"), method("IsA", "className", "boolean"),
-            method("GetFullName", "", "string"), method("FindFirstChild", "name", "Instance"),
-            method("GetChildren", "", "table")
+        "Part": partMembers,
+        "MeshPart": partMembers + [
+            property("MeshId", "string"), property("TextureID", "string"),
+            property("CollisionFidelity", "EnumItem"), property("MeshSize", "Vector3")
         ],
         "Workspace": [
             property("Name", "string"), property("Gravity", "number"),

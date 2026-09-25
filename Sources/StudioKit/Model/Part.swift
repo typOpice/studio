@@ -78,6 +78,9 @@ struct Part: Identifiable, Equatable, Codable {
     var clickDetector: ClickDetector?
     /// Makes the part a Seat: a character touching it sits down.
     var seat: SeatSettings?
+    /// Makes the part a MeshPart: an imported 3D file, stretched to its Size. Without
+    /// the file it is drawn and collided as its `shape`.
+    var mesh: MeshSettings?
 
     /// Something a character is kept out of: in the world, colliding, and not water.
     var isSolid: Bool { inWorld && canCollide && material != .water }
@@ -112,14 +115,14 @@ struct Part: Identifiable, Equatable, Codable {
             && lhs.visible == rhs.visible && lhs.parked == rhs.parked && lhs.locked == rhs.locked
             && lhs.canCollide == rhs.canCollide && lhs.canTouch == rhs.canTouch
             && lhs.shaderID == rhs.shaderID && lhs.light == rhs.light && lhs.parentID == rhs.parentID
-            && lhs.clickDetector == rhs.clickDetector && lhs.seat == rhs.seat
+            && lhs.clickDetector == rhs.clickDetector && lhs.seat == rhs.seat && lhs.mesh == rhs.mesh
     }
 
     // MARK: - Codable (simd_quatf needs manual handling)
 
     private enum CodingKeys: String, CodingKey {
         case id, name, shape, position, orientation, size, color, transparency, material, anchored, visible, locked, shaderID
-        case canCollide, canTouch, light, parentID, parked, clickDetector, seat
+        case canCollide, canTouch, light, parentID, parked, clickDetector, seat, mesh
     }
 
     init() {}
@@ -147,6 +150,7 @@ struct Part: Identifiable, Equatable, Codable {
         parked = try c.decodeIfPresent(Bool.self, forKey: .parked) ?? false
         clickDetector = try c.decodeIfPresent(ClickDetector.self, forKey: .clickDetector)
         seat = try c.decodeIfPresent(SeatSettings.self, forKey: .seat)
+        mesh = try c.decodeIfPresent(MeshSettings.self, forKey: .mesh)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -171,6 +175,7 @@ struct Part: Identifiable, Equatable, Codable {
         if parked { try c.encode(parked, forKey: .parked) }
         try c.encodeIfPresent(clickDetector, forKey: .clickDetector)
         try c.encodeIfPresent(seat, forKey: .seat)
+        try c.encodeIfPresent(mesh, forKey: .mesh)
     }
 }
 

@@ -70,6 +70,43 @@ local partProperties = {
 			return { value[1], value[2], value[3] }
 		end,
 	},
+	-- MeshPart only: the 3D model it shows ("studio://Name"), its picture, how it collides,
+	-- and the size the model was made at.
+	MeshId = {
+		host = "meshid",
+		meshOnly = true,
+		write = function(value)
+			if type(value) ~= "string" then
+				return nil, "string expected, got " .. typeof(value)
+			end
+			return value
+		end,
+	},
+	TextureID = {
+		host = "textureid",
+		meshOnly = true,
+		write = function(value)
+			if type(value) ~= "string" then
+				return nil, "string expected, got " .. typeof(value)
+			end
+			return value
+		end,
+	},
+	CollisionFidelity = {
+		host = "collisionfidelity",
+		meshOnly = true,
+		read = function(raw)
+			return Enum.CollisionFidelity[raw]
+		end,
+		write = function(value)
+			local name = enumName(value, "CollisionFidelity")
+			if name == nil or not pcall(function() return Enum.CollisionFidelity[name] end) then
+				return nil, "EnumItem expected, got " .. typeof(value)
+			end
+			return if name == "Default" then "Hull" else name
+		end,
+	},
+	MeshSize = { host = "meshsize", meshOnly = true, read = toVector, readOnly = true },
 	-- Physics (during play; zero in the editor, where nothing moves).
 	AssemblyLinearVelocity = { motion = "velocity" },
 	Velocity = { motion = "velocity" },
@@ -444,10 +481,13 @@ end
 function partMethods.IsA(self, className)
 	checkSelf(self, "Instance", "IsA")
 	local shape = invoke("part.get", partIdOf[self], "shape")
+	local mesh = invoke("part.get", partIdOf[self], "ismeshpart")
 	if className == "WedgePart" then
-		return shape == "wedge"
+		return shape == "wedge" and not mesh
+	elseif className == "MeshPart" then
+		return mesh == true
 	end
-	return className == "Part" and shape ~= "wedge"
+	return className == "Part" and shape ~= "wedge" and not mesh
 		or className == "BasePart" or className == "PVInstance" or className == "Instance"
 end
 
@@ -492,6 +532,9 @@ end
 PartMeta.__index = function(part, key)
 	local id = partIdOf[part]
 	local property = partProperties[key]
+	if property ~= nil and property.meshOnly and not invoke("part.get", id, "ismeshpart") then
+		property = nil
+	end
 	if property ~= nil and property.motion ~= nil then
 		if not invoke("part.exists", id) then
 			raise("attempt to use a part that has been destroyed", 2)
@@ -513,7 +556,9 @@ PartMeta.__index = function(part, key)
 	end
 	if key == "ClassName" then
 		local shape = invoke("part.get", id, "shape")
-		if invoke("part.get", id, "isseat") then
+		if invoke("part.get", id, "ismeshpart") then
+			return "MeshPart"
+		elseif invoke("part.get", id, "isseat") then
 			return "Seat"
 		end
 		return if shape == "wedge" then "WedgePart" elseif shape == "truss" then "TrussPart" else "Part"
@@ -559,6 +604,9 @@ PartMeta.__newindex = function(part, key, value)
 		raise(string.format("Unable to assign property %s. Property is read only", key), 2)
 	end
 	local property = partProperties[key]
+	if property ~= nil and property.meshOnly and not invoke("part.get", id, "ismeshpart") then
+		property = nil
+	end
 	if property == nil then
 		raise(string.format("%s is not a valid member of Part \"%s\"", tostring(key), partName(id)), 2)
 	end

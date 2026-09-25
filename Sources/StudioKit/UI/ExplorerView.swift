@@ -85,7 +85,7 @@ struct ExplorerView: View {
                         }
                     }
                     Button("New Tool") { model.addTool() }
-                    Button("Import Picture or Sound…") { importAssets() }
+                    Button("Import Picture, Sound or 3D Model…") { importAssets() }
                     Button("New Sound") {
                         let part = model.selection.count == 1 ? model.selection.first.flatMap { model.part(id: $0)?.id } : nil
                         if let part { expandedParts.insert(part) } else { soundServiceExpanded = true }
@@ -343,7 +343,7 @@ struct ExplorerView: View {
                 .buttonStyle(.plain)
             }
 
-            Image(systemName: part.shape.symbolName)
+            Image(systemName: part.mesh != nil ? "cube.transparent" : part.shape.symbolName)
                 .font(.system(size: 10))
                 .foregroundStyle(Color(vec: part.color))
                 .frame(width: 14)
@@ -767,8 +767,8 @@ struct ExplorerView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = SceneAsset.imageExtensions.union(SceneAsset.soundExtensions)
-            .sorted().compactMap { UTType(filenameExtension: $0) }
-        panel.message = "Pictures (PNG, JPEG…) and sounds (WAV, MP3, M4A…) — kept inside the scene when it's saved"
+            .union(SceneAsset.meshExtensions).sorted().compactMap { UTType(filenameExtension: $0) }
+        panel.message = "Pictures (PNG, JPEG…), sounds (WAV, MP3, M4A…) and 3D models (OBJ, STL, PLY, USDZ) — kept inside the scene when it's saved"
         guard panel.runModal() == .OK else { return }
         importFiles(panel.urls)
     }
@@ -792,7 +792,7 @@ struct ExplorerView: View {
             model.selectedAsset = nil
         }
         .padding(.top, 4)
-        .contextMenu { Button("Import Picture or Sound…") { importAssets() } }
+        .contextMenu { Button("Import Picture, Sound or 3D Model…") { importAssets() } }
         .dropDestination(for: URL.self) { urls, _ in
             importFiles(urls)
             return true
@@ -808,7 +808,7 @@ struct ExplorerView: View {
     private func assetRow(_ asset: SceneAsset) -> some View {
         let selected = model.selectedAsset == asset.id
         return HStack(spacing: 6) {
-            Image(systemName: asset.kind == .image ? "photo" : "speaker.wave.2.fill")
+            Image(systemName: asset.kind == .image ? "photo" : asset.kind == .mesh ? "cube.transparent" : "speaker.wave.2.fill")
                 .font(.system(size: 10))
                 .foregroundStyle(Color(red: 0.85, green: 0.7, blue: 0.95))
                 .frame(width: 14)
@@ -839,6 +839,11 @@ struct ExplorerView: View {
             model.selectedAsset = asset.id
         }
         .contextMenu {
+            if asset.kind == .mesh {
+                Button("Insert MeshPart") { session.viewport.insertMeshPart(asset.id) }
+                    .disabled(session.isPlaying)
+                Divider()
+            }
             Button("Copy Reference") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(asset.reference, forType: .string)

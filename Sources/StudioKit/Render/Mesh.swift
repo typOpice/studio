@@ -6,12 +6,16 @@ struct Vertex {
     var normal: Vec3
 }
 
-/// A GPU-resident indexed triangle mesh.
+/// A GPU-resident indexed triangle mesh: 16-bit indices for the built-in shapes,
+/// 32-bit for imported meshes, which may also carry texture coordinates.
 final class Mesh {
     let vertexBuffer: MTLBuffer
     let indexBuffer: MTLBuffer
     let indexCount: Int
+    let indexType: MTLIndexType
     let primitiveType: MTLPrimitiveType
+    /// A float2 per vertex, for a textured MeshPart; nil for everything else.
+    let uvBuffer: MTLBuffer?
 
     init?(device: MTLDevice, vertices: [Vertex], indices: [UInt16], primitiveType: MTLPrimitiveType = .triangle) {
         guard !vertices.isEmpty, !indices.isEmpty,
@@ -21,14 +25,32 @@ final class Mesh {
         vertexBuffer = vb
         indexBuffer = ib
         indexCount = indices.count
+        indexType = .uint16
         self.primitiveType = primitiveType
+        uvBuffer = nil
+    }
+
+    init?(device: MTLDevice, vertices: [Vertex], indices: [UInt32], uvs: [SIMD2<Float>]) {
+        guard !vertices.isEmpty, !indices.isEmpty,
+              let vb = device.makeBuffer(bytes: vertices, length: MemoryLayout<Vertex>.stride * vertices.count, options: .storageModeShared),
+              let ib = device.makeBuffer(bytes: indices, length: MemoryLayout<UInt32>.stride * indices.count, options: .storageModeShared)
+        else { return nil }
+        vertexBuffer = vb
+        indexBuffer = ib
+        indexCount = indices.count
+        indexType = .uint32
+        primitiveType = .triangle
+        uvBuffer = uvs.count == vertices.count
+            ? device.makeBuffer(bytes: uvs, length: MemoryLayout<SIMD2<Float>>.stride * uvs.count, options: .storageModeShared)
+            : nil
     }
 
     func draw(_ encoder: MTLRenderCommandEncoder) {
         encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        if let uvBuffer { encoder.setVertexBuffer(uvBuffer, offset: 0, index: 3) }
         encoder.drawIndexedPrimitives(type: primitiveType,
                                       indexCount: indexCount,
-                                      indexType: .uint16,
+                                      indexType: indexType,
                                       indexBuffer: indexBuffer,
                                       indexBufferOffset: 0)
     }

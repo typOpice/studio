@@ -454,6 +454,7 @@ Enum = table.freeze({
 	StartCorner = makeEnum("StartCorner", { "TopLeft", "TopRight", "BottomLeft", "BottomRight" }),
 	AspectType = makeEnum("AspectType", { "FitWithinMaxSize", "ScaleWithParentSize" }),
 	DominantAxis = makeEnum("DominantAxis", { "Width", "Height" }),
+	CollisionFidelity = makeEnum("CollisionFidelity", { "Default", "Hull", "Box", "PreciseConvexDecomposition" }),
 	MessageType = makeEnum("MessageType", { "MessageOutput", "MessageInfo", "MessageWarning", "MessageError" }),
 	Font = makeEnum("Font", {
 		"Legacy", "Arial", "ArialBold", "SourceSans", "SourceSansBold", "SourceSansLight", "Gotham", "GothamBold",

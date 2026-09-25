@@ -14,6 +14,8 @@
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Geometry/ConvexHullBuilder.h>
 #include <Jolt/Physics/Collision/GroupFilter.h>
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <Jolt/Physics/Constraints/PointConstraint.h>
@@ -235,6 +237,57 @@ void studio_jolt_set_ground(StudioJoltWorld *world, int enabled) {
         world->ground = BodyID();
         world->contacts.ground = BodyID();
     }
+}
+
+uint32_t studio_jolt_make_mesh_shape(StudioJoltWorld *world, const float *vertices, int vertexCount,
+                                     const uint32_t *indices, int triangleCount) {
+    if (vertexCount < 3 || triangleCount < 1) return STUDIO_JOLT_NO_BODY;
+    VertexList points;
+    points.reserve(vertexCount);
+    for (int i = 0; i < vertexCount; i++) points.push_back(Float3(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]));
+    IndexedTriangleList triangles;
+    triangles.reserve(triangleCount);
+    for (int i = 0; i < triangleCount; i++) {
+        uint32_t a = indices[i * 3], b = indices[i * 3 + 1], c = indices[i * 3 + 2];
+        if (a >= (uint32_t)vertexCount || b >= (uint32_t)vertexCount || c >= (uint32_t)vertexCount) continue;
+        triangles.push_back(IndexedTriangle(a, b, c));
+    }
+    if (triangles.empty()) return STUDIO_JOLT_NO_BODY;
+    MeshShapeSettings settings(std::move(points), std::move(triangles));
+    ShapeSettings::ShapeResult result = settings.Create();
+    if (result.HasError()) return STUDIO_JOLT_NO_BODY;
+    world->pendingShapes.push_back(result.Get());
+    return (uint32_t)(world->pendingShapes.size() - 1);
+}
+
+int studio_jolt_convex_hull(const float *points, int pointCount, int maxVertices,
+                            uint32_t *outIndices, int capacity) {
+    ensureRegistered();
+    if (pointCount < 4) return 0;
+    ConvexHullBuilder::Positions positions;
+    positions.reserve(pointCount);
+    for (int i = 0; i < pointCount; i++) positions.push_back(Vec3(points[i * 3], points[i * 3 + 1], points[i * 3 + 2]));
+    ConvexHullBuilder builder(positions);
+    const char *error = nullptr;
+    ConvexHullBuilder::EResult result = builder.Initialize(std::max(maxVertices, 4), 1.0e-4f, error);
+    if (result != ConvexHullBuilder::EResult::Success && result != ConvexHullBuilder::EResult::MaxVerticesReached) return 0;
+    // Each face is a polygon: a fan of triangles from its first corner.
+    int count = 0;
+    for (const ConvexHullBuilder::Face *face : builder.GetFaces()) {
+        if (face->mRemoved || face->mFirstEdge == nullptr) continue;
+        const ConvexHullBuilder::Edge *first = face->mFirstEdge;
+        const ConvexHullBuilder::Edge *edge = first->mNextEdge;
+        while (edge != nullptr && edge->mNextEdge != first) {
+            if (count < capacity) {
+                outIndices[count * 3] = (uint32_t)first->mStartIdx;
+                outIndices[count * 3 + 1] = (uint32_t)edge->mStartIdx;
+                outIndices[count * 3 + 2] = (uint32_t)edge->mNextEdge->mStartIdx;
+            }
+            count++;
+            edge = edge->mNextEdge;
+        }
+    }
+    return count;
 }
 
 uint32_t studio_jolt_make_shape(StudioJoltWorld *world, int shapeKind, const float *params, int paramCount,

@@ -112,19 +112,18 @@ vertex RasterData scene_vertex(uint vid [[vertex_id]],
     return out;
 }
 
-fragment float4 scene_fragment(RasterData in [[stage_in]],
-                               constant FrameUniforms &frame [[buffer(1)]],
-                               constant DrawUniforms &draw [[buffer(2)]]
-                               STUDIO_LIGHTING_PARAMS)
+// The lit colour of a surface point: the scene's parts, textured or not, share it.
+static float4 studio_scene_color(float3 worldPosition, float3 normal, float2 pixel, float3 base,
+                                 constant FrameUniforms &frame, constant DrawUniforms &draw,
+                                 constant LightingUniforms &lighting, constant PointLightData *pointLights,
+                                 depth2d<float> shadowMap STUDIO_RT_DECL)
 {
-    float3 n = normalize(in.normal);
+    float3 n = normalize(normal);
     float3 l = normalize(lighting.sunDirection.xyz);
-    float3 v = normalize(frame.cameraPosition.xyz - in.worldPosition);
-    float2 pixel = in.clipPosition.xy;
-    float3 base = draw.color.rgb;
+    float3 v = normalize(frame.cameraPosition.xyz - worldPosition);
 
-    float sun = studio_sun_visibility(in.worldPosition, n, pixel, lighting, shadowMap STUDIO_RT_ARGS);
-    float occlusion = studio_occlusion(in.worldPosition, n, pixel, lighting STUDIO_RT_ARGS);
+    float sun = studio_sun_visibility(worldPosition, n, pixel, lighting, shadowMap STUDIO_RT_ARGS);
+    float occlusion = studio_occlusion(worldPosition, n, pixel, lighting STUDIO_RT_ARGS);
     float ndotl = max(dot(n, l), 0.0);
     float3 color = base * (studio_ambient(n, occlusion, lighting) + ndotl * sun * lighting.sunColor.rgb);
 
@@ -132,7 +131,7 @@ fragment float4 scene_fragment(RasterData in [[stage_in]],
     float spec = pow(max(dot(n, h), 0.0), max(draw.shading.y, 1.0)) * draw.shading.x;
     color += spec * mix(float3(1.0), base, 0.35) * step(0.001, ndotl) * sun * (lighting.sunColor.rgb / 0.85);
 
-    color += studio_point_lights(in.worldPosition, n, v, base, draw.shading.x, draw.shading.y,
+    color += studio_point_lights(worldPosition, n, v, base, draw.shading.x, draw.shading.y,
                                  lighting, pointLights STUDIO_RT_ARGS);
 
 #if STUDIO_RAYTRACING
@@ -142,7 +141,7 @@ fragment float4 scene_fragment(RasterData in [[stage_in]],
         if (reflectivity > 0.01) {
             float3 r = reflect(-v, n);
             float fresnel = reflectivity + (1.0 - reflectivity) * pow(1.0 - saturate(dot(n, v)), 5.0) * 0.5;
-            float3 seen = studio_ray_reflection(in.worldPosition, n, r, lighting, accel, instances, faceNormals);
+            float3 seen = studio_ray_reflection(worldPosition, n, r, lighting, accel, instances, faceNormals);
             color = mix(color, seen * mix(float3(1.0), base, 0.5), saturate(fresnel));
         }
     }
@@ -150,8 +149,54 @@ fragment float4 scene_fragment(RasterData in [[stage_in]],
 
     // Neon-style emissive.
     color = mix(color, base * 1.35, draw.shading.z);
-    color = studio_finish(color, in.worldPosition, frame.cameraPosition.xyz, lighting);
+    color = studio_finish(color, worldPosition, frame.cameraPosition.xyz, lighting);
     return float4(color, draw.color.a);
+}
+
+fragment float4 scene_fragment(RasterData in [[stage_in]],
+                               constant FrameUniforms &frame [[buffer(1)]],
+                               constant DrawUniforms &draw [[buffer(2)]]
+                               STUDIO_LIGHTING_PARAMS)
+{
+    return studio_scene_color(in.worldPosition, in.normal, in.clipPosition.xy, draw.color.rgb, frame, draw,
+                              STUDIO_LIGHTING_ARGS);
+}
+
+// A MeshPart with a TextureID: its picture, tinted by the part's colour, lit as any part.
+struct RasterTextured {
+    float4 clipPosition [[position]];
+    float3 worldPosition;
+    float3 normal;
+    float2 uv;
+};
+
+vertex RasterTextured scene_vertex_textured(uint vid [[vertex_id]],
+                                            device const VertexData *vertices [[buffer(0)]],
+                                            constant FrameUniforms &frame [[buffer(1)]],
+                                            constant DrawUniforms &draw [[buffer(2)]],
+                                            device const float2 *uvs [[buffer(3)]])
+{
+    VertexData v = vertices[vid];
+    float4 world = draw.model * float4(v.position, 1.0);
+    RasterTextured out;
+    out.clipPosition = frame.viewProjection * world;
+    out.worldPosition = world.xyz;
+    out.normal = draw.normalMatrix * v.normal;
+    out.uv = uvs[vid];
+    return out;
+}
+
+fragment float4 scene_fragment_textured(RasterTextured in [[stage_in]],
+                                        constant FrameUniforms &frame [[buffer(1)]],
+                                        constant DrawUniforms &draw [[buffer(2)]]
+                                        STUDIO_LIGHTING_PARAMS,
+                                        texture2d<float> meshTexture [[texture(3)]])
+{
+    constexpr sampler picture(filter::linear, mip_filter::linear, address::repeat);
+    float4 texel = meshTexture.sample(picture, in.uv);
+    float4 lit = studio_scene_color(in.worldPosition, in.normal, in.clipPosition.xy, draw.color.rgb * texel.rgb,
+                                    frame, draw, STUDIO_LIGHTING_ARGS);
+    return float4(lit.rgb, lit.a * texel.a);
 }
 
 // Flat-shaded pass used for gizmo handles and selection outlines.

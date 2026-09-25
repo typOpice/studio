@@ -42,7 +42,9 @@ final class SceneModel: ObservableObject {
         didSet { if selectedGui != nil { leaveOthers(for: \.selectedGui) } }
     }
     /// Pictures and sounds brought into the scene, and its Sounds; the ones selected.
-    @Published var assets: [SceneAsset] = []
+    @Published var assets: [SceneAsset] = [] {
+        didSet { MeshLibrary.shared.register(assets) }
+    }
     @Published var sounds: [SceneSound] = []
     /// Which default HUD the scene has been given; see `DefaultHud`.
     var defaultGui = 0

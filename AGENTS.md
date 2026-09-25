@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 1855 checks — THE test suite, ~50–70s
+swift run StudioApp --selftest       # 1894 checks — THE test suite, ~50–70s
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
 ./make_app.sh release                # produce Studio.app and StudioClient.app
@@ -129,6 +129,7 @@ listed in §9.
 | `ToolSelfTest.swift` | Tools: StarterPack and parked parts (no picking, undo, saving), a copy per character, the hotbar's keys and slots, the hand (in front, following, arm out, not collided with), clicks, Backspace dropping, picking up by the Handle, respawning, the Luau API (StarterPack, Backpack, EquipTool, Parent, Instance.new, Enabled); a sword fight between host and joiner |
 | `RunModeSelfTest.swift` | Studio's Run mode: no player (no character, no StarterPlayer scripts, no LocalPlayer), the editor keeping input, scripts and physics running on the editor's frames, Stop restoring; events still reaching scripts (part-to-part Touched, a Sound's Ended) |
 | `AudioSelfTest.swift` | Pictures and sounds (WAV and PNG made in memory): importing (kinds, refusals, unique names, references, rename, undo, saving); a sound file imported from disk, the place saved through `SceneDocument`, the file deleted, the place reopened, played and hosted for a joiner; Models saving their Sounds and files, and inserting them (brought, shared, renamed with Sounds and scripts following, undone); decoding and mono mixdown, fading with distance; a part's Sounds deleted and copied with it; the Luau Sound/SoundService API against a `RecordingOutput` (3D position, volume, TimePosition, Pause/Resume, Ended once, Looped, PlaybackSpeed, reach, Stop, Destroy, a Sound made in Studio playing at start, read-only and typed properties, LocalScript Sounds kept local through task.spawn and events); an ImageLabel drawing its picture (rendered and read back); the StarterGui preview's pictures; a host's Sounds heard by a joiner (same part, stopping, ending) while each machine's LocalScript Sounds stay its own |
+| `MeshSelfTest.swift` | MeshParts (OBJ, STL and PLY made in memory): decoding (triangles, size, texture coordinates, hard edges kept when a file has no normals, squeezed into the unit cube, the hull and its volume, a broken file refused); inserting (size, on the ground, too-big models rescaled, fidelity and picture undoable, Reset Size, saving, old files); an arch clicked through its opening whatever it collides as, and walked into by each CollisionFidelity (Precise lets a capsule stand in the opening, Hull and Box push it out, pillars push sideways, turned); Jolt with a cup (a block lands inside a Precise one, on top of a Hull or Box one) and an unanchored MeshPart resting and weighing its hull; drawn plain, textured and ray traced and read back; the Luau MeshPart API (Instance.new, ClassName, IsA, MeshId → MeshSize, TextureID, CollisionFidelity, the errors, Clone); saved Models carrying models and pictures and renaming a clash; a joiner getting the models, walking through a Precise arch, and seeing a host script's MeshPart |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -219,8 +220,14 @@ Sources/StudioKit/
   Model/SceneModel+StarterGui.swift  StarterGuiObject (GUIs made in Studio) and editing them
   Model/DefaultHud.swift         StarterGui's PlayerHud a new scene starts with (objects,
                                  HudScript, FlyAndRespawn), and giving it to old scenes
-  Model/SceneModel+Assets.swift  SceneAsset (a picture or sound file kept in the scene, named
-                                 "studio://Name") and SceneSound (a Sound), and editing them
+  Model/SceneModel+Assets.swift  SceneAsset (a picture, sound or 3D model file kept in the scene,
+                                 named "studio://Name") and SceneSound (a Sound), and editing them
+  Model/MeshGeometry.swift       MeshSettings (a part's MeshId, TextureID, CollisionFidelity),
+                                 MeshGeometry (a model decoded by Model I/O into the unit cube,
+                                 with its hull) and MeshLibrary (decoded once per asset)
+  Model/TriangleSet.swift        triangles with a BVH: ray casts and closest points to a segment
+  Model/SceneModel+Mesh.swift    inserting MeshParts and editing their mesh settings
+  UI/MeshUI.swift                importing models, the ribbon's Mesh button, the Mesh section
   Play/Audio.swift               AudioOutput (SpeakerOutput: AVAudioEngine; RecordingOutput for
                                  the tests) and SoundSystem, which makes the scene's Sounds heard
   Scripting/ScriptRuntime+Sounds.swift  the `sound.*` host calls
@@ -281,9 +288,10 @@ Sources/StudioKit/
   UI/AnimationEditorView.swift the Animation tab: toolbar, KeyframeTimeline, JointInspector
   UI/LightingView.swift       Lighting inspector, a part's PointLight editor, RenderCapabilities
   UI/PanelSnapshot.swift      `--render-panel animation|inspector|explorer|ribbon out.png`,
-                              `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture out.png`
+                              `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture|mesh|meshasset out.png`
                               (whole window),
-                              `--render-client menu|character|join|chat out.png`
+                              `--render-client menu|character|join|chat out.png`;
+                              `--render-meshes out.png [ray]` (AvatarSnapshot) draws MeshParts
   UI/Theme.swift          colours, NumericField, VectorEditor
 ```
 
@@ -1014,6 +1022,21 @@ Roughly ordered by how much time they will cost you.
     drops deferred threads of a character's scope like sleeping ones. task's arguments
     are checked with `taskSeconds`/`taskThread` (Roblox's messages).
 
+93. **A MeshPart is a block with `Part.mesh` set, and its model is unit-sized.**
+    `part.shape` stays `.block` (the fallback when the model can't be read), so switches
+    over `PartShape` never see meshes; everything that cares checks `part.mesh` first.
+    `MeshGeometry` squeezes the model into the unit cube (invariant 1), so `Size` scales
+    it like any shape; `nativeSize` is `MeshSize`. Geometry is found by asset id through
+    `MeshLibrary.shared` (filled from `SceneModel.assets`' didSet), so physics, collision
+    and picking need no model. `CollisionFidelity` decides the collider in
+    `PhysicsWorld.shape(of:still:)`, `Collision.meshContact` and `Picking.intersect` alike —
+    box, hull (Jolt's `ConvexHullBuilder` via `studio_jolt_convex_hull`), or precise, which
+    is a Jolt `MeshShape` only for a static assembly (moving ones use the hull; Jolt's
+    mesh shapes can't be dynamic). A click (`Picking.pick`) always tests the real
+    triangles. Meshes are drawn two-sided (imported winding isn't trusted) and textured
+    through a separate UV buffer at vertex index 3, so `Vertex` and `DrawUniforms` keep
+    their sizes; each model is added to the ray-tracing scene as `"mesh:<uuid>"`.
+
 ## 8. Recipes
 
 ### Add a GUI class or property
@@ -1185,6 +1208,13 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   a character or a GUI; files are decoded whole, not streamed; a Sound's TimePosition
   on a joiner is only the host's last word; ImageRectOffset/Size, SliceCenter and
   TileSize aren't there. Luau only.
+- **MeshParts:** only the formats Model I/O reads (OBJ, STL, PLY, USD/USDA/USDC/USDZ —
+  no FBX or glTF); one texture per part, no normal/roughness maps, no SurfaceAppearance;
+  a model's own materials and colours are ignored; Precise collision only while anchored
+  (a moving Precise part is its hull, not a convex decomposition); Hull is capped at 128
+  corners; models over 500,000 triangles are refused; MeshId must name an imported
+  model (`studio://Name`), not a Roblox asset id; no `SpecialMesh`, no
+  `RenderFidelity`; Wren has no MeshPart API.
 - **Run mode is Studio-only:** it has no player and no network side, so it has no
   multiplayer test; a scene script that needs `Players.LocalPlayer` gets nil there, as
   on a Roblox server.
@@ -1205,7 +1235,7 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   In Studio one GUI object is selected at a time (no multi-select, no dragging in the
   Explorer to reparent), text is edited in Properties, not in the view. Luau only.
 - **Chat:** no filter, no commands (/whisper, /team…); bubbles are a fixed width.
-- **Roblox divergences:** `Instance.new` makes parts, Models, Folders, PointLights,
+- **Roblox divergences:** `Instance.new` makes parts, MeshParts, Models, Folders, PointLights,
   Animations, Sounds and the GUI classes, and new or cloned parts go straight into the workspace; setting
   `Parent = nil` destroys; no `Unions`;
   `Vector3.zero.Unit` is zero, not NaN.

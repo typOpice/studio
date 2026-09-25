@@ -1,5 +1,5 @@
 STUDIO PROJECT RECAP
-Last updated: 2026-09-24 (end of the session)
+Last updated: 2026-09-25
 
 
 WHAT THIS IS
@@ -14,7 +14,7 @@ Everything is one Swift package. There is no Xcode on the build machine, only th
 HOW TO CHECK THAT EVERYTHING STILL WORKS
 
 Run all the automatic checks:  swift run StudioApp --selftest
-They must all pass before any change counts as done (1855 checks at the end of this session, all passing).
+They must all pass before any change counts as done (1894 checks at the end of this session, all passing).
 Build the two apps:  ./make_app.sh release
 AGENTS.md explains how the code is organised and the rules that are easy to break. Read it first.
 README.md is the guide for people using the apps.
@@ -197,6 +197,17 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Threads due at the same moment now wake in the order they went to sleep, as in Roblox.
    Tested alone and on a host and a joined player.
    Fixed after: the chat window sat 84 points down, below the old built-in panel in the corner; with that panel gone it left a gap. It now sits 16 points in from the top-left corner.
+
+17. MeshParts (3D models), 2026-09-25.
+   3D models can be imported like pictures and sounds: OBJ, STL, PLY and USD (USDA, USDC, USDZ), the formats macOS reads itself. FBX and glTF are not supported; export them as OBJ or USD first.
+   Home > Mesh (or right-click a model in Assets > Insert MeshPart) puts a MeshPart on the ground at the model's own size, or 8 studs across if the model is far too big or small. Size stretches it like any part.
+   Properties has a Mesh section: the model (MeshId), one picture wrapped on it using the model's texture coordinates (TextureID, tinted by the part colour), CollisionFidelity and Reset Size.
+   CollisionFidelity works like Roblox: Hull (the default, shrink-wrapped), Box, or Precise (the real triangles, so you can walk through an arch or drop things into a cup). Precise only applies while the part is anchored; a moving Precise part collides as its hull. Clicking always hits the real shape.
+   Luau: Instance.new("MeshPart"), MeshId, TextureID, CollisionFidelity (Enum.CollisionFidelity), MeshSize (read only), ClassName "MeshPart", IsA. Wren has no MeshPart yet.
+   Saved Models take their 3D models and pictures with them. Joined players get the models with the world.
+   Drawn with shadows and ray tracing like other parts. Meshes are drawn two-sided.
+   Tested alone and with a host and a joined player (the joiner walks through a Precise arch on their own machine and sees a MeshPart a host script makes).
+   New files: Model/MeshGeometry.swift, Model/TriangleSet.swift, Model/SceneModel+Mesh.swift, UI/MeshUI.swift, MeshSelfTest.swift.
 
 
 THINGS TO KNOW

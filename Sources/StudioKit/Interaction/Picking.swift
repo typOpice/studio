@@ -2,20 +2,32 @@ import simd
 
 enum Picking {
 
-    /// Nearest part under the ray, tested against each shape's actual volume in local space.
+    /// Nearest part under the ray, tested against each shape's actual volume in local
+    /// space — a MeshPart's exact triangles, whatever it collides as.
     static func pick(ray: Ray, in parts: [Part]) -> (part: Part, distance: Float)? {
         var best: (Part, Float)?
         for part in parts where part.inWorld && !part.locked {
-            guard let t = intersect(ray: ray, part: part) else { continue }
+            guard let t = intersect(ray: ray, part: part, exact: true) else { continue }
             if best == nil || t < best!.1 { best = (part, t) }
         }
         return best.map { (part: $0.0, distance: $0.1) }
     }
 
-    static func intersect(ray: Ray, part: Part) -> Float? {
+    /// Where a ray meets a part: a MeshPart as it collides (box, hull or triangles), or —
+    /// `exact` — its triangles, as clicks and the mouse see it.
+    static func intersect(ray: Ray, part: Part, exact: Bool = false) -> Float? {
         let inverse = part.modelMatrix.inverse
         let local = ray.transformed(by: inverse)
         // The local ray direction is unnormalized, so `t` stays in world-space units.
+        if let mesh = part.mesh, let geometry = MeshLibrary.shared.geometry(for: part) {
+            if exact || mesh.collisionFidelity == .precise {
+                return geometry.triangles.raycast(origin: local.origin, direction: local.direction)
+            }
+            if mesh.collisionFidelity == .hull {
+                return geometry.hull.raycast(origin: local.origin, direction: local.direction)
+            }
+            return Intersect.rayUnitBox(local, halfExtents: Vec3(repeating: 0.5))
+        }
         switch part.shape {
         case .block, .truss:
             return Intersect.rayUnitBox(local, halfExtents: Vec3(repeating: 0.5))

@@ -62,7 +62,7 @@ Instance = table.freeze({
 			return light
 		end
 		local shape
-		if className == "Part" or className == "Seat" then
+		if className == "Part" or className == "Seat" or className == "MeshPart" then
 			shape = "block"
 		elseif className == "WedgePart" then
 			shape = "wedge"
@@ -77,6 +77,9 @@ Instance = table.freeze({
 		part.Anchored = false
 		if className == "Seat" then
 			invoke("part.set", partIdOf[part], "isseat", true)
+		elseif className == "MeshPart" then
+			-- No model until MeshId names one: drawn as a block meanwhile.
+			invoke("part.set", partIdOf[part], "ismeshpart", true)
 		elseif className == "TrussPart" then
 			part.Size = vector(2, 10, 2)
 			part.Anchored = true

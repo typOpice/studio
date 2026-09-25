@@ -111,6 +111,111 @@ enum AvatarSnapshot {
         return true
     }
 
+    /// `StudioApp --render-meshes out.png [ray]`: MeshParts made from 3D models written
+    /// here — a torus with a checked picture on it, an arch and a cup with a block dropped
+    /// in (Precise, so it lands inside) — simulated a moment and rendered.
+    static func renderMeshes(to url: URL, technology: LightingTechnology,
+                             width: Int = 1600, height: Int = 900) -> Bool {
+        guard let device = MTLCreateSystemDefaultDevice() else { return false }
+        let model = SceneModel()
+        model.scripts = []
+        model.shaders = []
+        model.groups = []
+        model.parts = []
+        model.lighting.technology = technology
+        guard let torus = try? model.importAsset(data: torusOBJ(), name: "Torus", fileExtension: "obj"),
+              let arch = try? model.importAsset(data: MeshSelfTest.arch, name: "Arch", fileExtension: "obj"),
+              let cup = try? model.importAsset(data: MeshSelfTest.cup, name: "Cup", fileExtension: "obj"),
+              (try? model.importAsset(data: checkerPNG(), name: "Checks", fileExtension: "png")) != nil,
+              let ring = model.insertMeshPart(torus, at: Vec3(-9, 0, 0)),
+              let gate = model.insertMeshPart(arch, at: Vec3(3, 0, -2)),
+              let holder = model.insertMeshPart(cup, at: Vec3(3, 0, 8)) else { return false }
+        model.update(id: ring) {
+            $0.size = Vec3(8, 3, 8)
+            $0.position.y = 3
+            $0.orientation = simd_quatf(angle: 0.5, axis: Vec3(1, 0, 0))
+            $0.color = Vec3(1, 1, 1)
+            $0.mesh?.textureId = "studio://Checks"
+        }
+        model.update(id: gate) { $0.color = Vec3(0.55, 0.6, 0.7) }
+        model.update(id: holder) { $0.color = Vec3(0.85, 0.5, 0.25); $0.mesh?.collisionFidelity = .precise }
+        var block = Part()
+        block.name = "Block"
+        block.anchored = false
+        block.size = Vec3(1.5, 1.5, 1.5)
+        block.color = Vec3(0.2, 0.7, 0.3)
+        block.position = Vec3(3, 9, 8)
+        var parts = model.parts + [block]
+        _ = PhysicsSelfTest.simulate(PhysicsWorld(), &parts, seconds: 2)
+        model.parts = parts
+        model.selection = []
+        var camera = Camera()
+        camera.target = Vec3(-1, 2.5, 3)
+        camera.distance = 26
+        camera.yaw = -0.8
+        camera.pitch = 0.38
+        let source = Source(model: model, avatars: [], camera: camera)
+        let view = MTKView(frame: CGRect(x: 0, y: 0, width: width, height: height), device: device)
+        guard let renderer = Renderer(device: device, view: view, source: source),
+              let image = renderer.snapshot(width: width, height: height),
+              let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
+        else {
+            print("Could not render the meshes.")
+            return false
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return false }
+        print("Wrote \(url.path) (\(renderer.drewRayTraced ? "ray traced" : "conventional"))")
+        return true
+    }
+
+    /// A torus with normals and picture coordinates, as OBJ text.
+    private static func torusOBJ(rings: Int = 48, sides: Int = 24) -> Data {
+        var text = ""
+        let big: Float = 1, small: Float = 0.38
+        for i in 0...rings {
+            for j in 0...sides {
+                let u = Float(i) / Float(rings) * 2 * .pi, v = Float(j) / Float(sides) * 2 * .pi
+                let centre = Vec3(cos(u) * big, 0, sin(u) * big)
+                let normal = Vec3(cos(u) * cos(v), sin(v), sin(u) * cos(v))
+                let p = centre + normal * small
+                text += "v \(p.x) \(p.y) \(p.z)\nvn \(normal.x) \(normal.y) \(normal.z)\n"
+                text += "vt \(Float(i) / Float(rings) * 6) \(Float(j) / Float(sides) * 2)\n"
+            }
+        }
+        for i in 0..<rings {
+            for j in 0..<sides {
+                let a = i * (sides + 1) + j + 1, b = a + sides + 1
+                // Counter-clockwise seen from outside.
+                text += "f \(a)/\(a)/\(a) \(a + 1)/\(a + 1)/\(a + 1) \(b + 1)/\(b + 1)/\(b + 1)\n"
+                text += "f \(a)/\(a)/\(a) \(b + 1)/\(b + 1)/\(b + 1) \(b)/\(b)/\(b)\n"
+            }
+        }
+        return Data(text.utf8)
+    }
+
+    /// Red and cream checks, 64 × 64.
+    private static func checkerPNG() -> Data {
+        let size = 64
+        guard let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return Data() }
+        for y in 0..<8 {
+            for x in 0..<8 {
+                context.setFillColor((x + y) % 2 == 0 ? CGColor(red: 0.85, green: 0.15, blue: 0.1, alpha: 1)
+                                                        : CGColor(red: 0.95, green: 0.9, blue: 0.8, alpha: 1))
+                context.fill(CGRect(x: x * 8, y: y * 8, width: 8, height: 8))
+            }
+        }
+        let data = NSMutableData()
+        guard let image = context.makeImage(),
+              let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)
+        else { return Data() }
+        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationFinalize(destination)
+        return data as Data
+    }
+
     /// `StudioApp --render-physics out.png [seconds]`: a pyramid of crates hit by a heavy
     /// ball, simulated for a while with the real physics, then rendered.
     static func renderPhysics(to url: URL, seconds: Float = 1.2) -> Bool {

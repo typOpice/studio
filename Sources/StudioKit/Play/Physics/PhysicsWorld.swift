@@ -122,12 +122,16 @@ final class PhysicsWorld {
     /// Mass from shape, size and material, as Roblox works it out (density × volume).
     static func massProperties(of part: Part) -> (mass: Float, volume: Float) {
         let s = simd_max(part.size, Vec3(repeating: 0.05))
-        let volume: Float
+        var volume: Float
         switch part.shape {
         case .block, .truss: volume = s.x * s.y * s.z
         case .sphere: volume = 4.0 / 3.0 * .pi * (s.x / 2) * (s.y / 2) * (s.z / 2)
         case .cylinder: volume = .pi * (s.x / 2) * (s.z / 2) * s.y
         case .wedge: volume = s.x * s.y * s.z / 2
+        }
+        // A MeshPart weighs what its outline holds (its box, collided as one).
+        if let mesh = part.mesh, let geometry = MeshLibrary.shared.geometry(for: part) {
+            volume = mesh.collisionFidelity == .box ? s.x * s.y * s.z : geometry.hullVolume * s.x * s.y * s.z
         }
         return (max(volume * density(part.material), 0.01), volume)
     }
@@ -135,14 +139,29 @@ final class PhysicsWorld {
     /// The shape Jolt collides for a part. Round shapes stay exact while they're round;
     /// a squashed sphere (an ellipsoid) or cylinder (an elliptical one) becomes a
     /// convex hull of its real surface.
-    static func shape(of part: Part) -> (kind: Int32, params: [Float], points: [Float]) {
+    static func shape(of part: Part, still: Bool = true)
+        -> (kind: Int32, params: [Float], points: [Float], triangles: [UInt32]) {
         let h = part.size * 0.5
         func uniform(_ a: Float, _ b: Float) -> Bool { abs(a - b) <= max(a, b) * 0.01 }
+        // A MeshPart: its box, its hull, or — held still — its exact triangles.
+        if let mesh = part.mesh, let geometry = MeshLibrary.shared.geometry(for: part) {
+            let s = simd_max(part.size, Vec3(repeating: 0.05))
+            switch mesh.collisionFidelity {
+            case .box:
+                return (Int32(STUDIO_JOLT_BOX.rawValue), [h.x, h.y, h.z], [], [])
+            case .precise where still:
+                return (Int32(STUDIO_JOLT_HULL.rawValue), [], geometry.positions.flatMap { v in let p = v * s; return [p.x, p.y, p.z] },
+                        geometry.indices)
+            case .hull, .precise:
+                return (Int32(STUDIO_JOLT_HULL.rawValue), [],
+                        geometry.hull.vertices.flatMap { v in let p = v * s; return [p.x, p.y, p.z] }, [])
+            }
+        }
         switch part.shape {
         case .block, .truss:
-            return (Int32(STUDIO_JOLT_BOX.rawValue), [h.x, h.y, h.z], [])
+            return (Int32(STUDIO_JOLT_BOX.rawValue), [h.x, h.y, h.z], [], [])
         case .sphere where uniform(h.x, h.y) && uniform(h.y, h.z):
-            return (Int32(STUDIO_JOLT_SPHERE.rawValue), [(h.x + h.y + h.z) / 3], [])
+            return (Int32(STUDIO_JOLT_SPHERE.rawValue), [(h.x + h.y + h.z) / 3], [], [])
         case .sphere:
             var points: [Float] = [0, h.y, 0, 0, -h.y, 0]
             let stacks = 8, slices = 16
@@ -153,21 +172,21 @@ final class PhysicsWorld {
                     points += [sin(phi) * cos(theta) * h.x, cos(phi) * h.y, sin(phi) * sin(theta) * h.z]
                 }
             }
-            return (Int32(STUDIO_JOLT_HULL.rawValue), [], points)
+            return (Int32(STUDIO_JOLT_HULL.rawValue), [], points, [])
         case .cylinder where uniform(h.x, h.z):
-            return (Int32(STUDIO_JOLT_CYLINDER.rawValue), [h.y, (h.x + h.z) / 2], [])
+            return (Int32(STUDIO_JOLT_CYLINDER.rawValue), [h.y, (h.x + h.z) / 2], [], [])
         case .cylinder:
             var points: [Float] = []
             for i in 0..<24 {
                 let t = Float(i) / 24 * 2 * .pi
                 points += [cos(t) * h.x, -h.y, sin(t) * h.z, cos(t) * h.x, h.y, sin(t) * h.z]
             }
-            return (Int32(STUDIO_JOLT_HULL.rawValue), [], points)
+            return (Int32(STUDIO_JOLT_HULL.rawValue), [], points, [])
         case .wedge:
             // Full height at −Z, sloping to nothing at +Z, as the renderer draws it.
             var points: [Float] = []
             for x in [-h.x, h.x] { points += [x, -h.y, -h.z, x, -h.y, h.z, x, h.y, -h.z] }
-            return (Int32(STUDIO_JOLT_HULL.rawValue), [], points)
+            return (Int32(STUDIO_JOLT_HULL.rawValue), [], points, [])
         }
     }
 
@@ -211,6 +230,10 @@ final class PhysicsWorld {
                 hasher.combine(part.material)
                 hasher.combine(part.anchored)
                 hasher.combine(part.isSolid)
+                // A MeshPart's model, how it collides, and whether that model has loaded.
+                hasher.combine(part.mesh?.asset)
+                hasher.combine(part.mesh?.collisionFidelity)
+                hasher.combine(MeshLibrary.shared.geometry(for: part) != nil)
             }
             let fingerprint = hasher.finalize()
 
@@ -271,10 +294,21 @@ final class PhysicsWorld {
         var rotations: [Float] = []
         var built: [UUID] = []
         for part in colliders {
-            let shape = Self.shape(of: part)
-            let id = shape.params.withUnsafeBufferPointer { p in
-                shape.points.withUnsafeBufferPointer { q in
-                    studio_jolt_make_shape(world, shape.kind, p.baseAddress, Int32(p.count), q.baseAddress, Int32(q.count / 3))
+            let shape = Self.shape(of: part, still: isStatic)
+            let id: UInt32
+            if !shape.triangles.isEmpty {
+                // A still MeshPart with Precise collision: exactly its triangles.
+                id = shape.points.withUnsafeBufferPointer { v in
+                    shape.triangles.withUnsafeBufferPointer { t in
+                        studio_jolt_make_mesh_shape(world, v.baseAddress, Int32(v.count / 3), t.baseAddress,
+                                                    Int32(t.count / 3))
+                    }
+                }
+            } else {
+                id = shape.params.withUnsafeBufferPointer { p in
+                    shape.points.withUnsafeBufferPointer { q in
+                        studio_jolt_make_shape(world, shape.kind, p.baseAddress, Int32(p.count), q.baseAddress, Int32(q.count / 3))
+                    }
                 }
             }
             guard id != STUDIO_JOLT_NO_BODY else { continue }

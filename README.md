@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-1855 headless checks covering shader compilation, uniform struct layout, mesh winding,
+1894 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -59,7 +59,7 @@ scene), the Luau, Wren and Metal lexers and completion engines, script-editor ca
 and input handling, the render loop, surface and full-screen shaders (rendered on
 the GPU and read back), collision, the player camera and the character controller,
 the screen GUI and chat, pictures and sounds (through a recorder, so nothing plays
-aloud), and two clients playing together over loopback.
+aloud), MeshParts and their collision, and two clients playing together over loopback.
 
 ## The player character
 
@@ -619,6 +619,45 @@ SoundService.Music.Playing = true -- one made in Studio
 `PlayLocalSound`. In a network game the host's Sounds are heard by everyone, from the
 same parts; a Sound a LocalScript makes (a button's click, say) is heard only on that
 player's machine — the host's own LocalScripts included.
+
+## MeshParts: 3D models
+
+A **MeshPart** is a part shaped like a 3D model. Import the model like a picture — the
+Explorer's **+ › Import Picture, Sound or 3D Model…**, or drop it on **Assets** — from an
+OBJ, STL, PLY or USD (USDA, USDC, USDZ) file: the formats macOS reads itself. FBX and glTF
+aren't; export those as OBJ or USD first. Then **Home › Mesh** (or right-click the
+model in Assets › **Insert MeshPart**) puts one on the ground in front of the camera, at
+the model's own size — or 8 studs across if that is far too big or too small.
+
+Its Properties add a **Mesh** section: the model it uses (`MeshId`), a picture wrapped
+on it with the model's own texture coordinates (`TextureID`, tinted by the part's
+Color), how it collides, and **Reset Size**. `Size` stretches it like any part.
+
+**CollisionFidelity**, as in Roblox:
+
+- **Hull** (the default) — collides as its convex hull, like shrink-wrap: an arch's
+  opening is solid, a cup's inside is filled.
+- **Box** — collides as its box. The cheapest.
+- **Precise** (`PreciseConvexDecomposition`) — collides as its real triangles, so you
+  can walk through the arch and drop things into the cup. Only while it's anchored (or
+  welded to something that is); an unanchored Precise part falls as its hull.
+
+Clicks always hit the model's real shape, whatever it collides as. A MeshPart weighs
+what its hull holds.
+
+```lua
+local statue = Instance.new("MeshPart")
+statue.MeshId = "studio://Statue"
+statue.TextureID = "studio://Marble"
+statue.CollisionFidelity = Enum.CollisionFidelity.PreciseConvexDecomposition
+statue.Size = statue.MeshSize * 2 -- twice the model's size
+statue.Anchored = true
+statue.Position = Vector3.new(0, 10, 0)
+print(statue.ClassName, statue:IsA("BasePart")) -- MeshPart true
+```
+
+`MeshSize` is the model's own size, read-only. A saved Model takes its MeshParts' 3D
+models and pictures with it, and joined players get them with the world. Luau only.
 
 ## Exploring a scene (the client)
 

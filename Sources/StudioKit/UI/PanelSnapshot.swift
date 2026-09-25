@@ -174,6 +174,18 @@ enum PanelSnapshot {
             let (music, picture) = addSampleAssets(to: model)
             session.showWorld()
             if state == "sounds" { model.selectedSound = music } else { model.selectedAsset = picture }
+        case "mesh", "meshasset":
+            // An arch imported and made a MeshPart with a picture on it, and its (or the
+            // 3D model's) properties.
+            let arch = (try? model.importAsset(data: MeshSelfTest.arch, name: "Arch", fileExtension: "obj")) ?? UUID()
+            _ = addSampleAssets(to: model)
+            session.showWorld()
+            if state == "mesh", let part = model.insertMeshPart(arch, at: Vec3(0, 0, -6)) {
+                model.setMeshTexture("studio://Star", of: [part])
+                model.selection = [part]
+            } else {
+                model.selectedAsset = arch
+            }
         case "newscript":
             // What someone sees on adding a script to a part.
             let platform = model.parts.first { $0.name == "Platform" } ?? model.parts[0]
@@ -183,7 +195,8 @@ enum PanelSnapshot {
             session.openCoreScript(named: CoreScripts.controlScript.name)
             session.openScript(script, line: 3)
         }
-        let size = NSRect(x: 0, y: 0, width: 1400, height: 880)
+        // The Mesh section is far down Properties: a taller window shows it.
+        let size = NSRect(x: 0, y: 0, width: 1400, height: state == "mesh" ? 1500 : 880)
         let hosting = NSHostingView(rootView: ContentView(model: model, session: session))
         hosting.frame = size
         let window = NSWindow(contentRect: size, styleMask: [.borderless], backing: .buffered, defer: false)

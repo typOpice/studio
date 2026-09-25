@@ -36,6 +36,20 @@ void studio_jolt_set_gravity(StudioJoltWorld *world, float y);
 /// An invisible floor whose top is at y = 0.
 void studio_jolt_set_ground(StudioJoltWorld *world, int enabled);
 
+/// A triangle mesh collided exactly (a MeshPart with Precise collision): `vertices`
+/// x, y, z each, `indices` three per triangle, counter-clockwise from outside. Only for
+/// static bodies — Jolt can't simulate a moving one. Returns a shape id as
+/// studio_jolt_make_shape does.
+uint32_t studio_jolt_make_mesh_shape(StudioJoltWorld *world, const float *vertices, int vertexCount,
+                                     const uint32_t *indices, int triangleCount);
+
+/// The convex hull of some points, as triangles (three indices into `points` each,
+/// counter-clockwise from outside), at most `maxVertices` corners. Writes at most
+/// `capacity` triangles to `outIndices`; returns how many there are, or 0 if the
+/// points have no volume.
+int studio_jolt_convex_hull(const float *points, int pointCount, int maxVertices,
+                            uint32_t *outIndices, int capacity);
+
 /// Makes a shape to build a body from; returns its id (valid until the next body is
 /// added), or STUDIO_JOLT_NO_BODY if the shape couldn't be made.
 uint32_t studio_jolt_make_shape(StudioJoltWorld *world, int shape, const float *params, int paramCount,

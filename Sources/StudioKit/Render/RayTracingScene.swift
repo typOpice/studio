@@ -32,7 +32,8 @@ final class RayTracingScene {
     private(set) var primitiveStructures: [MTLAccelerationStructure] = []
     private var meshIndex: [String: Int] = [:]
     private var faceOffsets: [UInt32] = []
-    let faceNormals: MTLBuffer
+    private var normals: [Vec4] = []
+    private(set) var faceNormals: MTLBuffer
 
     /// Three frames' worth of per-frame buffers, so the CPU never writes one the GPU
     /// is still reading.
@@ -53,51 +54,64 @@ final class RayTracingScene {
     /// `meshes`: a name, the GPU mesh, and the vertex and index data it was made from.
     init?(device: MTLDevice, meshes: [(name: String, mesh: Mesh, vertices: [Vertex], indices: [UInt16])]) {
         guard device.supportsRaytracing, let queue = device.makeCommandQueue(),
-              let buffer = queue.makeCommandBuffer(),
-              let encoder = buffer.makeAccelerationStructureCommandEncoder() else { return nil }
+              let placeholder = device.makeBuffer(length: MemoryLayout<Vec4>.stride, options: .storageModeShared)
+        else { return nil }
         self.device = device
         self.queue = queue
-
-        var normals: [Vec4] = []
-        for (index, entry) in meshes.enumerated() {
-            let geometry = MTLAccelerationStructureTriangleGeometryDescriptor()
-            geometry.vertexBuffer = entry.mesh.vertexBuffer
-            geometry.vertexStride = MemoryLayout<Vertex>.stride
-            geometry.vertexFormat = .float3
-            geometry.indexBuffer = entry.mesh.indexBuffer
-            geometry.indexType = .uint16
-            geometry.triangleCount = entry.indices.count / 3
-            geometry.opaque = true
-            let descriptor = MTLPrimitiveAccelerationStructureDescriptor()
-            descriptor.geometryDescriptors = [geometry]
-
-            let sizes = device.accelerationStructureSizes(descriptor: descriptor)
-            guard let structure = device.makeAccelerationStructure(size: sizes.accelerationStructureSize),
-                  let scratch = device.makeBuffer(length: max(sizes.buildScratchBufferSize, 16),
-                                                  options: .storageModePrivate) else { return nil }
-            encoder.build(accelerationStructure: structure, descriptor: descriptor,
-                          scratchBuffer: scratch, scratchBufferOffset: 0)
-            primitiveStructures.append(structure)
-            meshIndex[entry.name] = index
-
-            // One normal per triangle, the average of its corners: smooth enough for
-            // reflections of rounded shapes.
-            faceOffsets.append(UInt32(normals.count))
-            for t in stride(from: 0, to: entry.indices.count, by: 3) {
-                let a = entry.vertices[Int(entry.indices[t])].normal
-                let b = entry.vertices[Int(entry.indices[t + 1])].normal
-                let c = entry.vertices[Int(entry.indices[t + 2])].normal
-                let sum = a + b + c
-                normals.append(Vec4(length(sum) > 1e-6 ? normalize(sum) : Vec3(0, 1, 0), 0))
-            }
+        faceNormals = placeholder
+        for entry in meshes {
+            guard add(name: entry.name, mesh: entry.mesh, normals: entry.vertices.map(\.normal),
+                      indices: entry.indices.map(UInt32.init)) else { return nil }
         }
+    }
+
+    func has(_ name: String) -> Bool { meshIndex[name] != nil }
+
+    /// Builds a mesh's primitive acceleration structure — at start-up for the built-in
+    /// ones, when first seen for an imported mesh — and its triangles' normals.
+    @discardableResult
+    func add(name: String, mesh: Mesh, normals vertexNormals: [Vec3], indices: [UInt32]) -> Bool {
+        guard meshIndex[name] == nil else { return true }
+        guard let buffer = queue.makeCommandBuffer(),
+              let encoder = buffer.makeAccelerationStructureCommandEncoder() else { return false }
+        let geometry = MTLAccelerationStructureTriangleGeometryDescriptor()
+        geometry.vertexBuffer = mesh.vertexBuffer
+        geometry.vertexStride = MemoryLayout<Vertex>.stride
+        geometry.vertexFormat = .float3
+        geometry.indexBuffer = mesh.indexBuffer
+        geometry.indexType = mesh.indexType
+        geometry.triangleCount = indices.count / 3
+        geometry.opaque = true
+        let descriptor = MTLPrimitiveAccelerationStructureDescriptor()
+        descriptor.geometryDescriptors = [geometry]
+
+        let sizes = device.accelerationStructureSizes(descriptor: descriptor)
+        guard let structure = device.makeAccelerationStructure(size: sizes.accelerationStructureSize),
+              let scratch = device.makeBuffer(length: max(sizes.buildScratchBufferSize, 16),
+                                              options: .storageModePrivate) else { return false }
+        encoder.build(accelerationStructure: structure, descriptor: descriptor,
+                      scratchBuffer: scratch, scratchBufferOffset: 0)
         encoder.endEncoding()
         buffer.commit()
         buffer.waitUntilCompleted()
-        guard buffer.status == .completed,
-              let faceBuffer = device.makeBuffer(bytes: normals, length: max(normals.count, 1) * MemoryLayout<Vec4>.stride,
-                                                 options: .storageModeShared) else { return nil }
+        guard buffer.status == .completed else { return false }
+
+        // One normal per triangle, the average of its corners: smooth enough for
+        // reflections of rounded shapes.
+        let offset = UInt32(normals.count)
+        for t in stride(from: 0, to: indices.count - 2, by: 3) {
+            let a = vertexNormals[Int(indices[t])], b = vertexNormals[Int(indices[t + 1])]
+            let c = vertexNormals[Int(indices[t + 2])]
+            let sum = a + b + c
+            normals.append(Vec4(length(sum) > 1e-6 ? normalize(sum) : Vec3(0, 1, 0), 0))
+        }
+        guard let faceBuffer = device.makeBuffer(bytes: normals, length: max(normals.count, 1) * MemoryLayout<Vec4>.stride,
+                                                 options: .storageModeShared) else { return false }
         faceNormals = faceBuffer
+        meshIndex[name] = primitiveStructures.count
+        primitiveStructures.append(structure)
+        faceOffsets.append(offset)
+        return true
     }
 
     /// Encodes this frame's instance acceleration structure into `commandBuffer`.

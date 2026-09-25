@@ -295,6 +295,7 @@ struct RibbonView: View {
                     controller.insertPart(shape: shape, atScreenPoint: nil)
                 }
             }
+            RibbonMeshButton(model: model, session: session)
         }
 
         divider

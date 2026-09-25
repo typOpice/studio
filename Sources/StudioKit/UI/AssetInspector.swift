@@ -19,7 +19,7 @@ struct AssetInspector: View {
                         .background(RoundedRectangle(cornerRadius: 5).fill(Theme.panelAlt))
                 }
                 LabeledRow("Kind") {
-                    Text("\(asset.kind == .image ? "Picture" : "Sound") · .\(asset.fileExtension) · \(max(asset.data.count / 1024, 1)) KB")
+                    Text("\(asset.kind == .image ? "Picture" : asset.kind == .mesh ? "3D model" : "Sound") · .\(asset.fileExtension) · \(max(asset.data.count / 1024, 1)) KB")
                         .font(.system(size: 11)).foregroundStyle(Theme.text)
                 }
                 LabeledRow("In scripts") {
@@ -43,6 +43,20 @@ struct AssetInspector: View {
                         .background(RoundedRectangle(cornerRadius: 6).fill(Theme.panelAlt))
                     Text("\(Int(image.size.width)) × \(Int(image.size.height))")
                         .font(.system(size: 10)).foregroundStyle(Theme.textDim)
+                } else if asset.kind == .mesh {
+                    if let geometry = MeshLibrary.shared.geometry(asset.id) {
+                        let s = geometry.nativeSize
+                        Text("\(geometry.triangleCount) triangles · \(NumericField.format(s.x)) × \(NumericField.format(s.y)) × \(NumericField.format(s.z)) studs\(geometry.uvs.isEmpty ? " · no texture coordinates" : "")")
+                            .font(.system(size: 10)).foregroundStyle(Theme.textDim)
+                        if let session {
+                            SmallButton("Insert MeshPart", icon: "cube.transparent") {
+                                session.viewport.insertMeshPart(asset.id)
+                            }
+                        }
+                    } else {
+                        Text("This file can't be read as a 3D model.")
+                            .font(.system(size: 10)).foregroundStyle(Color(red: 0.95, green: 0.7, blue: 0.4))
+                    }
                 } else if asset.kind == .sound, let session {
                     let length = session.previewSounds.duration(of: asset)
                     Text(length.map { String(format: "%.2f seconds", $0) } ?? "This file can't be played.")

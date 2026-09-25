@@ -214,6 +214,17 @@ final class ViewportController: ViewportSource {
     }
 
     /// Drop a new part on the ground under the cursor, or in front of the camera.
+    /// A MeshPart of an imported model, where a new part would go.
+    @discardableResult
+    func insertMeshPart(_ asset: UUID, atScreenPoint point: SIMD2<Float>? = nil) -> UUID? {
+        var position = camera.target + camera.forward * 6
+        if let point, let ground = Picking.groundPoint(ray: ray(at: point)) {
+            position = ground
+        }
+        position.y = 0
+        return model.insertMeshPart(asset, at: position)
+    }
+
     func insertPart(shape: PartShape, atScreenPoint point: SIMD2<Float>?) {
         var position = camera.target + camera.forward * 6
         if let point, let ground = Picking.groundPoint(ray: ray(at: point)) {

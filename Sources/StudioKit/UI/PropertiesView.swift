@@ -46,6 +46,10 @@ struct PropertiesView: View {
                         Divider().overlay(Theme.stroke)
                         appearanceSection(part)
                         Divider().overlay(Theme.stroke)
+                        if part.mesh != nil {
+                            MeshSection(model: model, part: part)
+                            Divider().overlay(Theme.stroke)
+                        }
                         behaviorSection(part)
                         Divider().overlay(Theme.stroke)
                         PointLightEditor(model: model, part: part)
@@ -92,6 +96,12 @@ struct PropertiesView: View {
                     .background(RoundedRectangle(cornerRadius: 5).fill(Theme.panelAlt))
                     .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.stroke, lineWidth: 1))
             }
+            if part.mesh != nil {
+                LabeledRow("Class") {
+                    Text("MeshPart").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
             LabeledRow("Shape") {
                 Picker("", selection: Binding(
                     get: { part.shape },
@@ -105,6 +115,7 @@ struct PropertiesView: View {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .controlSize(.small)
+            }
             }
         }
     }

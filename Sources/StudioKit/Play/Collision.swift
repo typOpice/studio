@@ -78,6 +78,11 @@ enum Collision {
     /// Resolve one capsule against one part, returning the contact that separates them.
     static func contact(capsule: Capsule, part: Part) -> Contact? {
         guard part.inWorld else { return nil }
+        // A MeshPart collides as its hull or its triangles; as its box, like a block.
+        if let mesh = part.mesh, mesh.collisionFidelity != .box, let geometry = MeshLibrary.shared.geometry(for: part) {
+            return meshContact(capsule: capsule, part: part, geometry: geometry,
+                               precise: mesh.collisionFidelity == .precise)
+        }
         let rotation = float3x3(part.orientation)
         let inverseRotation = rotation.transpose
         let h = halfExtents(part)
@@ -114,6 +119,45 @@ enum Collision {
         return Contact(normal: normalize(rotation * direction), depth: penetration)
     }
 
+    /// A capsule against a MeshPart's hull (convex: anything inside it is pushed out the
+    /// shortest way) or its exact triangles (a shell: a capsule behind a face is pushed
+    /// back out through it). Worked out in the part's frame, stretched by its Size.
+    private static func meshContact(capsule: Capsule, part: Part, geometry: MeshGeometry, precise: Bool) -> Contact? {
+        let rotation = float3x3(part.orientation)
+        let inverse = rotation.transpose
+        let scale = simd_max(part.size, Vec3(repeating: 0.05))
+        let a = inverse * (capsule.lower - part.position)
+        let b = inverse * (capsule.upper - part.position)
+        if !precise {
+            var deepest: (direction: Vec3, depth: Float)?
+            for point in [a, b, (a + b) / 2] {
+                if let escape = geometry.escapeFromHull(point / scale, scale: scale),
+                   escape.depth > (deepest?.depth ?? -1) { deepest = escape }
+            }
+            if let deepest {
+                return Contact(normal: normalize(rotation * deepest.direction), depth: deepest.depth + capsule.radius)
+            }
+        }
+        let set = precise ? geometry.triangles : geometry.hull
+        guard let near = set.closest(toSegment: a, b, reach: capsule.radius, scale: scale) else { return nil }
+        let delta = near.onSegment - near.onSurface
+        var distance = length(delta)
+        var direction = near.normal
+        if distance > 1e-5 {
+            direction = delta / distance
+            if precise && dot(direction, near.normal) < 0 {
+                // Behind the face: out through it.
+                direction = near.normal
+                distance = -distance
+            }
+        } else {
+            distance = 0
+        }
+        let penetration = capsule.radius - distance
+        guard penetration > 0 else { return nil }
+        return Contact(normal: normalize(rotation * direction), depth: penetration)
+    }
+
     /// Shortest way out for a point already inside the shape.
     private static func deepEscape(_ p: Vec3, shape: PartShape, halfExtents h: Vec3) -> (direction: Vec3, depth: Float) {
         var best = (direction: Vec3(0, 1, 0), depth: h.y)
@@ -147,6 +191,12 @@ enum Collision {
         let rotation = float3x3(part.orientation)
         let p = rotation.transpose * (worldPoint - part.position)
         let h = halfExtents(part)
+        if let mesh = part.mesh, mesh.collisionFidelity != .box, let geometry = MeshLibrary.shared.geometry(for: part) {
+            let set = mesh.collisionFidelity == .precise ? geometry.triangles : geometry.hull
+            let scale = simd_max(part.size, Vec3(repeating: 0.05))
+            let near = set.closest(toSegment: p, p, reach: 0.5, scale: scale)
+            return normalize(rotation * (near?.normal ?? Vec3(0, 1, 0)))
+        }
         return normalize(rotation * surfaceNormalInFrame(p, shape: part.shape, halfExtents: h))
     }
 

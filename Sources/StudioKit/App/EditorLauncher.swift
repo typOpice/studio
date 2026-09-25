@@ -153,6 +153,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         add(to: insertMenu, "Cylinder", #selector(insertCylinder), "3", modifiers: [.command, .shift])
         add(to: insertMenu, "Wedge", #selector(insertWedge), "4", modifiers: [.command, .shift])
         add(to: insertMenu, "Truss", #selector(insertTruss), "")
+        add(to: insertMenu, "MeshPart from 3D Model…", #selector(insertMeshPart), "")
         insertItem.submenu = insertMenu
         mainMenu.addItem(insertItem)
 
@@ -312,6 +313,10 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
     @objc private func insertCylinder() { session.viewport.insertPart(shape: .cylinder, atScreenPoint: nil) }
     @objc private func insertWedge() { session.viewport.insertPart(shape: .wedge, atScreenPoint: nil) }
     @objc private func insertTruss() { session.viewport.insertPart(shape: .truss, atScreenPoint: nil) }
+    @objc private func insertMeshPart() {
+        guard !session.isPlaying else { return }
+        MeshMenu.importAndInsert(model: model, session: session)
+    }
 
     // MARK: - Documents
 
@@ -457,6 +462,13 @@ public enum StudioEditor {
             let clock = arguments.count > 2 ? Float(arguments[2]) : nil
             exit(AvatarSnapshot.renderScene(to: URL(fileURLWithPath: path), technology: technology,
                                             clockTime: clock) ? 0 : 1)
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-meshes") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let path = arguments.first ?? "meshes.png"
+            let technology: LightingTechnology = arguments.dropFirst().first?.lowercased().hasPrefix("ray") == true
+                ? .rayTraced : .conventional
+            exit(AvatarSnapshot.renderMeshes(to: URL(fileURLWithPath: path), technology: technology) ? 0 : 1)
         }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-car") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])

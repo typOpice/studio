@@ -13,6 +13,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         let opaque: MTLRenderPipelineState
         let blend: MTLRenderPipelineState
         let grid: MTLRenderPipelineState
+        /// A MeshPart with a TextureID.
+        let textured: MTLRenderPipelineState
+        let texturedBlend: MTLRenderPipelineState
     }
     private var litPipelines: [Bool: LitPipelines] = [:]
     /// This frame's variant.
@@ -47,6 +50,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var depthAlways: MTLDepthStencilState!
 
     private var shapeMeshes: [PartShape: Mesh] = [:]
+    /// Imported meshes on the GPU, and MeshParts' pictures, by asset.
+    private var assetMeshes: [UUID: Mesh] = [:]
+    private var assetTextures: [UUID: (size: Int, texture: MTLTexture?)] = [:]
     private var groundMesh: Mesh!
     private var outlineMesh: Mesh!
     private var coneMesh: Mesh!
@@ -191,7 +197,11 @@ final class Renderer: NSObject, MTKViewDelegate {
                 blend: try makePipeline(vertex: "scene_vertex", fragment: "scene_fragment", blending: true,
                                         rayTraced: rayTraced),
                 grid: try makePipeline(vertex: "scene_vertex", fragment: "grid_fragment", blending: true,
-                                       rayTraced: rayTraced))
+                                       rayTraced: rayTraced),
+                textured: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_textured",
+                                           blending: false, rayTraced: rayTraced),
+                texturedBlend: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_textured",
+                                                blending: true, rayTraced: rayTraced))
         }
         lit = litPipelines[false]
         flatPipeline = try makePipeline(vertex: "scene_vertex", fragment: "flat_fragment", blending: false)
@@ -436,13 +446,13 @@ final class Renderer: NSObject, MTKViewDelegate {
             .sorted { length_squared($0.position - camera.position) > length_squared($1.position - camera.position) }
 
         encoder.setDepthStencilState(depthDefault)
-        for part in opaque { drawPart(encoder, part: part, model: model, fallback: lit.opaque) }
+        for part in opaque { drawPart(encoder, part: part, model: model, fallback: lit.opaque, cull: .back) }
 
         if !transparent.isEmpty {
             encoder.setDepthStencilState(depthNoWrite)
             encoder.setCullMode(.none)
             for part in transparent {
-                drawPart(encoder, part: part, model: model, fallback: lit.blend)
+                drawPart(encoder, part: part, model: model, fallback: lit.blend, cull: .none)
             }
             encoder.setCullMode(.back)
         }
@@ -698,7 +708,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private func shadowCasters(model: SceneModel, avatars: [AvatarPose]) -> [(mesh: Mesh, matrix: float4x4)] {
         var casters: [(Mesh, float4x4)] = []
         for part in model.parts where part.inWorld && part.transparency < 0.5 {
-            if let mesh = shapeMeshes[part.shape] { casters.append((mesh, part.modelMatrix)) }
+            if let mesh = meshOf(part) { casters.append((mesh, part.modelMatrix)) }
         }
         for avatar in avatars {
             for (name, matrix) in avatar.partTransforms()
@@ -737,7 +747,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         var instances: [RayTracingScene.Instance] = []
         for part in model.parts where part.inWorld && part.transparency < 0.5 {
             let shading = part.material.shading
-            instances.append(.init(mesh: part.shape.rawValue, transform: part.modelMatrix, color: part.color,
+            let name = assetMesh(for: part) != nil ? "mesh:\(part.mesh?.asset?.uuidString ?? "")" : part.shape.rawValue
+            instances.append(.init(mesh: name, transform: part.modelMatrix, color: part.color,
                                    shading: Vec4(shading.x, shading.y, shading.z, 0),
                                    mask: part.light?.enabled == true ? RayTracingScene.maskLightHousing
                                                                      : RayTracingScene.maskSolid))
@@ -779,9 +790,40 @@ final class Renderer: NSObject, MTKViewDelegate {
         mesh.draw(encoder)
     }
 
+    /// A MeshPart's mesh on the GPU, made the first time it's drawn — and handed to the
+    /// ray tracer too; nil for other parts, and for a mesh whose file is missing.
+    private func assetMesh(for part: Part) -> Mesh? {
+        guard let asset = part.mesh?.asset, let geometry = MeshLibrary.shared.geometry(asset) else { return nil }
+        if let known = assetMeshes[asset] { return known }
+        let vertices = zip(geometry.positions, geometry.normals).map { Vertex(position: $0, normal: $1) }
+        guard let mesh = Mesh(device: device, vertices: vertices, indices: geometry.indices, uvs: geometry.uvs) else {
+            return nil
+        }
+        assetMeshes[asset] = mesh
+        rayTracing?.add(name: "mesh:\(asset.uuidString)", mesh: mesh, normals: geometry.normals, indices: geometry.indices)
+        return mesh
+    }
+
+    /// What a part is drawn with: its mesh, or its shape's.
+    private func meshOf(_ part: Part) -> Mesh? { assetMesh(for: part) ?? shapeMeshes[part.shape] }
+
+    /// A MeshPart's TextureID as a texture, loaded once per picture.
+    private func texture(for part: Part, model: SceneModel) -> MTLTexture? {
+        guard let name = part.mesh?.textureId, !name.isEmpty,
+              let asset = model.asset(named: name), asset.kind == .image else { return nil }
+        if let known = assetTextures[asset.id], known.size == asset.data.count { return known.texture }
+        let loaded = try? MTKTextureLoader(device: device).newTexture(data: asset.data, options: [
+            .SRGB: false, .generateMipmaps: true, .origin: MTKTextureLoader.Origin.topLeft,
+            .textureStorageMode: MTLStorageMode.private.rawValue,
+        ])
+        assetTextures[asset.id] = (asset.data.count, loaded)
+        return loaded
+    }
+
     private func drawPart(_ encoder: MTLRenderCommandEncoder, part: Part,
-                          model: SceneModel, fallback: MTLRenderPipelineState) {
-        guard let mesh = shapeMeshes[part.shape] else { return }
+                          model: SceneModel, fallback: MTLRenderPipelineState, cull: MTLCullMode) {
+        let imported = assetMesh(for: part)
+        guard let mesh = imported ?? shapeMeshes[part.shape] else { return }
 
         // A part with a shader that has compiled draws with it; anything else — no
         // shader, disabled, still compiling, broken — falls back to the built-in pass.
@@ -792,8 +834,14 @@ final class Renderer: NSObject, MTKViewDelegate {
             pipeline = userPipeline
             var params = ShaderUniforms(shader.parameters.map(\.value))
             encoder.setFragmentBytes(&params, length: MemoryLayout<ShaderUniforms>.stride, index: 3)
+        } else if imported?.uvBuffer != nil, let picture = texture(for: part, model: model), let lit {
+            pipeline = fallback === lit.opaque ? lit.textured : lit.texturedBlend
+            encoder.setFragmentTexture(picture, index: 3)
         }
         encoder.setRenderPipelineState(pipeline)
+        // Imported meshes can be wound either way: both sides are drawn.
+        if imported != nil && cull != .none { encoder.setCullMode(.none) }
+        defer { if imported != nil && cull != .none { encoder.setCullMode(cull) } }
 
         var draw = DrawUniforms()
         draw.model = part.modelMatrix

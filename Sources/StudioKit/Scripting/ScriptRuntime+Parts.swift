@@ -83,6 +83,14 @@ extension ScriptRuntime {
         case "shape": return .string(part.shape.rawValue)
         case "isseat": return .bool(part.seat != nil)
         case "seatdisabled": return part.seat.map { .bool($0.disabled) } ?? .nothing
+        case "ismeshpart": return .bool(part.mesh != nil)
+        case "meshid": return part.mesh.map { .string($0.meshId) } ?? .nothing
+        case "textureid": return part.mesh.map { .string($0.textureId) } ?? .nothing
+        case "collisionfidelity": return part.mesh.map { .string($0.collisionFidelity.robloxName) } ?? .nothing
+        case "meshsize":
+            // The size the mesh was made at; zero with no mesh (or none that loads).
+            let size = MeshLibrary.shared.geometry(for: part)?.nativeSize ?? .zero
+            return .triple(size.x, size.y, size.z)
         case "occupant":
             // Who is in a seat is the play session's to say.
             guard part.seat != nil else { return .nothing }
@@ -110,6 +118,8 @@ extension ScriptRuntime {
     }
 
     func write(_ id: UUID, _ property: String, _ value: ScriptValue) {
+        // A MeshId names an imported 3D model: found now, kept by its id.
+        let meshAsset = property == "meshid" ? value.asString.flatMap(model.asset(named:)).flatMap { $0.kind == .mesh ? $0.id : nil } : nil
         model.update(id: id) { part in
             switch property {
             case "name":
@@ -120,6 +130,19 @@ extension ScriptRuntime {
                 }
             case "isseat":
                 if let on = value.asBool { part.seat = on ? (part.seat ?? SeatSettings()) : nil }
+            case "ismeshpart":
+                if let on = value.asBool { part.mesh = on ? (part.mesh ?? MeshSettings()) : nil }
+            case "meshid":
+                if let name = value.asString, part.mesh != nil {
+                    part.mesh?.meshId = name
+                    part.mesh?.asset = meshAsset
+                }
+            case "textureid":
+                if let name = value.asString, part.mesh != nil { part.mesh?.textureId = name }
+            case "collisionfidelity":
+                if let name = value.asString, let fidelity = CollisionFidelity(robloxName: name), part.mesh != nil {
+                    part.mesh?.collisionFidelity = fidelity
+                }
             case "seatdisabled":
                 if let on = value.asBool, part.seat != nil { part.seat?.disabled = on }
             case "material":

@@ -6,6 +6,8 @@ import Foundation
 struct SceneAsset: Codable, Equatable, Identifiable {
     enum Kind: String, Codable {
         case image, sound
+        /// A 3D model — OBJ, STL, PLY or USD — for MeshParts.
+        case mesh
     }
 
     var id = UUID()
@@ -22,10 +24,13 @@ struct SceneAsset: Codable, Equatable, Identifiable {
     static let largest = 8 << 20
     static let largestTotal = 40 << 20
 
+    static var meshExtensions: Set<String> { MeshGeometry.fileExtensions }
+
     static func kind(forExtension ext: String) -> Kind? {
         let lower = ext.lowercased()
         if imageExtensions.contains(lower) { return .image }
         if soundExtensions.contains(lower) { return .sound }
+        if meshExtensions.contains(lower) { return .mesh }
         return nil
     }
 
@@ -93,7 +98,7 @@ enum AssetError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .unknownKind(let ext): return "Only pictures and sounds can be imported, not .\(ext) files."
+        case .unknownKind(let ext): return "Only pictures, sounds and 3D models can be imported, not .\(ext) files."
         case .tooLarge(let bytes): return "That file is \(bytes >> 20) MB; the most is \(SceneAsset.largest >> 20) MB."
         case .full: return "The scene's assets would be over \(SceneAsset.largestTotal >> 20) MB."
         }

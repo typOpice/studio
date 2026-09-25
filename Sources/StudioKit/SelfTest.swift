@@ -55,6 +55,7 @@ enum SelfTest {
         SelectionSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         HudSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         AudioSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        MeshSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LANSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
 
         if failures == 0 {

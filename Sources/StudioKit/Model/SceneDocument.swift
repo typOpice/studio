@@ -92,7 +92,10 @@ final class SceneDocument: ObservableObject {
         let pivot = parts.reduce(Vec3.zero) { $0 + $1.position } / Float(parts.count)
         // Its Sounds, and the files they play or its scripts name, so it sounds the same anywhere.
         let sounds = model.sounds.filter { !$0.local && ($0.parentID.map(ids.contains) ?? false) }
+        // …and the 3D models and pictures its MeshParts show.
         let played = Set(sounds.compactMap { model.asset(named: $0.soundId)?.id })
+            .union(parts.compactMap { $0.mesh?.asset })
+            .union(parts.compactMap { $0.mesh.flatMap { model.asset(named: $0.textureId)?.id } })
         let sources = scripts.map(\.source)
         let assets = model.assets.filter { asset in
             played.contains(asset.id) || sources.contains { $0.contains(asset.reference) }
@@ -128,10 +131,12 @@ final class SceneDocument: ObservableObject {
             // is; a different one under a name that's taken comes in renamed, and what
             // names it — its Sounds, its scripts — follows.
             var reference: [UUID: String] = [:]
+            var assetID: [UUID: UUID] = [:]
             var renamed: [String: String] = [:]
             for original in incoming.assets {
                 if let same = model.assets.first(where: { $0.data == original.data && $0.kind == original.kind }) {
                     reference[original.id] = same.reference
+                    assetID[original.id] = same.id
                     if same.reference != original.reference { renamed[original.reference] = same.reference }
                     continue
                 }
@@ -144,6 +149,7 @@ final class SceneDocument: ObservableObject {
                 asset.name = SceneModel.unique(original.name, among: model.assets.map(\.name))
                 model.assets.append(asset)
                 reference[original.id] = asset.reference
+                assetID[original.id] = asset.id
                 if asset.name != original.name { renamed[original.reference] = asset.reference }
             }
             for original in incoming.sounds {
@@ -173,6 +179,14 @@ final class SceneDocument: ObservableObject {
                 part.parentID = original.parentID.flatMap { remapped[$0] }
                 part.name = model.uniqueName(base: original.name)
                 part.position += offset
+                // A MeshPart shows the model and picture it brought, wherever they landed.
+                if let mesh = original.mesh {
+                    if let old = mesh.asset, let now = assetID[old] {
+                        part.mesh?.asset = now
+                        part.mesh?.meshId = reference[old] ?? mesh.meshId
+                    }
+                    if let now = renamed[mesh.textureId] { part.mesh?.textureId = now }
+                }
                 newParts.append(part)
                 if part.parentID == nil { newSelection.insert(part.id) }
             }
