@@ -270,6 +270,11 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Luau only. Tested with a sample scene, a scene built in Studio, and Adventure Island's own modules.
    New files: Editor/LuauScene.swift, Editor/LuauModuleShape.swift.
 
+24. Suggestions for GetService, 2026-09-26.
+   Typing game:GetService(" lists every service. The one named like the variable you are declaring comes first (local TweenService = game:GetService(" puts TweenService at the top), and services the script already has go to the bottom. Tab puts in the name and closes the string and the bracket.
+   Right after game:GetService( (before the quote) the list opens too, and puts the quotes in for you.
+   LogService was missing from the suggestions and is now there. A test runs every suggested service through the real game:GetService, so the list can't offer one that doesn't exist.
+
 
 THINGS TO KNOW
 

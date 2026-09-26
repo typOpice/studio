@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 enum PanelSnapshot {
     @MainActor
     static func render(panel: String, to url: URL) -> Bool {
-        if ["suggestions", "picked", "require", "module"].contains(panel) { return renderSuggestions(panel, to: url) }
+        if ["suggestions", "picked", "require", "module", "service"].contains(panel) { return renderSuggestions(panel, to: url) }
         let model = SceneModel()
         let session = EditorSession(model: model)
         let view: AnyView
@@ -54,7 +54,7 @@ enum PanelSnapshot {
             }
             .frame(width: 1400))
         default:
-            print("Unknown panel \"\(panel)\" — try animation, inspector, lighting, explorer, ribbon, suggestions, picked, require or module.")
+            print("Unknown panel \"\(panel)\" — try animation, inspector, lighting, explorer, ribbon, suggestions, picked, require, module or service.")
             return false
         }
         let renderer = ImageRenderer(content: view.background(Theme.panel).environment(\.colorScheme, .dark))
@@ -73,8 +73,8 @@ enum PanelSnapshot {
 
     /// A script with the suggestion list open: `suggestions` under `part.C`, `picked`
     /// after Down twice, `require` just after `require(`, `module` after a required
-    /// module's name. The list is its own little window, so it is drawn over the
-    /// editor's picture here.
+    /// module's name, `service` inside `GetService("`. The list is its own little
+    /// window, so it is drawn over the editor's picture here.
     @MainActor
     static func renderSuggestions(_ state: String, to url: URL) -> Bool {
         _ = NSApplication.shared
@@ -102,6 +102,12 @@ enum PanelSnapshot {
         switch state {
         case "require": source = modules
         case "module": source = modules.replacingOccurrences(of: "local Enemy = require(", with: "\nlocal speed = Utils.")
+        case "service":
+            source = """
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local Players = game:GetService("Players")
+            local TweenService = game:GetService("
+            """
         default:
             source = """
             local Players = game:GetService("Players")

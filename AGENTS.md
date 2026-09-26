@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2200 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2222 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -122,7 +122,7 @@ listed in §9.
 | `ShaderSelfTest.swift` | Surface shaders: generated Metal, error line mapping, compile pipeline |
 | `ScreenShaderSelfTest.swift` | Full-screen effects, rendered on the GPU and read back |
 | `DocumentSelfTest.swift` | Scene files, dirty tracking, model export, old-file compatibility, repairing a file with duplicate ids |
-| `EditorSelfTest.swift` | Code-editor caret, selection, indent, substitutions, highlighting; the suggestion list, typed into as a keyboard does (waiting for a pause, nothing written until chosen, Return a new line unless one was picked with the arrows, Tab, Esc, ⌥Esc, a word typed in full, `end`/`then`/… then Return in one press, naming a local, a loop variable or a parameter, inside a word, a number's dot, comments, Backspace widening, moving off the word, clicking a row, one undo step, placed under the word; Wren and Metal through it; `require(` and Tab, a module's functions, `WaitForChild("` names with a space); Cut/Copy/Paste in the menu, and no two menu commands on one shortcut |
+| `EditorSelfTest.swift` | Code-editor caret, selection, indent, substitutions, highlighting; the suggestion list, typed into as a keyboard does (waiting for a pause, nothing written until chosen, Return a new line unless one was picked with the arrows, Tab, Esc, ⌥Esc, a word typed in full, `end`/`then`/… then Return in one press, naming a local, a loop variable or a parameter, inside a word, a number's dot, comments, Backspace widening, moving off the word, clicking a row, one undo step, placed under the word; Wren and Metal through it; `require(` and Tab, a module's functions, `WaitForChild("` names with a space, `GetService("` and `GetService(`); Cut/Copy/Paste in the menu, and no two menu commands on one shortcut |
 | `GuiLayoutSelfTest.swift` | UIListLayout (order, padding, alignments, horizontal), AutomaticSize (text and frames), ScrollingFrame (automatic canvas, clipping, bar, the wheel, its end), ClipsDescendants, TextScaled, fonts, the TextBox caret, ⌘A, paste, TextEditable; the new classes from Luau (enums, ImageButton, BillboardGui Adornee and where it's drawn, CursorPosition); StarterGui (made, only changes kept, saved, undone, previewed with the selection outlined, copied at play, its LocalScript and clicks, ResetOnSpawn on and off, one copy per player over the network) |
 | `HudSelfTest.swift` | The default HUD: in the starter and new scenes, old files given it on opening, a deleted one staying deleted, an old custom ControlScript keeping F and R, Insert Default HUD; in play its health bar, countdown, numbers, H, ` and the output (through LogService, MessageOut, GetLogHistory), error count, first-person crosshair (MouseBehavior LockCenter), F and R; a scene without it showing nothing and F, R, ` doing nothing; host and joiner each with their own, R and F only their own |
 | `SelectionSelfTest.swift` | One thing selected at a time (parts, GUI objects, Sounds, files, scripts), a click on empty space leaving nothing selected, Esc deselecting everything (join tool, Lighting, StarterPlayer; the Animation tab's animation kept) through the window's key monitor wherever the keyboard is, but not in play |
@@ -142,7 +142,7 @@ listed in §9.
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
-| `SyntaxSelfTest.swift` | Luau, Wren and Metal lexers, and all three completion engines (Luau's order: case typed, locals, keywords, globals; nothing while naming something; a local not on its own line); modules and the scene: reading a module (values, functions with parameters, tables, methods, `return { … }`, a constructor's objects, a nested return), `require(` listing every ModuleScript as its path (script.Parent, GetService, the script's own local, no second `)`), places listing what's in them (and only modules inside `require(`), `WaitForChild("…")` names, script.Parent, a required module's members, tables, types, methods and objects; built from a SceneModel (a part's module, a Folder's, ServerStorage's) and from Adventure Island |
+| `SyntaxSelfTest.swift` | Luau, Wren and Metal lexers, and all three completion engines (Luau's order: case typed, locals, keywords, globals; nothing while naming something; a local not on its own line); modules and the scene: reading a module (values, functions with parameters, tables, methods, `return { … }`, a constructor's objects, a nested return), `require(` listing every ModuleScript as its path (script.Parent, GetService, the script's own local, no second `)`), places listing what's in them (and only modules inside `require(`), `WaitForChild("…")` names, script.Parent, a required module's members, tables, types, methods and objects; built from a SceneModel (a part's module, a Folder's, ServerStorage's) and from Adventure Island; `GetService("` (every service, closing or not, single quotes, narrowing, the declared local's first, the script's own last, before the quote, each one run through the real `game:GetService`) |
 
 Assertions use `Checker` (`PlaySelfTest.swift`): `check("name", condition, "detail")`,
 detail printed only on failure. `ScriptSelfTest.assertAll` evaluates a list of Luau
@@ -326,7 +326,7 @@ Sources/StudioKit/
   UI/StarterPlayerView.swift  StarterPlayer inspector, read-only core script viewer
   UI/AnimationEditorView.swift the Animation tab: toolbar, KeyframeTimeline, JointInspector
   UI/LightingView.swift       Lighting inspector, a part's PointLight editor, RenderCapabilities
-  UI/PanelSnapshot.swift      `--render-panel animation|inspector|explorer|ribbon|suggestions|picked|require|module out.png`,
+  UI/PanelSnapshot.swift      `--render-panel animation|inspector|explorer|ribbon|suggestions|picked|require|module|service out.png`,
                               `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture|mesh|meshasset|avatar|replicated out.png`
                               (whole window),
                               `--render-client menu|character|faces|clothes|outfit|join|chat|leaderboard|talk out.png`;
@@ -1190,9 +1190,11 @@ Roughly ordered by how much time they will cost you.
     `game:GetService("ReplicatedStorage")` and `workspace` resolve (`refine`) to the real
     place when there's a scene and to the API tables when there isn't. A module's members
     come from `LuauModuleShape`, which reads the code's shape and never runs it; keep new
-    patterns there, with a test. `WaitForChild("…")` is the one string with suggestions,
-    and its replacement starts after the quote (`CodeLanguage.completionRange`), since a
-    name may contain spaces.
+    patterns there, with a test. `GetService("…")` and `WaitForChild("…")` are the only
+    strings with suggestions (`nameArgument`), and their replacement starts after the
+    quote (`CodeLanguage.completionRange`), since a name may contain spaces.
+    `LuauAPI.services` must list exactly what the library's `services` table (14-Extras,
+    plus 15-Data's three places) holds; `SyntaxSelfTest.testServices` runs each one.
 
 ## 8. Recipes
 

@@ -23,6 +23,44 @@ enum SyntaxSelfTest {
         testLuauLexer(check)
         testLuauCompletion(check)
         testModules(check)
+        testServices(check)
+    }
+
+    private static func testServices(_ check: Checker) {
+        print("\nCompletion: GetService")
+        func items(_ source: String, caret: Int? = nil) -> [CompletionItem] {
+            LuauCompletion.items(in: source, caret: caret ?? (source as NSString).length)
+        }
+        func labels(_ source: String) -> [String] { items(source).map(\.label) }
+        func insert(_ label: String, _ source: String, caret: Int? = nil) -> String? {
+            items(source, caret: caret).first { $0.label == label }?.insert
+        }
+
+        check("GetService(\" lists every service", Set(labels("game:GetService(\"")) == Set(LuauAPI.services.keys),
+              "\(labels("game:GetService(\""))")
+        check("…in order", labels("game:GetService(\"").prefix(3) == ["Animations", "Lighting", "LogService"],
+              "\(labels("game:GetService(\"").prefix(3))")
+        check("…closing the string and the call", insert("Players", "game:GetService(\"") == "Players\")")
+        check("…or not, when they're closed", insert("Players", "game:GetService(\"\")", caret: 17) == "Players")
+        check("…with single quotes too", insert("Players", "game:GetService('") == "Players')")
+        check("…narrowed as it's typed", labels("game:GetService(\"Tw") == ["TweenService"])
+        check("the one named like the local being declared comes first",
+              labels("local TweenService = game:GetService(\"").first == "TweenService")
+        let have = "local RunService = game:GetService(\"RunService\")\nlocal Players = game:GetService(\"Players\")\n"
+        check("…and those the script already has come last",
+              labels(have + "local x = game:GetService(\"").suffix(2) == ["Players", "RunService"],
+              "\(labels(have + "local x = game:GetService(\""))")
+        check("before the quote, it's put in for you", insert("Lighting", "local Lighting = game:GetService(") == "\"Lighting\")")
+        check("…without a second )", insert("Lighting", "game:GetService()", caret: 16) == "\"Lighting\"")
+        check("…first by the local's name there too", labels("local Lighting = game:GetService(").first == "Lighting")
+        check("…narrowed by what's typed", labels("game:GetService(Ru") == ["RunService"])
+        check("each suggestion knows what it gives", items("game:GetService(\"").first { $0.label == "Players" }?.returns == "Players")
+        check("GetService on its own isn't a method call", !items("GetService(").contains { $0.detail == "service" })
+        check("an ordinary string still has nothing", labels("print(\"Pla").isEmpty)
+        check("and what it gives goes on resolving", luauLabels("game:GetService(\"LogService\").").contains("MessageOut"))
+        // Every service offered must be one GetService really has.
+        ScriptSelfTest.assertAll(check, "every suggested service is one the game has",
+                                 LuauAPI.services.keys.sorted().map { "game:GetService('\($0)') ~= nil" })
     }
 
     // MARK: - Modules and the scene

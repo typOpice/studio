@@ -10,6 +10,9 @@ import Foundation
 /// new name is being made up (`local x`, `for i`, a function's name and parameters),
 /// where any suggestion would only be in the way.
 ///
+/// Inside `game:GetService("…")` (or right after `GetService(`) it offers the services,
+/// the one named like the local being declared first.
+///
 /// Given the scene (`LuauScene`), it also knows what is really there: the children of
 /// `ReplicatedStorage`, `workspace.Model` or `script.Parent` by name, the names inside
 /// `WaitForChild("…")`, every ModuleScript right after `require(`, and — by reading the
@@ -39,15 +42,22 @@ enum LuauCompletion {
         let caret = min(max(caret, 0), units.count)
         let resolver = Resolver(text: text, units: units, caret: caret, scene: scene)
 
-        // `:WaitForChild("Na|")`: the names of what is really there.
-        if let start = childNameStart(units: units, caret: caret) {
-            let typed = String(decoding: units[start..<caret], as: UTF16.self)
-            return rank(resolver.childNameItems(quote: start - 1).map { ($0, 0) }, prefix: typed)
+        // `:GetService("Pl|")`: the services; `:WaitForChild("Na|")`: what is really there.
+        if let argument = nameArgument(units: units, caret: caret) {
+            let typed = String(decoding: units[argument.start..<caret], as: UTF16.self)
+            if argument.method == "GetService" {
+                return rank(resolver.serviceItems(quote: units[argument.start - 1]), prefix: typed)
+            }
+            return rank(resolver.childNameItems(quote: argument.start - 1).map { ($0, 0) }, prefix: typed)
         }
         if LuauSyntax.isInCommentOrString(offset: caret, in: text) { return [] }
 
         let range = WrenCompletion.partialWordRange(in: text, caret: caret)
         let prefix = String(decoding: units[range.location..<(range.location + range.length)], as: UTF16.self)
+        // `game:GetService(` before the quote: the services, quoted for you.
+        if isArgument(of: "GetService", units: units, at: range.location, afterColon: true) {
+            return rank(resolver.serviceItems(quote: nil), prefix: prefix)
+        }
 
         if range.location > 0 {
             let separator = units[range.location - 1]
@@ -76,23 +86,25 @@ enum LuauCompletion {
     static func replacementStart(in text: String, caret: Int) -> Int {
         let units = Array(text.utf16)
         let caret = min(max(caret, 0), units.count)
-        return childNameStart(units: units, caret: caret) ?? WrenCompletion.partialWordRange(in: text, caret: caret).location
+        return nameArgument(units: units, caret: caret)?.start ?? WrenCompletion.partialWordRange(in: text, caret: caret).location
     }
 
     /// Where the list should open without waiting for a pause: straight after
-    /// `require(`, and after the opening quote of `WaitForChild("`.
+    /// `require(` or `GetService(`, and after the opening quote of `GetService("` or
+    /// `WaitForChild("`.
     static func opensAtOnce(in text: String, caret: Int) -> Bool {
         let units = Array(text.utf16)
         let caret = min(max(caret, 0), units.count)
-        if let start = childNameStart(units: units, caret: caret) { return start == caret }
+        if let argument = nameArgument(units: units, caret: caret) { return argument.start == caret }
         return isRequireArgument(units: units, at: caret)
+            || isArgument(of: "GetService", units: units, at: caret, afterColon: true)
     }
 
     /// Whether suggestions belong at the caret even though it's in a string: the name
-    /// inside `WaitForChild("…")` or `FindFirstChild("…")`.
-    static func isChildName(in text: String, caret: Int) -> Bool {
+    /// inside `GetService("…")`, `WaitForChild("…")` or `FindFirstChild("…")`.
+    static func isNameArgument(in text: String, caret: Int) -> Bool {
         let units = Array(text.utf16)
-        return childNameStart(units: units, caret: min(max(caret, 0), units.count)) != nil
+        return nameArgument(units: units, caret: min(max(caret, 0), units.count)) != nil
     }
 
     /// Whether the line so far leaves the caret where a new name goes: `local na`,
@@ -128,16 +140,24 @@ enum LuauCompletion {
 
     /// `require(` just before `index` (spaces allowed), with only a word typed since.
     fileprivate static func isRequireArgument(units: [UInt16], at index: Int) -> Bool {
+        isArgument(of: "require", units: units, at: index, afterColon: false)
+    }
+
+    /// `function(` just before `index` (spaces allowed), with only a word typed since;
+    /// for a method, with a colon before its name.
+    fileprivate static func isArgument(of function: String, units: [UInt16], at index: Int, afterColon: Bool) -> Bool {
         var i = index
         while i > 0, isIdentifier(units[i - 1]) { i -= 1 }
         while i > 0, units[i - 1] == space { i -= 1 }
-        guard i > 0, units[i - 1] == leftParen else { return false }
-        return word(endingAt: i - 1, in: units) == "require"
+        guard i > 0, units[i - 1] == leftParen, word(endingAt: i - 1, in: units) == function else { return false }
+        let start = i - 1 - function.utf16.count
+        if afterColon { return start > 0 && units[start - 1] == colon }
+        return start == 0 || !(units[start - 1] == dot || units[start - 1] == colon)
     }
 
-    /// Inside the string that is the first argument of `:WaitForChild(` or
-    /// `:FindFirstChild(`, the offset just after its opening quote.
-    fileprivate static func childNameStart(units: [UInt16], caret: Int) -> Int? {
+    /// Inside the string that is the first argument of `:GetService(`, `:WaitForChild(` or
+    /// `:FindFirstChild(`: which of them, and the offset just after the opening quote.
+    fileprivate static func nameArgument(units: [UInt16], caret: Int) -> (start: Int, method: String)? {
         var quote = caret
         while quote > 0 {
             let c = units[quote - 1]
@@ -151,10 +171,10 @@ enum LuauCompletion {
         while i > 0, units[i - 1] == space { i -= 1 }
         guard i > 0, units[i - 1] == leftParen else { return nil }
         let method = word(endingAt: i - 1, in: units)
-        guard method == "WaitForChild" || method == "FindFirstChild" else { return nil }
+        guard ["GetService", "WaitForChild", "FindFirstChild"].contains(method) else { return nil }
         let methodStart = i - 1 - method.utf16.count
         guard methodStart > 0, units[methodStart - 1] == colon else { return nil }
-        return quote
+        return (quote, method)
     }
 
     /// The identifier that ends just before `end`.
@@ -237,6 +257,41 @@ enum LuauCompletion {
                 }
             }
             return LuauCompletion.isRequireArgument(units: units, at: i)
+        }
+
+        // MARK: Services
+
+        /// Every service `game:GetService` knows. The one named like the local this line
+        /// declares comes first (`local Players = game:GetService("`), and those the
+        /// script already has come last. `quote` is the string's opening quote, or nil
+        /// before there is one — then the quotes are put in too.
+        func serviceItems(quote: UInt16?) -> [(CompletionItem, Int)] {
+            let before = String(decoding: units[0..<caret], as: UTF16.self)
+            let lineStart = before.lastIndex(of: "\n").map { before.index(after: $0) } ?? before.startIndex
+            let line = before[lineStart...].drop { $0 == " " || $0 == "\t" }
+            var declaring: String?
+            if line.hasPrefix("local "), let equals = line.firstIndex(of: "=") {
+                declaring = line[line.index(line.startIndex, offsetBy: 6)..<equals]
+                    .split(separator: ":").first?.trimmingCharacters(in: .whitespaces)
+            }
+            var already = Set<String>()
+            for name in LuauCompletion.declaredLocals(in: String(before[..<lineStart])) {
+                if case .instance(let type)? = localContext(of: name, visiting: []) { already.insert(type) }
+                if case .node(let index)? = localContext(of: name, visiting: []), let scene,
+                   scene.nodes[index].parent == nil { already.insert(scene.nodes[index].name) }
+            }
+            let after = caret < units.count ? units[caret] : 0
+            return LuauAPI.services.keys.map { name in
+                let insert: String
+                if let quote {
+                    insert = after == quote ? name : name + String(decoding: [quote, rightParen], as: UTF16.self)
+                } else {
+                    insert = "\"\(name)\"" + (after == rightParen ? "" : ")")
+                }
+                let group = name == declaring ? -1 : already.contains(LuauAPI.services[name] ?? name) ? 1 : 0
+                return (CompletionItem(label: name, insert: insert, detail: "service", kind: .object,
+                                       returns: LuauAPI.services[name]), group)
+            }
         }
 
         // MARK: Names in WaitForChild("…")

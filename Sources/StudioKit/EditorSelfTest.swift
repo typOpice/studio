@@ -458,6 +458,23 @@ enum EditorSelfTest {
         editor.type("print(\"hello")
         editor.pause()
         check("an ordinary string still has no list", !editor.list.isOpen)
+
+        editor.reset()
+        editor.type("local Players = game:GetService(\"")
+        check("GetService(\" opens the list at once, the local's service first",
+              editor.list.isOpen && editor.highlighted == "Players", "\(editor.labels)")
+        editor.key(tab)
+        check("…and Tab finishes the line", editor.text == "local Players = game:GetService(\"Players\")", editor.text)
+        editor.reset()
+        editor.type("local Lighting = game:GetService(")
+        check("so does GetService( before the quote", editor.list.isOpen && editor.highlighted == "Lighting",
+              "\(editor.labels)")
+        editor.key(tab)
+        check("…putting the quotes in", editor.text == "local Lighting = game:GetService(\"Lighting\")", editor.text)
+        editor.reset()
+        editor.type("local s = game:GetService(\"Ru")
+        editor.key(tab)
+        check("typed part-way, Tab completes it", editor.text == "local s = game:GetService(\"RunService\")", editor.text)
     }
 
     private static func textView(_ contents: String) -> NSTextView {

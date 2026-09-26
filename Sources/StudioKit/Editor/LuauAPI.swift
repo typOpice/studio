@@ -306,6 +306,10 @@ enum LuauAPI {
             property("Name", "string"), property("Parent", "Instance"), property("OnInvoke", "function"),
             method("Invoke", "...", "any"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
         ],
+        "LogService": [
+            property("MessageOut", "RBXScriptSignal"), method("GetLogHistory", "", "table"),
+            method("IsA", "className", "boolean")
+        ],
         "ServerStorage": [
             method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name, timeout", "Instance"),
             method("GetChildren", "", "table"), method("GetDescendants", "", "table")
@@ -621,7 +625,7 @@ enum LuauAPI {
         "Animations": "Animations", "Lighting": "Lighting", "TextChatService": "TextChatService",
         "StarterPack": "StarterPack", "SoundService": "SoundService",
         "ReplicatedStorage": "ReplicatedStorage", "ServerScriptService": "ServerScriptService",
-        "ServerStorage": "ServerStorage"
+        "ServerStorage": "ServerStorage", "LogService": "LogService"
     ]
 
     static let globalFunctions: [CompletionItem] = [

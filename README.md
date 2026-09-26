@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2200 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2222 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1209,6 +1209,10 @@ The same list serves Wren and the shader editor.
 **Luau suggestions know your scene and your ModuleScripts:**
 
 ```lua
+local TweenService = game:GetService("   →  TweenService first, then every other service
+                                            (those the script already has last); Tab
+                                            closes the string and the call. Right after
+                                            GetService( it puts the quotes in too.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Utils = require(          →  Utils, Config, Enemy …  every ModuleScript, as a path:
                                    ReplicatedStorage.Utils), script.Parent.Enemy) …

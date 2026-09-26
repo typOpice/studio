@@ -572,7 +572,7 @@ struct CodeEditor: NSViewRepresentable {
             var onWord = selection.length == 0 && selection.location >= completionList.anchor
                 && selection.location <= ns.length
             // A name inside `WaitForChild("…")` may have spaces in it.
-            let inName = language == .luau && LuauCompletion.isChildName(in: textView.string, caret: selection.location)
+            let inName = language == .luau && LuauCompletion.isNameArgument(in: textView.string, caret: selection.location)
             if onWord && !inName {
                 for index in completionList.anchor..<selection.location where !Self.isIdentifier(ns.character(at: index)) {
                     onWord = false
@@ -587,9 +587,9 @@ struct CodeEditor: NSViewRepresentable {
         static func mayOffer(in text: NSString, word: NSRange, typed: Bool, language: CodeLanguage) -> Bool {
             let caret = word.location + word.length
             guard caret <= text.length else { return false }
-            // Luau's `WaitForChild("…")` is the one string with suggestions: the names there,
-            // from the opening quote on.
-            if language == .luau, LuauCompletion.isChildName(in: text as String, caret: caret) { return true }
+            // The strings with suggestions, from the opening quote on: Luau's
+            // `GetService("…")` (the services) and `WaitForChild("…")` (the names there).
+            if language == .luau, LuauCompletion.isNameArgument(in: text as String, caret: caret) { return true }
             guard !language.isInCommentOrString(offset: caret, in: text as String) else { return false }
             // Editing inside a word: a suggestion would replace only half of it.
             if caret < text.length, isIdentifier(text.character(at: caret)) { return false }
@@ -600,7 +600,8 @@ struct CodeEditor: NSViewRepresentable {
         }
 
         /// Where the list opens without waiting: after a dot or colon, and in Luau straight
-        /// after `require(` (the ModuleScripts) or `WaitForChild("` (the names there).
+        /// after `require(` (the ModuleScripts), `GetService(` or `GetService("` (the
+        /// services) and `WaitForChild("` (the names there).
         static func opensAtOnce(_ text: String, caret: Int, language: CodeLanguage) -> Bool {
             if followsMemberAccess(text as NSString, caret: caret, language: language) { return true }
             return language == .luau && LuauCompletion.opensAtOnce(in: text, caret: caret)
