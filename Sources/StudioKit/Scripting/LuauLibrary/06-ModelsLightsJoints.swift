@@ -1,4 +1,4 @@
-// The Luau library, part 6 of 15: Models and Folders, PointLights, attachments, welds and joints.
+// The Luau library, part 6 of 16: Models and Folders, PointLights, attachments, welds and joints.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -91,6 +91,10 @@ function groupMethods.MoveTo(self, position)
 end
 
 GroupMeta.__index = function(group, key)
+	-- A Folder that went into a Player or ReplicatedStorage is a data Folder now.
+	if dataKit.adopted[group] then
+		return dataKit.Meta.__index(group, key)
+	end
 	local id = groupIdOf[group]
 	if key == "Name" then
 		return invoke("group.get", id, "name") or raise("attempt to use a Model that has been destroyed", 2)
@@ -126,8 +130,22 @@ GroupMeta.__index = function(group, key)
 end
 
 GroupMeta.__newindex = function(group, key, value)
+	if dataKit.adopted[group] then
+		return dataKit.Meta.__newindex(group, key, value)
+	end
 	local id = groupIdOf[group]
 	if toolKit.assign(id, key, value) then
+		return
+	end
+	-- A Folder going into a Player (their leaderstats), ReplicatedStorage or a data
+	-- Folder leaves the Workspace tree and becomes a data Folder.
+	local place = key == "Parent" and value ~= nil and value ~= workspace_ and partIdOf[value] == nil
+		and groupIdOf[value] == nil and dataKit.placeOf(value)
+	if place then
+		if not invoke("data.fromGroup", id, place) then
+			raise("Unable to assign property Parent. Only an empty Folder can go there", 2)
+		end
+		dataKit.adopt(group, id)
 		return
 	end
 	if key == "Parent" then
@@ -158,6 +176,9 @@ GroupMeta.__newindex = function(group, key, value)
 end
 
 GroupMeta.__tostring = function(group)
+	if dataKit.adopted[group] then
+		return dataKit.Meta.__tostring(group)
+	end
 	return invoke("group.get", groupIdOf[group], "name") or "Model"
 end
 

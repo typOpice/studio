@@ -1,4 +1,4 @@
-// The Luau library, part 15 of 15: the entry points the host calls.
+// The Luau library, part 16 of 16: the entry points the host calls.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -17,7 +17,9 @@ ScriptMeta.__index = function(object, key)
 	if key == "Name" then
 		return invoke("script.get", id, "name")
 	elseif key == "ClassName" then
-		return "Script"
+		return invoke("script.get", id, "class") or "Script"
+	elseif key == "Parent" and invoke("script.get", id, "class") == "ModuleScript" then
+		return dataKit.moduleParent(id)
 	elseif key == "Parent" then
 		-- A script in something (a Tool from StarterPack, say) is in it; the
 		-- StarterCharacterScripts live inside their character, as in Roblox.
@@ -34,7 +36,12 @@ ScriptMeta.__index = function(object, key)
 		return wrapToken(parent)
 	elseif key == "IsA" then
 		return function(_, className)
-			return className == "Script" or className == "BaseScript" or className == "Instance"
+			local class = invoke("script.get", id, "class") or "Script"
+			if class == "ModuleScript" then
+				return className == class or className == "LuaSourceContainer" or className == "Instance"
+			end
+			return className == class or className == "BaseScript" or className == "LuaSourceContainer"
+				or className == "Instance"
 		end
 	end
 	raise(string.format("%s is not a valid member of Script", tostring(key)), 2)
@@ -49,6 +56,12 @@ ScriptMeta.__tostring = function(object)
 end
 
 ScriptMeta.__metatable = LOCKED
+
+-- `require(script)` inside a ModuleScript, or of a module's own `script`.
+function dataKit.scriptModuleId(object)
+	local id = scriptIdOf[object]
+	return if id ~= nil and invoke("script.get", id, "class") == "ModuleScript" then id else nil
+end
 
 local sharedTable = {}
 local globalTable = {}

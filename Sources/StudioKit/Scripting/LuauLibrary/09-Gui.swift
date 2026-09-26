@@ -1,4 +1,4 @@
-// The Luau library, part 9 of 15: the screen — GUI objects and TextChatService.
+// The Luau library, part 9 of 16: the screen — GUI objects and TextChatService.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.

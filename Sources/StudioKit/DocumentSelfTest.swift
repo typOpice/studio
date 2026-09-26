@@ -106,8 +106,9 @@ enum DocumentSelfTest {
             try older.loadScene(from: Data(legacy.utf8))
             check("a scene file without scripts still opens", older.parts.count == 1)
             check("…and, being from before the default HUD, gets it — its only scripts",
-                  older.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName]
-                  && older.scripts.map(\.name) == [DefaultHud.hudScriptName, DefaultHud.keysScriptName]
+                  older.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName, DefaultHud.listName]
+                  && older.scripts.map(\.name) == [DefaultHud.hudScriptName, DefaultHud.keysScriptName,
+                                                     DefaultHud.listScriptName]
                   && older.scripts.allSatisfy { $0.host == .starterGui })
         } catch {
             check("a scene file without scripts still opens", false, "\(error)")

@@ -11,7 +11,7 @@ enum LAN {
     /// The Bonjour service type. It must also be in each app's `NSBonjourServices`.
     static let serviceType = "_studioplay._tcp"
     /// Bumped whenever the messages change; hosts refuse players on another version.
-    static let protocolVersion = 12
+    static let protocolVersion = 13
     /// How often each player says where they are.
     static let updatesPerSecond: Double = 20
     /// A scene is one message; this is far above any real one.
@@ -61,10 +61,12 @@ struct SceneDelta: Codable, Equatable {
     var screenShaders: [UUID]?
     /// The Sounds — playing or not — when any changes.
     var sounds: [SceneSound]?
+    /// Folders, Value objects (leaderstats among them) and remotes, when any changes.
+    var dataObjects: [DataObject]?
 
     var isEmpty: Bool {
         parts.isEmpty && removed.isEmpty && groups == nil && lighting == nil && shaders == nil
-            && attachments == nil && constraints == nil && screenShaders == nil && sounds == nil
+            && attachments == nil && constraints == nil && screenShaders == nil && sounds == nil && dataObjects == nil
     }
 
     /// From what was last sent to how things are now. Applying it is idempotent, so a
@@ -82,6 +84,7 @@ struct SceneDelta: Codable, Equatable {
         if now.constraints != sent.constraints { delta.constraints = now.constraints }
         if now.screenShaderIDs != sent.screenShaderIDs { delta.screenShaders = now.screenShaderIDs }
         if now.sounds != sent.sounds { delta.sounds = now.sounds }
+        if now.dataObjects != sent.dataObjects { delta.dataObjects = now.dataObjects }
         return delta
     }
 
@@ -109,6 +112,8 @@ struct SceneDelta: Codable, Equatable {
         if let screenShaders { model.screenShaderIDs = screenShaders }
         // A joined player's own sounds are theirs; the host's replace the rest.
         if let sounds { model.sounds = sounds + model.sounds.filter(\.local) }
+        // The same for data objects: a joined player's LocalScripts' own stay.
+        if let dataObjects { model.dataObjects = dataObjects + model.dataObjects.filter(\.local) }
     }
 }
 

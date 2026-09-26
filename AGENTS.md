@@ -53,15 +53,20 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 1943 checks — THE test suite, ~50–70s
+swift run StudioApp --selftest       # 1997 checks — THE test suite, ~50–70s
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
 ./make_app.sh release                # produce Studio.app and StudioClient.app
 ```
 
-There is **no Xcode on this machine** — Command Line Tools only, so `xcodebuild`
-fails. That is why Metal shaders compile at runtime from Swift strings, and why Luau
-and Wren are vendored as source. Do not "fix" any of that with an Xcode project.
+**Xcode 27 is installed and selected** (`xcode-select -p` →
+`/Applications/Xcode.app/Contents/Developer`; Swift 6.4, the newer Metal compiler),
+and the package builds cleanly with it — keep it free of new warnings. But the project
+does **not** depend on Xcode: it began on a Mac with Command Line Tools only, and it
+must still build there. That is why Metal shaders compile at runtime from Swift
+strings, why Luau, Wren and Jolt are vendored as source, and why there is no Xcode
+project. Do not "fix" any of that. (The newer Metal compiler rejects lambdas in shader
+source: use a macro, as the screen-effect wrapper's `sample` does.)
 
 ## 3. The test suite is the contract
 
@@ -131,6 +136,7 @@ listed in §9.
 | `AudioSelfTest.swift` | Pictures and sounds (WAV and PNG made in memory): importing (kinds, refusals, unique names, references, rename, undo, saving); a sound file imported from disk, the place saved through `SceneDocument`, the file deleted, the place reopened, played and hosted for a joiner; Models saving their Sounds and files, and inserting them (brought, shared, renamed with Sounds and scripts following, undone); decoding and mono mixdown, fading with distance; a part's Sounds deleted and copied with it; the Luau Sound/SoundService API against a `RecordingOutput` (3D position, volume, TimePosition, Pause/Resume, Ended once, Looped, PlaybackSpeed, reach, Stop, Destroy, a Sound made in Studio playing at start, read-only and typed properties, LocalScript Sounds kept local through task.spawn and events); an ImageLabel drawing its picture (rendered and read back); the StarterGui preview's pictures; a host's Sounds heard by a joiner (same part, stopping, ending) while each machine's LocalScript Sounds stay its own |
 | `MeshSelfTest.swift` | MeshParts (OBJ, STL and PLY made in memory): decoding (triangles, size, texture coordinates, hard edges kept when a file has no normals, squeezed into the unit cube, the hull and its volume, a broken file refused); inserting (size, on the ground, too-big models rescaled, fidelity and picture undoable, Reset Size, saving, old files); an arch clicked through its opening whatever it collides as, and walked into by each CollisionFidelity (Precise lets a capsule stand in the opening, Hull and Box push it out, pillars push sideways, turned); Jolt with a cup (a block lands inside a Precise one, on top of a Hull or Box one) and an unanchored MeshPart resting and weighing its hull; drawn plain, textured and ray traced and read back; the Luau MeshPart API (Instance.new, ClassName, IsA, MeshId → MeshSize, TextureID, CollisionFidelity, the errors, Clone); saved Models carrying models and pictures and renaming a clash; a joiner getting the models, walking through a Precise arch, and seeing a host script's MeshPart |
 | `WardrobeSelfTest.swift` | What characters wear: every catalog accessory's mesh (sane size, wound outwards), faces and clothing pictures (sizes, a tee's sleeves, shorts to the knee); Roblox's clothing template on the torso, arms and hands, the face patch; a place's and a player's looks combined (own look kept or not, ten at most, built-in only for players), saving, old files, renaming a picture (and undo); accessories hung from their attachments, turning, nodding and lying down with the body, imported models by their anchor; drawn and read back (shirt over pants, pants, a top hat, a face picture in place of the smile, ray traced); in play (StarterPlayer over the player's look, afresh each character, the Animation Editor's rig); the Luau API (Accessory, AddAccessory, parenting, Shirt, Pants, Head.face, errors, GetAppliedDescription, Destroy, ApplyDescription with body colours, RemoveAccessories); the profile (kept, old profiles, applied); two players seeing each other's looks and a host script dressing a joined player, read back at once |
+| `RemotesSelfTest.swift` | Scripts working together: ModuleScripts and data objects in the scene (made, saved, old files, deleted and undone, copied and deleted with a part); `require` (once, the same value to every script, ReplicatedStorage, Script Service and parts, never by themselves, loops, nothing returned, errors, compile errors, wrong arguments); Values (IntValue rounding, StringValue from a number, BoolValue refusing, Folders, Clone, WaitForChild waiting, Changed with each value, Destroy, a Folder becoming a Player's leaderstats); remotes played alone (FireServer with tables, Vector3s and parts, FireClient, FireAllClients, InvokeServer and its errors, the wrong side refused); Raycast (first hit and all its fields, IgnoreWater, RespectCanCollide, Exclude and Include, too short, bad params, characters and excluding them); the leaderboard (hidden with no leaderstats, columns and rows, the HUD numbers moved, Tab); the README's examples; a host and a joined player (modules on each, FireServer as that player with a part, FireClient back, InvokeServer, leaderstats and Changed reaching the player, a late remote waited for, both on the joiner's leaderboard, the host's rays meeting the joiner, leaderstats leaving with the player) |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -268,6 +274,12 @@ Sources/StudioKit/
   Scripting/ScriptRuntime+Lighting/Animations/Tree/Joints/Parts/Shaders.swift
                                    the host calls, one file per namespace group
   Scripting/ScriptConsole.swift    buffered output: info, output, warning, error
+  Scripting/ScriptRuntime+Data.swift  `data.*` (Folders, Values, remotes as data objects),
+                                   `module.*`, `workspace.raycast`
+  Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them
+  Play/PlayController+Remotes.swift  `remote.*` across machines, `character.raycast`,
+                                   Values' Changed from outside
+  UI/DataObjectsUI.swift           the Explorer's ReplicatedStorage, the data-object inspector
 
   Editor/LuauSyntax.swift      Luau lexer
   Editor/LuauAPI.swift         tables the Luau completion is driven from
@@ -298,9 +310,9 @@ Sources/StudioKit/
   UI/AnimationEditorView.swift the Animation tab: toolbar, KeyframeTimeline, JointInspector
   UI/LightingView.swift       Lighting inspector, a part's PointLight editor, RenderCapabilities
   UI/PanelSnapshot.swift      `--render-panel animation|inspector|explorer|ribbon out.png`,
-                              `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture|mesh|meshasset|avatar out.png`
+                              `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture|mesh|meshasset|avatar|replicated out.png`
                               (whole window),
-                              `--render-client menu|character|faces|clothes|outfit|join|chat out.png`;
+                              `--render-client menu|character|faces|clothes|outfit|join|chat|leaderboard out.png`;
                               `--render-meshes out.png [ray]` (AvatarSnapshot) draws MeshParts;
                               `--render-looks out.png [ray] [back]` the sample outfits
   UI/Theme.swift          colours, NumericField, VectorEditor
@@ -859,7 +871,7 @@ Roughly ordered by how much time they will cost you.
     with newlines and runs them as a single chunk, so a part may use any `local` from an
     earlier part and none from a later one; moving code between parts can break that
     silently only at run time (the Luau suite catches it). **A chunk has at most 200
-    locals at its top level, and the whole library shares them: 151 are used.** Past
+    locals at its top level, and the whole library shares them: 153 are used.** (The self-test counts unindented `local` lines, so a part that wraps its helpers in `do … end` indents them, as part 15 does.) Past
     200 nothing compiles, so `ScriptSelfTest` fails at 190 — before then, gather related
     locals into a table instead of adding more, as `gui`, `cframeMath`, `lights`,
     `constraintKit`, `easings`, `randoms`, `tweens` and `otherPlayers` do. A renamed
@@ -872,7 +884,7 @@ Roughly ordered by how much time they will cost you.
     `remoteCharacterCall` (PlayController+Multiplayer.swift): reads answer from the
     player's last `PlayerState` (velocity and MoveDirection included); writes
     (`humanoid.set`/`damage`/`move`/`moveTo`/`state`, `root.set`, `body.set`,
-    `character.moveTo`, `look.set`) go to that player as `.call` and run there as their own call.
+    `character.moveTo`, `look.set`; remotes have their own messages, invariant 96) go to that player as `.call` and run there as their own call.
     The host also keeps each write in `pendingRemoteWrites` — Health clamped and damage
     taken off as the player's Humanoid will — and answers reads with it until the
     player's report agrees, their character changes, or 0.5 s pass, so a script reads
@@ -1033,26 +1045,6 @@ Roughly ordered by how much time they will cost you.
     drops deferred threads of a character's scope like sleeping ones. task's arguments
     are checked with `taskSeconds`/`taskThread` (Roblox's messages).
 
-94. **What a character wears is an `AvatarLook`, owned by the machine that runs the
-    character.** `PlayController.look` is set at each spawn from
-    `StarterPlayerSettings.look.worn(by: playerLook, …)` — `playerLook` is the client
-    profile's, built-in things only, since a place's imported files don't travel with
-    the player — and rides in every `PlayerState` (so others draw it; `LAN.protocolVersion`
-    went to 12 for it). Scripts read and write it through `look.get`/`look.set` (the
-    whole look as `{face, shirt, pants, {accessory…}}`; `set` takes one key), which for
-    another player go to them as `.call` with a pending write (invariant 77). The Luau
-    Accessory, Shirt, Pants, face Decal and HumanoidDescription (`avatarKit`, in the
-    player part) are views of that value, never objects of their own: a worn accessory is
-    its entry's id. Accessories hang from R6 attachments (`AccessoryType.attachment`) via
-    `AvatarPose.accessoryTransforms`: a built-in one is made at its real size around the
-    attachment point; an imported model is the unit-cube MeshGeometry stretched to its
-    native size and placed by the type's `anchor`. Clothes use the classic template: the
-    clothed body parts are `MeshFactory.clothedBox` (the same rounded boxes as the plain
-    body, with UVs per face region) drawn with `scene_fragment_clothed`, which lays the
-    premultiplied picture over the body colour; pants and shirt are layered into one
-    texture for the torso. A face picture is drawn on `faceDecal` instead of the classic
-    shape face (look.face `""`); `builtin://None` draws neither.
-
 93. **A MeshPart is a block with `Part.mesh` set, and its model is unit-sized.**
     `part.shape` stays `.block` (the fallback when the model can't be read), so switches
     over `PartShape` never see meshes; everything that cares checks `part.mesh` first.
@@ -1067,6 +1059,63 @@ Roughly ordered by how much time they will cost you.
     triangles. Meshes are drawn two-sided (imported winding isn't trusted) and textured
     through a separate UV buffer at vertex index 3, so `Vertex` and `DrawUniforms` keep
     their sizes; each model is added to the ray-tracing scene as `"mesh:<uuid>"`.
+
+94. **What a character wears is an `AvatarLook`, owned by the machine that runs the
+    character.** `PlayController.look` is set at each spawn from
+    `StarterPlayerSettings.look.worn(by: playerLook, …)` — `playerLook` is the client
+    profile's, built-in things only, since a place's imported files don't travel with
+    the player — and rides in every `PlayerState` (so others draw it; `LAN.protocolVersion`
+    went to 12 for it, and to 13 for data objects). Scripts read and write it through `look.get`/`look.set` (the
+    whole look as `{face, shirt, pants, {accessory…}}`; `set` takes one key), which for
+    another player go to them as `.call` with a pending write (invariant 77). The Luau
+    Accessory, Shirt, Pants, face Decal and HumanoidDescription (`avatarKit`, in the
+    player part) are views of that value, never objects of their own: a worn accessory is
+    its entry's id. Accessories hang from R6 attachments (`AccessoryType.attachment`) via
+    `AvatarPose.accessoryTransforms`: a built-in one is made at its real size around the
+    attachment point; an imported model is the unit-cube MeshGeometry stretched to its
+    native size and placed by the type's `anchor`. Clothes use the classic template: the
+    clothed body parts are `MeshFactory.clothedBox` (the same rounded boxes as the plain
+    body, with UVs per face region) drawn with `scene_fragment_clothed`, which lays the
+    premultiplied picture over the body colour; pants and shirt are layered into one
+    texture for the torso. A face picture is drawn on `faceDecal` instead of the classic
+    shape face (look.face `""`); `builtin://None` draws neither.
+
+95. **ModuleScripts are compiled when the Luau VM starts and run on first `require`.**
+    A module is a `ScriptObject` with `kind == .module` (in ReplicatedStorage —
+    `ScriptHost.replicatedStorage` — Script Service, or a part or Model); `start()`
+    never runs one. `ScriptRuntime.defineModule` compiles each as
+    `__studio_define_module(id, function(...) <source>\nend)` — the wrapper on the
+    module's first line, so its errors keep its own line numbers — in its own
+    environment, whose `script` answers ClassName "ModuleScript". Luau's `require`
+    (part 15) runs it once per VM under `pcall` (yields allowed), caches the single value,
+    and gives Roblox's errors for a loop, a count other than one, and a module that
+    failed (which then stays failed). The host VM holds the host's scene scripts and its
+    LocalScripts, so they share one cache; each joined player has their own.
+
+96. **Folders, Values and remotes are data objects; remotes ride the existing channels.**
+    `DataObject` (DataObjects.swift) covers Folder, Int/Number/String/BoolValue,
+    RemoteEvent and RemoteFunction, with a `DataParent`: none, the Workspace,
+    ReplicatedStorage, a Player (their number) or a node (part, group or another data
+    object) by id. They live in `SceneState.dataObjects`, travel in `SceneDelta.dataObjects`
+    (a joined player's own are `local` and stay), are pruned and cloned with the tree, and
+    reach Luau as "v:<id>" tokens (`dataKit`, part 15); ReplicatedStorage is "rs", Script
+    Service "sss", a player "pl:<n>" (`data.children`/`data.find`). `Instance.new("Folder")`
+    still makes a tree Folder; parenting it to a Player, ReplicatedStorage or a data
+    Folder turns it into a data Folder of the same id (`data.fromGroup`), and its proxy
+    delegates to `dataKit.Meta` from then on (`dataKit.adopted`) and stays the one object
+    for that id. A script's own `.Value` write fires Changed at once in Luau and tells
+    the session (`noteDataWritten`); any other change — the host's, arriving — is found
+    by `noteDataChanges` diffing each frame and raised as `["DataChanged", id]`.
+    Remotes (`remote.*`, PlayController+Remotes.swift) go joined player → host as
+    `sendAction("remote.server"/"remote.invoke"/"remote.replied")` and host → player as
+    `forwardToPlayer("remote.client"/"remote.invoke.client"/"remote.replied")`; the
+    machine that runs the world (host, or alone) is the server and delivers its own
+    locally. Arguments are encoded by `dataKit.encode` into tagged lists (`{"$v3", …}`,
+    `{"$p", id}`, `{"$pl", n}`, `{"$t", k, v, …}`). On the host, LocalScripts are the
+    client and scene scripts the server (`inLocalScript`), which decides FireServer vs
+    FireClient. A player who leaves takes their `.player(n)` objects with them. The
+    leaderboard is StarterGui's PlayerList (`DefaultHud.makeLeaderboard`, HUD version 2),
+    which reads `leaderstats` like any LocalScript would.
 
 ## 8. Recipes
 
@@ -1231,7 +1280,7 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
 - **Tools:** their scripts all run on the host (there are no LocalScripts in tools);
   held tools aren't in the physics, so they don't push crates or report part-to-part
   Touched (bodies still touch them); `Backpack.ChildAdded/ChildRemoved` aren't there and
-  `WaitForChild` doesn't wait; Luau only.
+  its `WaitForChild` doesn't wait; Luau only.
 - **Sounds and pictures:** only files imported into the scene (`studio://Name`), not
   Roblox asset ids; no SoundGroups, sound effects (reverb, EQ…), RollOffMinDistance or
   roll-off modes (it fades linearly to nothing at RollOffMaxDistance); a Sound goes in a
@@ -1253,6 +1302,14 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   there; a player's own look is built-in things only (they can't bring their own
   files); HumanoidDescription covers the look and body colours, not scale or
   animations. Luau only.
+- **Scripts working together:** no ServerStorage, BindableEvent/Function, ObjectValue,
+  Vector3Value and the other Value classes, or `RunService:IsServer()`; `require` takes a
+  ModuleScript in the place, not an asset id; the host's scene scripts and LocalScripts
+  share one module cache; remotes send parts, Models, data objects, players, characters
+  and body parts, but not GUI objects, Sounds or joints (they arrive as nil); only
+  ReplicatedStorage, Players and data Folders have a `WaitForChild` that waits;
+  `workspace:Raycast` ignores CollisionGroup and meets characters as boxes; data objects
+  made at run time in parts aren't shown in Studio's Explorer. Luau only.
 - **Run mode is Studio-only:** it has no player and no network side, so it has no
   multiplayer test; a scene script that needs `Players.LocalPlayer` gets nil there, as
   on a Roblox server.
@@ -1273,7 +1330,7 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   In Studio one GUI object is selected at a time (no multi-select, no dragging in the
   Explorer to reparent), text is edited in Properties, not in the view. Luau only.
 - **Chat:** no filter, no commands (/whisper, /team…); bubbles are a fixed width.
-- **Roblox divergences:** `Instance.new` makes parts, MeshParts, Models, Folders, PointLights,
+- **Roblox divergences:** `Instance.new` makes parts, MeshParts, Models, Folders, Values, remotes, Accessories, Shirts, Pants, PointLights,
   Animations, Sounds and the GUI classes, and new or cloned parts go straight into the workspace; setting
   `Parent = nil` destroys; no `Unions`;
   `Vector3.zero.Unit` is zero, not NaN.

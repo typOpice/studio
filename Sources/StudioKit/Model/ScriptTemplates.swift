@@ -37,6 +37,21 @@ enum ScriptTemplates {
 
     // MARK: - Luau
 
+    /// A ModuleScript's: a table of functions, returned.
+    static let luauModule = """
+        -- A ModuleScript: code other scripts share. It runs once on each machine, the
+        -- first time a script requires it, and every script that requires it gets back
+        -- what it returns:
+        --   local Greeter = require(game.ReplicatedStorage.Greeter)
+        local module = {}
+
+        function module.greet(name)
+        \treturn "Hello, " .. name .. "!"
+        end
+
+        return module
+        """
+
     static let luauPart = """
     -- Runs when you press Play. script.Parent is the part this script is in.
     local part = script.Parent

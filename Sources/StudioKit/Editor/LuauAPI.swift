@@ -38,6 +38,7 @@ enum LuauAPI {
         "ColorSequence": [method("new", "color0, color1", "ColorSequence")],
         "ColorSequenceKeypoint": [method("new", "time, color", "ColorSequenceKeypoint")],
         "NumberSequence": [method("new", "value0, value1", "NumberSequence")],
+        "RaycastParams": [method("new", "", "RaycastParams")],
         "NumberSequenceKeypoint": [method("new", "time, value", "NumberSequenceKeypoint")],
         "Random": [method("new", "seed", "Random")],
         "TweenInfo": [method("new", "time, easingStyle, easingDirection, repeatCount, reverses, delayTime", "TweenInfo")],
@@ -253,7 +254,47 @@ enum LuauAPI {
             property("Name", "string"), property("Gravity", "number"),
             method("FindFirstChild", "name", "Part"), method("WaitForChild", "name", "Part"),
             method("GetChildren", "", "table"), method("GetDescendants", "", "table"),
-            method("IsA", "className", "boolean")
+            method("IsA", "className", "boolean"),
+            method("Raycast", "origin, direction, params", "RaycastResult")
+        ],
+        "RaycastParams": [
+            property("FilterDescendantsInstances", "table"), property("FilterType", "EnumItem"),
+            property("IgnoreWater", "boolean"), property("RespectCanCollide", "boolean"),
+            method("AddToFilter", "instances", "()")
+        ],
+        "RaycastResult": [
+            property("Instance", "Part"), property("Position", "Vector3"), property("Normal", "Vector3"),
+            property("Distance", "number"), property("Material", "EnumItem")
+        ],
+        "ReplicatedStorage": [
+            method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name, timeout", "Instance"),
+            method("GetChildren", "", "table"), method("GetDescendants", "", "table")
+        ],
+        "ServerScriptService": [
+            method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name, timeout", "Instance"),
+            method("GetChildren", "", "table")
+        ],
+        "ModuleScript": [
+            property("Name", "string"), property("Parent", "Instance"), method("IsA", "className", "boolean")
+        ],
+        "RemoteEvent": [
+            property("Name", "string"), property("Parent", "Instance"),
+            property("OnServerEvent", "RBXScriptSignal"), property("OnClientEvent", "RBXScriptSignal"),
+            method("FireServer", "...", "()"), method("FireClient", "player, ...", "()"),
+            method("FireAllClients", "...", "()"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "RemoteFunction": [
+            property("Name", "string"), property("Parent", "Instance"),
+            property("OnServerInvoke", "function"), property("OnClientInvoke", "function"),
+            method("InvokeServer", "...", "any"), method("InvokeClient", "player, ...", "any"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "IntValue": valueMembers, "NumberValue": valueMembers, "StringValue": valueMembers, "BoolValue": valueMembers,
+        "Folder": [
+            property("Name", "string"), property("Parent", "Instance"),
+            method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name, timeout", "Instance"),
+            method("GetChildren", "", "table"), method("ClearAllChildren", "", "()"),
+            method("Destroy", "", "()"), method("Clone", "", "Folder"), method("IsA", "className", "boolean")
         ],
         "Game": [
             property("Workspace", "Workspace"),
@@ -544,12 +585,20 @@ enum LuauAPI {
         "TextChatService": "TextChatService", "StarterPack": "StarterPack", "SoundService": "SoundService"
     ]
 
+    /// A Value object's members.
+    private static let valueMembers: [CompletionItem] = [
+        property("Name", "string"), property("Value", "any"), property("Parent", "Instance"),
+        property("Changed", "RBXScriptSignal"), method("GetPropertyChangedSignal", "property", "RBXScriptSignal"),
+        method("Destroy", "", "()"), method("Clone", "", "Instance"), method("IsA", "className", "boolean")
+    ]
+
     /// What `game:GetService("…")` returns, by its argument.
     static let services: [String: String] = [
         "Workspace": "Workspace", "RunService": "RunService", "Players": "Players",
         "TweenService": "TweenService", "Shaders": "Shaders", "UserInputService": "UserInputService",
         "Animations": "Animations", "Lighting": "Lighting", "TextChatService": "TextChatService",
-        "StarterPack": "StarterPack", "SoundService": "SoundService"
+        "StarterPack": "StarterPack", "SoundService": "SoundService",
+        "ReplicatedStorage": "ReplicatedStorage", "ServerScriptService": "ServerScriptService"
     ]
 
     static let globalFunctions: [CompletionItem] = [
@@ -559,7 +608,8 @@ enum LuauAPI {
         method("ipairs", "t", "iterator"), method("pcall", "f, ...", "boolean"),
         method("error", "message, level", "()"), method("assert", "value, message", "any"),
         method("select", "index, ...", "any"), method("time", "", "number"),
-        method("setmetatable", "t, metatable", "table"), method("getmetatable", "t", "table")
+        method("setmetatable", "t, metatable", "table"), method("getmetatable", "t", "table"),
+        method("require", "moduleScript", "any")
     ]
 
     static let snippets: [CompletionItem] = [

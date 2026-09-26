@@ -1,4 +1,4 @@
-// The Luau library, part 5 of 15: parts, the tree they sit in, and part physics.
+// The Luau library, part 5 of 16: parts, the tree they sit in, and part physics.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -255,8 +255,12 @@ local attachmentIdOf = setmetatable({}, { __mode = "k" })
 local constraintIdOf = setmetatable({}, { __mode = "k" })
 local wrapAttachment, wrapConstraint
 
+-- Folders, Value objects, remotes and ModuleScripts, filled in by part 15.
+local dataKit = {}
+
 -- The tree. The host hands back tokens — "p:<id>" a part, "g:<id>" a Model or
--- Folder, "w" the Workspace — and takes a node's id, or "w", as a parent.
+-- Folder, "w" the Workspace, "v:<id>" a data object, "m:<id>" a ModuleScript — and
+-- takes a node's id, or "w", as a parent.
 local function wrapToken(token)
 	if token == nil then
 		return nil
@@ -273,6 +277,10 @@ local function wrapToken(token)
 		return wrapConstraint(id)
 	elseif kind == "s" then
 		return soundKit.wrap(id)
+	elseif kind == "v" then
+		return dataKit.wrap(id)
+	elseif kind == "m" then
+		return dataKit.wrapModule(id)
 	end
 	return wrapGroup(id)
 end

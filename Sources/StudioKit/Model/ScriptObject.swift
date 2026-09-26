@@ -24,6 +24,9 @@ enum ScriptHost: String, Codable, CaseIterable, Identifiable {
     /// Inside a GUI object in StarterGui (a LocalScript): runs in each player's copy of
     /// that GUI, with the copy as `script.Parent`.
     case starterGui
+    /// ReplicatedStorage: ModuleScripts every machine can require. Nothing here runs by
+    /// itself.
+    case replicatedStorage
 
     var id: String { rawValue }
     var displayName: String {
@@ -32,8 +35,16 @@ enum ScriptHost: String, Codable, CaseIterable, Identifiable {
         case .starterPlayer: return "StarterPlayerScripts"
         case .starterCharacter: return "StarterCharacterScripts"
         case .starterGui: return "StarterGui"
+        case .replicatedStorage: return "ReplicatedStorage"
         }
     }
+}
+
+/// A Script runs by itself where it lives; a ModuleScript runs only when a script
+/// requires it, once per machine, and hands every script that does what it returned.
+enum ScriptKind: String, Codable {
+    case script
+    case module
 }
 
 /// A script stored in the scene. Scripts attached to a part receive that part as
@@ -47,6 +58,9 @@ struct ScriptObject: Identifiable, Codable, Equatable {
     var source: String = ScriptObject.template
     var enabled: Bool = true
     var parentID: UUID?
+    var kind: ScriptKind = .script
+
+    var isModule: Bool { kind == .module }
 
     init() {}
 
@@ -58,7 +72,7 @@ struct ScriptObject: Identifiable, Codable, Equatable {
         return script
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, language, host, source, enabled, parentID }
+    private enum CodingKeys: String, CodingKey { case id, name, language, host, source, enabled, parentID, kind }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -71,11 +85,25 @@ struct ScriptObject: Identifiable, Codable, Equatable {
         source = try c.decodeIfPresent(String.self, forKey: .source) ?? ""
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
+        kind = try c.decodeIfPresent(ScriptKind.self, forKey: .kind) ?? .script
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(language, forKey: .language)
+        try c.encode(host, forKey: .host)
+        try c.encode(source, forKey: .source)
+        try c.encode(enabled, forKey: .enabled)
+        try c.encodeIfPresent(parentID, forKey: .parentID)
+        if kind != .script { try c.encode(kind, forKey: .kind) }
     }
 
     /// What a script in Script Service starts with; `ScriptTemplates` has one for every
     /// place a script can be made.
     static let template = ScriptTemplates.source(.luau, in: .service)
+    static let moduleTemplate = ScriptTemplates.luauModule
     static let wrenTemplate = ScriptTemplates.source(.wren, in: .service)
 }
 
@@ -109,13 +137,15 @@ struct SceneState: Equatable, Codable {
     /// Pictures and sounds brought in, and the Sounds that play them.
     var assets: [SceneAsset] = []
     var sounds: [SceneSound] = []
+    /// Folders, Value objects and remotes.
+    var dataObjects: [DataObject] = []
     /// Which default HUD the scene has been given (`DefaultHud.version`); 0 is a scene
     /// from before there was one.
     var defaultGui = 0
 
     private enum CodingKeys: String, CodingKey {
         case parts, scripts, shaders, screenShaderID, screenShaderIDs, starterPlayer, animations, lighting, groups
-        case attachments, constraints, starterGui, assets, sounds, defaultGui
+        case attachments, constraints, starterGui, assets, sounds, dataObjects, defaultGui
     }
 
     init(parts: [Part] = [], scripts: [ScriptObject] = [], shaders: [ShaderObject] = [],
@@ -124,8 +154,10 @@ struct SceneState: Equatable, Codable {
          animations: [AnimationObject] = [], lighting: LightingSettings = LightingSettings(),
          groups: [SceneGroup] = [], attachments: [SceneAttachment] = [],
          constraints: [SceneConstraint] = [], starterGui: [StarterGuiObject] = [],
-         assets: [SceneAsset] = [], sounds: [SceneSound] = [], defaultGui: Int = 0) {
+         assets: [SceneAsset] = [], sounds: [SceneSound] = [], dataObjects: [DataObject] = [],
+         defaultGui: Int = 0) {
         self.defaultGui = defaultGui
+        self.dataObjects = dataObjects
         self.starterGui = starterGui
         self.assets = assets
         self.sounds = sounds
@@ -159,6 +191,7 @@ struct SceneState: Equatable, Codable {
         starterGui = try c.decodeIfPresent([StarterGuiObject].self, forKey: .starterGui) ?? []
         assets = try c.decodeIfPresent([SceneAsset].self, forKey: .assets) ?? []
         sounds = try c.decodeIfPresent([SceneSound].self, forKey: .sounds) ?? []
+        dataObjects = try c.decodeIfPresent([DataObject].self, forKey: .dataObjects) ?? []
         defaultGui = try c.decodeIfPresent(Int.self, forKey: .defaultGui) ?? 0
     }
 
@@ -179,6 +212,7 @@ struct SceneState: Equatable, Codable {
         if !starterGui.isEmpty { try c.encode(starterGui, forKey: .starterGui) }
         if !assets.isEmpty { try c.encode(assets, forKey: .assets) }
         if !sounds.isEmpty { try c.encode(sounds, forKey: .sounds) }
+        if !dataObjects.isEmpty { try c.encode(dataObjects, forKey: .dataObjects) }
         if defaultGui > 0 { try c.encode(defaultGui, forKey: .defaultGui) }
     }
 }

@@ -100,6 +100,11 @@ struct ExplorerView: View {
                         session.showDock(.animation)
                     }
                     Divider()
+                    Button("New ModuleScript") {
+                        session.openScript(model.addModuleScript())
+                    }
+                    Button("New RemoteEvent") { model.addDataObject(.remoteEvent) }
+                    Divider()
                     Button("New StarterPlayer Script") {
                         playerScriptsExpanded = true
                         session.openScript(model.addScript(host: .starterPlayer))
@@ -192,6 +197,11 @@ struct ExplorerView: View {
                     }
                     .padding(.top, 4)
 
+                    .contextMenu {
+                        Button("New Script") { session.openScript(model.addScript()) }
+                        Button("New ModuleScript") { session.openScript(model.addModuleScript(host: .scene)) }
+                    }
+
                     if serviceExpanded {
                         ForEach(looseScripts) { script in
                             scriptRow(script, indent: 20)
@@ -200,6 +210,8 @@ struct ExplorerView: View {
                             emptyNote("No standalone scripts")
                         }
                     }
+
+                    ReplicatedStorageGroup(model: model, session: session)
 
                     groupRow(title: "Shaders",
                              icon: "paintbrush.pointed.fill",
@@ -437,6 +449,10 @@ struct ExplorerView: View {
                 expandedParts.insert(part.id)
                 session.openScript(model.addScript(parentID: part.id, language: .wren))
             }
+            Button("Add ModuleScript") {
+                expandedParts.insert(part.id)
+                session.openScript(model.addModuleScript(parentID: part.id, host: .scene))
+            }
             if !model.shaders.isEmpty {
                 Menu("Shader") {
                     Button("None") { model.assignShader(nil, to: [part.id]) }
@@ -464,11 +480,10 @@ struct ExplorerView: View {
     private func scriptRow(_ script: ScriptObject, indent: CGFloat) -> some View {
         let selected = model.selectedScript == script.id
         return HStack(spacing: 6) {
-            Image(systemName: script.enabled ? "doc.plaintext.fill" : "doc.plaintext")
+            Image(systemName: script.isModule ? "doc.text.fill" : script.enabled ? "doc.plaintext.fill" : "doc.plaintext")
                 .font(.system(size: 10))
-                .foregroundStyle(script.enabled
-                                 ? Color(red: 0.62, green: 0.78, blue: 0.45)
-                                 : Theme.textDim)
+                .foregroundStyle(script.isModule ? ReplicatedStorageGroup.moduleTint
+                                 : script.enabled ? Color(red: 0.62, green: 0.78, blue: 0.45) : Theme.textDim)
                 .frame(width: 14)
 
             if renamingID == script.id {
@@ -483,9 +498,10 @@ struct ExplorerView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
-            Text(script.language.badge)
+            Text(script.isModule ? "module" : script.language.badge)
                 .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                .foregroundStyle(script.language == .luau ? Color(red: 0.45, green: 0.62, blue: 0.95) : Theme.textDim)
+                .foregroundStyle(script.isModule ? ReplicatedStorageGroup.moduleTint
+                                 : script.language == .luau ? Color(red: 0.45, green: 0.62, blue: 0.95) : Theme.textDim)
             if !script.enabled {
                 Text("off")
                     .font(.system(size: 9, design: .monospaced))

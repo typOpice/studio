@@ -255,6 +255,10 @@ final class PlayController: ViewportSource, PlayerBridge {
     /// On a joined player: the host's handle for a track it plays on this character, and
     /// this game's own handle for it.
     var hostTracks: [Int: Int] = [:]
+    /// RemoteFunction calls this machine made, counted: a reply comes back with its number.
+    var remoteCalls = 0
+    /// Each Value object's value as last seen, so a change from outside raises Changed.
+    var knownDataValues: [UUID: ScriptValue] = [:]
     /// Seconds of play so far, by the frames stepped.
     private(set) var clock: Double = 0
 
@@ -330,6 +334,7 @@ final class PlayController: ViewportSource, PlayerBridge {
     /// One frame with an explicit step, which is how the tests drive it.
     func step(dt: Float) {
         clock += Double(dt)
+        noteDataChanges()
         guard hasPlayer else {
             scripts.update(dt: Double(dt))
             simulateParts(dt: dt)

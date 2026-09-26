@@ -146,6 +146,8 @@ extension PlayController {
             if let id { activateTool(id, by: player, down: arguments.count > 1 ? arguments[1].asBool ?? true : true) }
         case "click.part", "click.hover":
             remoteClick(from: player, name, arguments)
+        case "remote.server", "remote.invoke", "remote.replied":
+            remoteMessage(from: player, name, arguments)
         default:
             break
         }

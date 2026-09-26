@@ -1,4 +1,4 @@
-// The Luau library, part 13 of 15: the host's events, delivered at the start of each frame.
+// The Luau library, part 13 of 16: the host's events, delivered at the start of each frame.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -23,6 +23,10 @@ local function dispatch(event)
 		if invoke("part.exists", a) and invoke("part.exists", b) then
 			fire(partSignal(b, name), wrapPart(a))
 		end
+		return
+	end
+	if kind == "DataChanged" or string.sub(kind, 1, 6) == "Remote" then
+		dataKit.dispatch(event)
 		return
 	end
 	if kind == "Tool" then

@@ -28,9 +28,9 @@ swift run StudioClient path/to/Scene.json   # the path is optional
 ```
 
 There is no Xcode dependency: the Metal shaders are compiled at runtime from
-`Sources/StudioKit/Render/Shaders.swift`, and Luau and Wren are built from vendored
-sources,
-so Command Line Tools alone are enough.
+`Sources/StudioKit/Render/Shaders.swift`, and Luau, Wren and Jolt are built from
+vendored sources, so Command Line Tools alone are enough. (It builds cleanly with
+Xcode 27 and Swift 6.4 as well.)
 
 ## Running the zipped builds
 
@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-1943 headless checks covering shader compilation, uniform struct layout, mesh winding,
+1994 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -59,7 +59,7 @@ scene), the Luau, Wren and Metal lexers and completion engines, script-editor ca
 and input handling, the render loop, surface and full-screen shaders (rendered on
 the GPU and read back), collision, the player camera and the character controller,
 the screen GUI and chat, pictures and sounds (through a recorder, so nothing plays
-aloud), MeshParts and their collision, what characters wear, and two clients playing together over loopback.
+aloud), MeshParts and their collision, what characters wear, modules, remotes, raycasts and leaderstats, and two clients playing together over loopback.
 
 ## The player character
 
@@ -861,10 +861,11 @@ Every one runs cleanly as it is, and so does every line it suggests trying.
 | Welds and joints | `WeldConstraint` (`Part0`, `Part1`, `Enabled`, `Active`), `HingeConstraint` and `PrismaticConstraint` (`ActuatorType`, `AngularVelocity`/`Velocity`, `MotorMaxTorque`/`MotorMaxForce`, `TargetAngle`/`TargetPosition`, `AngularSpeed`/`Speed`, `Servo…`, `LimitsEnabled`, limits, `CurrentAngle`/`CurrentPosition`), `BallSocketConstraint`, `RopeConstraint` (`Length`), `SpringConstraint` (`FreeLength`, `Stiffness`, `Damping`), `Attachment` (`Position`, `Axis`, `WorldPosition`, `CFrame`), `Enum.ActuatorType` |
 | The tree | `Model` (`PrimaryPart`, `:GetPivot`, `:PivotTo`, `:MoveTo`, `:GetBoundingBox`), `Folder`; on everything: `:GetChildren`, `:GetDescendants`, `:FindFirstChild(name, recursive)`, `:WaitForChild`, `:FindFirstChildOfClass`, `:IsDescendantOf`, `:FindFirstAncestor…`, `:GetFullName`, `:ClearAllChildren`, children by name (`workspace.Car.Seat`) |
 | `CFrame` | `new` (every form), `lookAt`, `Angles`, `fromEulerAnglesXYZ/YXZ`, `fromOrientation`, `fromAxisAngle`, `fromMatrix`, `identity`; `*`, `+`, `-`; `Position`, `LookVector`, `RightVector`, `UpVector`, `Rotation`; `:Inverse`, `:Lerp`, `:ToWorldSpace`, `:ToObjectSpace`, `:PointTo…Space`, `:VectorTo…Space`, `:GetComponents`, `:ToEulerAnglesXYZ/YXZ`, `:ToOrientation`, `:ToAxisAngle`, `:FuzzyEq` |
-| `Instance.new` | `"Part"`, `"WedgePart"`, `"Model"`, `"Folder"`, `"PointLight"`, `"Animation"`, `"Attachment"`, `"WeldConstraint"` and the five joint classes, with Roblox's defaults |
+| `Instance.new` | `"Part"`, `"WedgePart"`, `"MeshPart"`, `"Model"`, `"Folder"`, `"PointLight"`, `"Animation"`, `"Attachment"`, `"WeldConstraint"` and the five joint classes, `"IntValue"`, `"NumberValue"`, `"StringValue"`, `"BoolValue"`, `"RemoteEvent"`, `"RemoteFunction"`, `"Accessory"`, `"Shirt"`, `"Pants"`, `"HumanoidDescription"`, `"Sound"`, the GUI classes — with Roblox's defaults |
+| Working together | `require` and ModuleScripts; `RemoteEvent`, `RemoteFunction`; Value objects; `workspace:Raycast` and `RaycastParams` (see *Scripts working together*) |
 | `Vector3`, `Color3` | the Roblox constructors, properties, operators and methods — float32, as in Roblox |
 | `Enum` | `Material`, `PartType`, `EasingStyle`, `EasingDirection`, `PlaybackState`, `KeyCode`, `UserInputType`, `UserInputState`, `HumanoidStateType`, `CameraMode`, `TextXAlignment` |
-| `game:GetService` | `RunService` (`Heartbeat`, `Stepped`, `RenderStepped` with `:Connect`, `:Once`, `:Wait`), `Players`, `UserInputService`, `TweenService` (`:Create`, `:GetValue`), `Workspace` (`Gravity`) |
+| `game:GetService` | `RunService` (`Heartbeat`, `Stepped`, `RenderStepped` with `:Connect`, `:Once`, `:Wait`), `Players`, `UserInputService`, `TweenService` (`:Create`, `:GetValue`), `Workspace` (`Gravity`), `ReplicatedStorage`, `ServerScriptService` |
 | Tweens | `TweenInfo.new(time, style, direction, repeatCount, reverses, delayTime)`; `TweenService:Create(instance, info, goals)` → `:Play`, `:Pause`, `:Cancel`, `PlaybackState`, `Completed`; numbers, booleans, `Vector3`, `Color3`, `CFrame`, `UDim2`, `UDim`, `Vector2` — parts and GUI alike |
 | The player | `Players.LocalPlayer` — `Character`, `CharacterAdded`, `CharacterRemoving`, `:LoadCharacter()`, `CameraMode`, `CameraMin/MaxZoomDistance`; `Players.RespawnTime`, `Players:GetPlayerFromCharacter` |
 | `Humanoid` | `WalkSpeed`, `JumpPower`, `JumpHeight`, `UseJumpPower`, `Health`, `MaxHealth`, `MaxSlopeAngle`, `AutoRotate`, `Jump`, `MoveDirection`; `:Move`, `:MoveTo`, `:TakeDamage`, `:GetState`, `:ChangeState`; `Died`, `HealthChanged`, `StateChanged`, `Jumping`, `FreeFalling`, `Running`, `MoveToFinished`, `Touched(part, bodyPart)` |
@@ -897,6 +898,138 @@ and disconnected; the others keep running.
 **A runaway script cannot freeze the app.** Each script and each handler gets two
 seconds; `while true do end` is stopped with the line it was stuck on. Scripts are
 sandboxed, so one cannot redefine `Vector3` or `print` for the others.
+
+## Scripts working together
+
+### ModuleScripts and `require`
+
+A **ModuleScript** holds code other scripts share. It doesn't run by itself: the first
+time a script calls `require` on it, it runs and hands back what it returns, and every
+later `require` of it gets that same thing. Make one in **ReplicatedStorage** (the
+Explorer's **+ › New ModuleScript**, or right-click ReplicatedStorage), where scripts on
+the host and LocalScripts on every player's machine can reach it — or in Script Service,
+or in a part or Model.
+
+```lua
+-- ReplicatedStorage/Weapons (a ModuleScript)
+local Weapons = {}
+Weapons.damage = { Sword = 25, Bow = 15 }
+function Weapons.describe(name)
+	return name .. " does " .. Weapons.damage[name] .. " damage"
+end
+return Weapons
+
+-- any Script or LocalScript
+local Weapons = require(game:GetService("ReplicatedStorage").Weapons)
+print(Weapons.describe("Sword"))
+```
+
+A module that requires itself round a loop, returns nothing, errors or doesn't compile
+gives Roblox's error at the `require`. Each machine runs its modules once for itself.
+
+### RemoteEvents and RemoteFunctions
+
+In a network game the host runs the game — the **server** — and each player's machine
+runs their LocalScripts — a **client**. Remotes are how they talk. Put a **RemoteEvent**
+or **RemoteFunction** in ReplicatedStorage (right-click it), or make one from a host
+script with `Instance.new("RemoteEvent")`.
+
+```lua
+-- A LocalScript (StarterPlayerScripts): ask the server to buy something.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Buy = ReplicatedStorage:WaitForChild("Buy")          -- a RemoteFunction
+local ok, message = Buy:InvokeServer("Sword")
+print(message)
+
+-- A Script: the server decides.
+ReplicatedStorage.Buy.OnServerInvoke = function(player, item)
+	local coins = player.leaderstats.Coins
+	if coins.Value < 100 then
+		return false, "Not enough coins"
+	end
+	coins.Value -= 100
+	ReplicatedStorage.Announce:FireAllClients(player.Name .. " bought a " .. item)  -- a RemoteEvent
+	return true, "Bought a " .. item
+end
+```
+
+A RemoteEvent has `:FireServer(…)` (a LocalScript's; the server hears it on
+`OnServerEvent` with the player first), `:FireClient(player, …)` and
+`:FireAllClients(…)` (the server's; LocalScripts hear it on `OnClientEvent`). A
+RemoteFunction has `:InvokeServer(…)`, which waits for what `OnServerInvoke` returns
+(an error there comes back to the caller), and `:InvokeClient(player, …)` with
+`OnClientInvoke`. Numbers, strings, booleans, `nil`, tables, `Vector3`, `Vector2`,
+`Color3`, `CFrame`, `EnumItem`s, parts, Models, Players, characters and their body parts
+all go across. The same code works in Studio's play test and in a game played alone:
+that machine is server and client at once.
+
+### Folders and Values
+
+`Instance.new` makes `IntValue`, `NumberValue`, `StringValue` and `BoolValue` — each
+with `Value` and `Changed` (which fires with the new value) — to keep in parts,
+Models, Folders, ReplicatedStorage or a Player. A Folder that goes into a Player or
+ReplicatedStorage leaves the Workspace. Values the host changes reach every player,
+and fire `Changed` there too. `WaitForChild` on ReplicatedStorage, a Player or a Folder
+really waits — for something the host is about to make — and warns after five seconds.
+
+### Leaderstats and the leaderboard
+
+Give each player a Folder called `leaderstats` with Values in it, and the leaderboard
+shows them top right: a column for each Value, a row for each player, sorted by the
+first column, your own row picked out. **Tab** hides it.
+
+```lua
+-- A Script in Script Service
+local Players = game:GetService("Players")
+
+local function setUp(player)
+	local leaderstats = Instance.new("Folder")
+	leaderstats.Name = "leaderstats"
+	leaderstats.Parent = player
+
+	local coins = Instance.new("IntValue")
+	coins.Name = "Coins"
+	coins.Parent = leaderstats
+end
+
+for _, player in Players:GetPlayers() do setUp(player) end
+Players.PlayerAdded:Connect(setUp)
+
+workspace.Coin.Touched:Connect(function(hit)
+	local player = Players:GetPlayerFromCharacter(hit.Parent)
+	if player then
+		player.leaderstats.Coins.Value += 1
+	end
+end)
+```
+
+Like the rest of the screen, the leaderboard is ordinary GUI — StarterGui ›
+**PlayerList**, with its LeaderboardScript — so it can be restyled or deleted. New
+scenes have it; older ones that kept the default HUD get it when opened.
+
+### Raycasts
+
+`workspace:Raycast(origin, direction, params)` finds the first thing along a line
+`direction` long: a `RaycastResult` with `Instance`, `Position`, `Normal`, `Distance`
+and `Material`, or `nil`. It meets parts and characters' body parts (whose `Parent` is
+the character). `RaycastParams.new()` has `FilterDescendantsInstances` and `FilterType`
+(`Enum.RaycastFilterType.Exclude` or `Include`), `IgnoreWater` and `RespectCanCollide`.
+
+```lua
+-- A LocalScript: what's under the mouse, from where the character stands.
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local root = player.Character:WaitForChild("HumanoidRootPart")
+local mouse = player:GetMouse()
+
+local params = RaycastParams.new()
+params.FilterDescendantsInstances = { player.Character }   -- don't hit yourself
+local result = workspace:Raycast(root.Position, (mouse.Hit.Position - root.Position).Unit * 300, params)
+if result then
+	local victim = Players:GetPlayerFromCharacter(result.Instance.Parent)
+	print("hit", result.Instance.Name, "at", result.Position, victim and victim.Name)
+end
+```
 
 ## Wren, the second language
 

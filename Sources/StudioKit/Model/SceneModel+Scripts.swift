@@ -8,7 +8,8 @@ extension SceneModel {
 
     func script(id: UUID) -> ScriptObject? { scripts.first { $0.id == id } }
 
-    /// Scene scripts attached to a part, or in Script Service when `parentID` is nil.
+    /// Scene scripts (and ModuleScripts) attached to a part, or in Script Service when
+    /// `parentID` is nil.
     func scripts(parentID: UUID?) -> [ScriptObject] {
         scripts.filter { $0.host == .scene && $0.parentID == parentID }
     }
@@ -54,6 +55,7 @@ extension SceneModel {
         case .starterPlayer: return .starterPlayer
         case .starterCharacter: return .starterCharacter
         case .starterGui: return .gui
+        case .replicatedStorage: return .service
         case .scene:
             guard let parentID else { return .service }
             if part(id: parentID) != nil { return .part }
@@ -77,6 +79,24 @@ extension SceneModel {
         return script.id
     }
 
+
+    /// A new ModuleScript — in ReplicatedStorage, Script Service, or a part or Model —
+    /// selected and open. With undo.
+    @discardableResult
+    func addModuleScript(parentID: UUID? = nil, host: ScriptHost = .replicatedStorage, name: String? = nil,
+                         source: String? = nil) -> UUID {
+        var script = ScriptObject.blank(language: .luau)
+        script.kind = .module
+        script.host = host == .replicatedStorage ? .replicatedStorage : .scene
+        script.parentID = script.host == .scene ? parentID : nil
+        script.source = source ?? ScriptObject.moduleTemplate
+        script.name = name ?? uniqueScriptName(base: "ModuleScript")
+        commit("Added \(script.name)") {
+            scripts.append(script)
+            selectedScript = script.id
+        }
+        return script.id
+    }
 
     func deleteScript(id: UUID) {
         guard let script = script(id: id) else { return }

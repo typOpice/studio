@@ -1,5 +1,5 @@
 STUDIO PROJECT RECAP
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 
 WHAT THIS IS
@@ -8,13 +8,13 @@ A Roblox Studio style 3D game maker for macOS, written in Swift and Metal.
 There are two apps: Studio.app (the editor) and StudioClient.app (the player / game client).
 Scripts are written in Luau (the main language, like Roblox) or Wren (a second language that gets new features later).
 Physics is Jolt Physics. Luau, Wren and Jolt are included as source code in the project.
-Everything is one Swift package. There is no Xcode on the build machine, only the command line tools.
+Everything is one Swift package. Xcode 27 is installed now (Swift 6.4), but the project doesn't need it: it still builds with just the command line tools.
 
 
 HOW TO CHECK THAT EVERYTHING STILL WORKS
 
 Run all the automatic checks:  swift run StudioApp --selftest
-They must all pass before any change counts as done (1943 checks at the end of this session, all passing).
+They must all pass before any change counts as done (1997 checks at the end of this session, all passing).
 Build the two apps:  ./make_app.sh release
 AGENTS.md explains how the code is organised and the rules that are easy to break. Read it first.
 README.md is the guide for people using the apps.
@@ -219,6 +219,18 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Drawn with shadows and ray tracing, following the body as it moves, turns and falls.
    Tested alone and with a host and a joined player: each sees the other's look, and a host script dressing the joined player works and reads back at once.
    New files: Model/AvatarLook.swift, Model/AvatarCatalog.swift, Render/AvatarWardrobe.swift, UI/AvatarPreview.swift, UI/AvatarLookEditor.swift, WardrobeSelfTest.swift.
+
+19. Scripts working together, 2026-09-26.
+   ModuleScripts: shared code that runs once on each machine, the first time a script calls require on it, and gives every script what it returns. Make them in ReplicatedStorage (new in the Explorer), Script Service, or a part or Model.
+   ReplicatedStorage: a place both the host and every player can reach, for ModuleScripts, RemoteEvents, RemoteFunctions, Folders and Values. Right-click it to add them.
+   RemoteEvents and RemoteFunctions: LocalScripts talk to the host's scripts and back, as in Roblox (FireServer, OnServerEvent, FireClient, FireAllClients, OnClientEvent, InvokeServer, OnServerInvoke, InvokeClient). Tables, Vector3s, colours, parts, players and characters all go across. Works alone, in Studio's play test and in network games.
+   Values: IntValue, NumberValue, StringValue and BoolValue, with Value and Changed. Changes the host makes reach every player. WaitForChild on ReplicatedStorage, Players and Folders now really waits.
+   Leaderstats: a Folder called leaderstats in a Player shows on a new leaderboard, top right (Tab hides it). It's an ordinary StarterGui ScreenGui (PlayerList) with its own LocalScript. New scenes have it; old scenes that kept the default HUD get it when opened.
+   workspace:Raycast with RaycastParams (filter, include/exclude, IgnoreWater, RespectCanCollide): finds parts and characters' body parts.
+   Code completion knows all of it. Luau only; Wren has none of it.
+   Tested alone and with a host and a joined player, including the README's examples.
+   Also corrected the notes that said there is no Xcode: Xcode 27 is installed, but the project still builds without it.
+   New files: Model/DataObjects.swift, Scripting/ScriptRuntime+Data.swift, Scripting/LuauLibrary/15-Data.swift (the entry points are now part 16), Play/PlayController+Remotes.swift, UI/DataObjectsUI.swift, RemotesSelfTest.swift.
 
 
 THINGS TO KNOW

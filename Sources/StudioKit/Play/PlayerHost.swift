@@ -6,6 +6,9 @@ protocol PlayerBridge: AnyObject {
     /// The current character's generation, or 0 when there is none yet.
     var characterGeneration: Int { get }
     func playerInvoke(_ name: String, _ arguments: [ScriptValue]) -> ScriptValue
+    /// A script set a Value object's value: its Changed is its own to raise, not a
+    /// change noticed from the network.
+    func noteDataWritten(_ id: UUID)
 }
 
 /// Every host call scripts can make about the player — the one place to add to when
@@ -25,7 +28,7 @@ protocol PlayerBridge: AnyObject {
 /// Property names are compared case-insensitively, so Wren's `position` and
 /// Luau's `Position` reach the same thing.
 enum PlayerHost {
-    static let namespaces: Set<String> = ["player", "humanoid", "root", "body", "look", "input", "track", "physics",
+    static let namespaces: Set<String> = ["player", "humanoid", "root", "body", "look", "remote", "input", "track", "physics",
                                           "character", "players", "gui", "chat", "backpack", "seat"]
 
     /// Calls whose first argument is a character's number — which may be another player's.
@@ -51,6 +54,8 @@ enum PlayerHost {
         case "character.name", "players.name": return .string("Player")
         case "character.owner": return .number(-1)
         case "look.catalog": return catalogEntry(arguments)
+        // Studio's Run mode is the server, and nobody is there to be a client.
+        case "remote.isServer": return .bool(true)
         case "look.get": return AvatarLook().scriptValue
         case "players.character": return .number(0)
         case "input.down": return .bool(false)
@@ -107,6 +112,13 @@ extension PlayController {
         // Tools: see PlayController+Tools.
         if name.hasPrefix("backpack.") {
             return backpackCall(name, arguments)
+        }
+        // Remotes, and rays that meet characters: see PlayController+Remotes.
+        if name.hasPrefix("remote.") {
+            return remoteCall(name, arguments)
+        }
+        if name == "character.raycast" {
+            return characterRaycast(arguments)
         }
 
         // Another player's character, in a network game: see PlayController+Multiplayer.

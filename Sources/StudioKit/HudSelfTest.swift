@@ -81,14 +81,13 @@ enum HudSelfTest {
                   starter.guiChildren(of: screen!.id).contains { $0.name == name }
               })
         starter.clearScene()
-        check("a new scene starts with it too", starter.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName]
-              && starter.scripts.count == 2 && starter.defaultGui == DefaultHud.version)
+        check("a new scene starts with it too, and the leaderboard",
+              starter.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName, DefaultHud.listName]
+              && starter.scripts.count == 3 && starter.defaultGui == DefaultHud.version)
 
         // Deleted and saved, it stays deleted.
         let deleting = SceneModel()
-        if let hudScreen = deleting.guiChildren(of: nil).first(where: { $0.name == DefaultHud.screenName }) {
-            deleting.deleteGuiObject(hudScreen.id)
-        }
+        for screen in deleting.guiChildren(of: nil) { deleting.deleteGuiObject(screen.id) }
         let saved = try? deleting.encodeScene()
         let reopened = SceneModel()
         if let saved { try? reopened.loadScene(from: saved) }
@@ -103,7 +102,24 @@ enum HudSelfTest {
         let upgraded = old.upgradedToDefaultHud()
         check("an old scene with its own ControlScript gets the HUD but keeps its own F and R",
               upgraded.starterGui.contains { $0.name == DefaultHud.screenName }
-              && upgraded.scripts.map(\.name) == ["ControlScript", DefaultHud.hudScriptName])
+              && upgraded.scripts.map(\.name) == ["ControlScript", DefaultHud.hudScriptName, DefaultHud.listScriptName])
+
+        // One saved with the first HUD (before the leaderboard) gets the leaderboard, unless
+        // its HUD was deleted.
+        var first = SceneState(defaultGui: 1)
+        let hud = DefaultHud.make()
+        // make() puts the leaderboard's objects last.
+        let listIDs = Set(hud.objects.suffix(DefaultHud.makeLeaderboard().objects.count).map(\.id))
+        first.starterGui = hud.objects.filter { !listIDs.contains($0.id) }
+        first.scripts = hud.scripts.filter { $0.name != DefaultHud.listScriptName }
+        let withList = first.upgradedToDefaultHud()
+        var bare = SceneState(defaultGui: 1)
+        bare.scripts = []
+        check("a scene from before the leaderboard that kept its HUD gets it; one without its HUD doesn't",
+              first.starterGui.count == hud.objects.count - listIDs.count
+              && withList.starterGui.filter { $0.parentID == nil }.map(\.name) == [DefaultHud.screenName, DefaultHud.listName]
+              && withList.scripts.filter { $0.name == DefaultHud.listScriptName }.count == 1
+              && bare.upgradedToDefaultHud().starterGui.isEmpty)
 
         let restoring = SceneModel()
         restoring.starterGui = []
@@ -111,7 +127,8 @@ enum HudSelfTest {
         let steps = restoring.undoCount
         restoring.addDefaultHud()
         check("Insert Default HUD puts it back, one step to undo",
-              restoring.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName] && restoring.scripts.count == 2
+              restoring.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName, DefaultHud.listName]
+              && restoring.scripts.count == 3
               && restoring.undoCount == steps + 1)
     }
 

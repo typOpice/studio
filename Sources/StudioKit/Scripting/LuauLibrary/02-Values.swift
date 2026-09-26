@@ -1,4 +1,4 @@
-// The Luau library, part 2 of 15: Vector3, Color3 and Enum.
+// The Luau library, part 2 of 16: Vector3, Color3 and Enum.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -455,6 +455,7 @@ Enum = table.freeze({
 	AspectType = makeEnum("AspectType", { "FitWithinMaxSize", "ScaleWithParentSize" }),
 	DominantAxis = makeEnum("DominantAxis", { "Width", "Height" }),
 	CollisionFidelity = makeEnum("CollisionFidelity", { "Default", "Hull", "Box", "PreciseConvexDecomposition" }),
+	RaycastFilterType = makeEnum("RaycastFilterType", { "Exclude", "Include", "Blacklist", "Whitelist" }),
 	AccessoryType = makeEnum("AccessoryType", { "Hat", "Hair", "Face", "Neck", "Shoulder", "Front", "Back", "Waist" }),
 	MessageType = makeEnum("MessageType", { "MessageOutput", "MessageInfo", "MessageWarning", "MessageError" }),
 	Font = makeEnum("Font", {

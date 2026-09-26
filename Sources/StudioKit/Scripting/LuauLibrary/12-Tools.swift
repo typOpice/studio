@@ -1,4 +1,4 @@
-// The Luau library, part 12 of 15: Tools, StarterPack and the Backpack.
+// The Luau library, part 12 of 16: Tools, StarterPack and the Backpack.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.

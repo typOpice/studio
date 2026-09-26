@@ -57,6 +57,7 @@ enum SelfTest {
         AudioSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         MeshSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         WardrobeSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        RemotesSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LANSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
 
         if failures == 0 {

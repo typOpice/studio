@@ -1,4 +1,4 @@
-// The Luau library, part 7 of 15: Instance.new, the services, the screen and Lighting.
+// The Luau library, part 7 of 16: Instance.new, the services, the screen and Lighting.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -27,6 +27,9 @@ Instance = table.freeze({
 		end
 		if avatarKit.classes ~= nil and avatarKit.classes[className] then
 			return avatarKit.new(className, parent)
+		end
+		if dataKit.classes ~= nil and dataKit.classes[className] then
+			return dataKit.new(className, parent)
 		end
 		if className == "Attachment" then
 			local partId = if parent ~= nil then partIdOf[parent] else nil

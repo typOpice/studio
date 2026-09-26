@@ -33,6 +33,7 @@ enum LuauLibrary {
         tools,
         hostEvents,
         extras,
+        data,
         entryPoints
     ]
 }

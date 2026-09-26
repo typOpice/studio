@@ -1,4 +1,4 @@
-// The Luau library, part 1 of 15: the host bridge, raise, print and typeof.
+// The Luau library, part 1 of 16: the host bridge, raise, print and typeof.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.

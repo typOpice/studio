@@ -285,6 +285,12 @@ extension SceneModel {
         // Joints under what went, and joints that lost a part, go too.
         constraints.removeAll { $0.parentID.map(doomed.contains) ?? false }
         pruneConstraints()
+        // Folders, Values and remotes inside what went.
+        let inside = dataObjects.filter { object in
+            if case .node(let parent) = object.parent { return doomed.contains(parent) }
+            return false
+        }
+        if !inside.isEmpty { removeDataObjects(Set(inside.map(\.id)), undoable: false) }
     }
 
     /// Copies a subtree — parts, groups, scripts and sounds, all newly identified — under
@@ -319,6 +325,21 @@ extension SceneModel {
             copy.id = UUID()
             copy.parentID = remap[script.parentID!]
             scripts.append(copy)
+        }
+        // Data objects inside, and inside those.
+        var dataQueue = dataObjects.filter { object in
+            if case .node(let parent) = object.parent { return remap[parent] != nil }
+            return false
+        }
+        while !dataQueue.isEmpty {
+            let original = dataQueue.removeFirst()
+            guard case .node(let parent) = original.parent, let newParent = remap[parent] else { continue }
+            var copy = original
+            copy.id = UUID()
+            copy.parent = .node(newParent)
+            remap[original.id] = copy.id
+            dataObjects.append(copy)
+            dataQueue += dataObjects(in: .node(original.id))
         }
         for sound in sounds where sound.parentID.map({ remap[$0] != nil }) ?? false {
             var copy = sound

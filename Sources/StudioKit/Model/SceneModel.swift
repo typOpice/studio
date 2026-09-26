@@ -46,6 +46,11 @@ final class SceneModel: ObservableObject {
         didSet { MeshLibrary.shared.register(assets) }
     }
     @Published var sounds: [SceneSound] = []
+    /// Folders, Value objects and remotes (see DataObjects.swift), and the one selected.
+    @Published var dataObjects: [DataObject] = []
+    @Published var selectedDataObject: UUID? {
+        didSet { if selectedDataObject != nil { leaveOthers(for: \.selectedDataObject) } }
+    }
     /// Which default HUD the scene has been given; see `DefaultHud`.
     var defaultGui = 0
     @Published var selectedAsset: UUID? {
@@ -105,7 +110,9 @@ final class SceneModel: ObservableObject {
         if picked != \SceneModel.selectedGui, selectedGui != nil { selectedGui = nil }
         if picked != \SceneModel.selectedSound, selectedSound != nil { selectedSound = nil }
         if picked != \SceneModel.selectedAsset, selectedAsset != nil { selectedAsset = nil }
-        if picked == \SceneModel.selectedGui || picked == \SceneModel.selectedSound || picked == \SceneModel.selectedAsset {
+        if picked != \SceneModel.selectedDataObject, selectedDataObject != nil { selectedDataObject = nil }
+        if picked == \SceneModel.selectedGui || picked == \SceneModel.selectedSound || picked == \SceneModel.selectedAsset
+            || picked == \SceneModel.selectedDataObject {
             if !selection.isEmpty { selection = [] }
             if selectedConstraint != nil { selectedConstraint = nil }
             if selectedAttachment != nil { selectedAttachment = nil }
@@ -126,6 +133,7 @@ final class SceneModel: ObservableObject {
         selectedGui = nil
         selectedSound = nil
         selectedAsset = nil
+        selectedDataObject = nil
         selectedScript = nil
         selectedShader = nil
         selectedConstraint = nil
@@ -136,7 +144,7 @@ final class SceneModel: ObservableObject {
 
     /// Whether anything at all is selected.
     var hasAnySelection: Bool {
-        !selection.isEmpty || selectedGui != nil || selectedSound != nil || selectedAsset != nil
+        !selection.isEmpty || selectedGui != nil || selectedSound != nil || selectedAsset != nil || selectedDataObject != nil
             || selectedScript != nil || selectedShader != nil || selectedConstraint != nil || selectedAttachment != nil
             || lightingSelected || starterPlayerSelected || selectedCoreScript != nil || joinTool != nil
     }
@@ -211,7 +219,7 @@ final class SceneModel: ObservableObject {
                          screenShaderIDs: screenShaderIDs, starterPlayer: starterPlayer,
                          animations: animations, lighting: lighting, groups: groups,
                          attachments: attachments, constraints: constraints, starterGui: starterGui,
-                         assets: assets, sounds: sounds, defaultGui: defaultGui) }
+                         assets: assets, sounds: sounds, dataObjects: dataObjects, defaultGui: defaultGui) }
         set {
             parts = newValue.parts
             groups = newValue.groups
@@ -220,6 +228,8 @@ final class SceneModel: ObservableObject {
             starterGui = newValue.starterGui
             assets = newValue.assets
             sounds = newValue.sounds
+            dataObjects = newValue.dataObjects
+            if let id = selectedDataObject, !dataObjects.contains(where: { $0.id == id }) { selectedDataObject = nil }
             defaultGui = newValue.defaultGui
             scripts = newValue.scripts
             shaders = newValue.shaders
@@ -494,6 +504,7 @@ final class SceneModel: ObservableObject {
     var sharedState: SceneState {
         var shared = state
         shared.sounds.removeAll(where: \.local)
+        shared.dataObjects.removeAll(where: \.local)
         return shared
     }
 

@@ -1,4 +1,4 @@
-// The Luau library, part 10 of 15: the player, the character, the Humanoid and input.
+// The Luau library, part 10 of 16: the player, the character, the Humanoid and input.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -1140,15 +1140,33 @@ function localPlayerMethods.Teleport(_, position)
 	invoke("player.set", "position", { position[1], position[2], position[3] })
 end
 
-function localPlayerMethods.FindFirstChild(_, name)
+-- The Backpack and PlayerGui; data objects in the player (leaderstats) are found too.
+local function localPlayerChild(name)
 	if name == "Backpack" then
 		return toolKit.backpack(invoke("backpack.me"))
 	end
 	return if name == "PlayerGui" then gui.playerGui else nil
 end
 
-function localPlayerMethods.WaitForChild(_, name)
-	return localPlayerMethods.FindFirstChild(nil, name)
+function localPlayerMethods.FindFirstChild(_, name)
+	return localPlayerChild(name) or dataKit.playerChild(invoke("backpack.me"), name)
+end
+
+-- Waits for what isn't there yet: leaderstats a host script is still making.
+function localPlayerMethods.WaitForChild(_, name, timeout)
+	return dataKit.waitForPlayerChild(invoke("backpack.me"), name, timeout, localPlayerChild)
+end
+
+function localPlayerMethods.GetChildren()
+	local list = { toolKit.backpack(invoke("backpack.me")), gui.playerGui }
+	for _, child in dataKit.playerChildren(invoke("backpack.me")) do
+		table.insert(list, child)
+	end
+	return list
+end
+
+function localPlayerMethods.__child(key)
+	return dataKit.playerChild(invoke("backpack.me"), key)
 end
 
 local LocalPlayer = service("Player", {
@@ -1254,10 +1272,22 @@ function otherPlayers.get(id)
 			return className == "Player" or className == "Instance"
 		end,
 		FindFirstChild = function(_, name)
-			return if name == "Backpack" then toolKit.backpack(id) else nil
+			return if name == "Backpack" then toolKit.backpack(id) else dataKit.playerChild(id, name)
 		end,
-		WaitForChild = function(_, name)
-			return if name == "Backpack" then toolKit.backpack(id) else nil
+		WaitForChild = function(_, name, timeout)
+			return dataKit.waitForPlayerChild(id, name, timeout, function(key)
+				return if key == "Backpack" then toolKit.backpack(id) else nil
+			end)
+		end,
+		GetChildren = function()
+			local list = { toolKit.backpack(id) }
+			for _, child in dataKit.playerChildren(id) do
+				table.insert(list, child)
+			end
+			return list
+		end,
+		__child = function(key)
+			return dataKit.playerChild(id, key)
 		end,
 	})
 	otherPlayers.byId[id] = entry

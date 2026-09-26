@@ -74,7 +74,8 @@ final class ScriptRuntime {
         wrenFailed = false
         running = true
 
-        let enabled = model.scripts.filter(\.enabled)
+        // ModuleScripts never run by themselves: scripts require them.
+        let enabled = model.scripts.filter { $0.enabled && !$0.isModule }
         // A player who joined a network game leaves the scene's scripts to the host.
         // Scripts in a Tool out of the world wait for it: StarterPack's run in each
         // player's copy, a Backpack's with their character.
@@ -129,7 +130,7 @@ final class ScriptRuntime {
     /// StarterCharacterScripts for a new character: the scene's, plus any core ones
     /// not overridden by name.
     private func startingCharacterScripts() -> [ScriptObject] {
-        model.scripts.filter { $0.enabled && $0.host == .starterCharacter && $0.language == .luau }
+        model.scripts.filter { $0.enabled && !$0.isModule && $0.host == .starterCharacter && $0.language == .luau }
             + CoreScripts.active(overriddenBy: model.scripts).filter { $0.host == .starterCharacter }
     }
 
@@ -148,7 +149,25 @@ final class ScriptRuntime {
         }
         vm.sandbox()
         interpreter = vm
+        for module in model.scripts where module.isModule && module.language == .luau {
+            defineModule(module, in: vm)
+        }
         return true
+    }
+
+    /// Compiles a ModuleScript into a function `require` calls the first time it's asked
+    /// for. The wrapper goes on the module's first line, so errors keep its own line
+    /// numbers; the module gets its own environment, with `script` as itself.
+    private func defineModule(_ module: ScriptObject, in vm: LuauInterpreter) {
+        let id = module.id.uuidString
+        let environment = "module:\(id)"
+        vm.makeEnvironment(environment)
+        vm.run(name: "=setup", source: "script, shared, _G = __studio_env_setup(\"\(id)\", 0)", environment: environment)
+        let wrapped = "__studio_define_module(\"\(id)\", function(...) " + module.source + "\nend)"
+        if !vm.run(name: "=" + module.name, source: wrapped, environment: environment) {
+            // The module won't load; requiring it says so, and here is why.
+            console.error(vm.lastError)
+        }
     }
 
     /// Runs one Luau script in its own environment. `scope` is 0 for scripts that
@@ -315,7 +334,10 @@ final class ScriptRuntime {
         case "animation": return animationsCall(name, arguments)
         case "tree", "node", "group", "tool": return treeCall(name, arguments)
         case "attachment", "constraint": return jointsCall(name, arguments)
+        case "workspace" where name == "workspace.raycast": return raycast(arguments)
         case "part", "workspace": return partsCall(name, arguments)
+        case "data": return dataCall(name, arguments)
+        case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)
         default: return unknownCall(name)
@@ -354,9 +376,13 @@ final class ScriptRuntime {
         case "script.get":
             guard arguments.count >= 2, let string = arguments[0].asString,
                   let id = UUID(uuidString: string),
-                  let script = model.script(id: id) ?? CoreScripts.script(id: id),
-                  arguments[1].asString == "name" else { return .nothing }
-            return .string(script.name)
+                  let script = model.script(id: id) ?? CoreScripts.script(id: id) else { return .nothing }
+            switch arguments[1].asString {
+            case "name": return .string(script.name)
+            case "class":
+                return .string(script.isModule ? "ModuleScript" : script.host == .scene ? "Script" : "LocalScript")
+            default: return .nothing
+            }
 
         case "script.parent":
             guard let string = arguments.first?.asString, let id = UUID(uuidString: string),

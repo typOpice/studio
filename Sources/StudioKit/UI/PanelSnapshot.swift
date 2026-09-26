@@ -186,6 +186,19 @@ enum PanelSnapshot {
             } else {
                 model.selectedAsset = arch
             }
+        case "replicated":
+            // ReplicatedStorage with a module, remotes and a Folder of Values, a Value picked.
+            session.showWorld()
+            model.addModuleScript(name: "Weapons")
+            model.addDataObject(.remoteEvent)
+            model.updateDataObject(id: model.dataObjects.last!.id) { $0.name = "Damage" }
+            model.addDataObject(.remoteFunction)
+            model.updateDataObject(id: model.dataObjects.last!.id) { $0.name = "BuyItem" }
+            let folder = model.addDataObject(.folder)
+            model.updateDataObject(id: folder) { $0.name = "Settings" }
+            let round = model.addDataObject(.intValue, in: .node(folder))
+            model.updateDataObject(id: round) { $0.name = "RoundLength"; $0.number = 120 }
+            model.selectDataObject(round)
         case "avatar":
             // StarterPlayer dressed: a top hat and suit for everyone, the hat opened up.
             session.showWorld()
@@ -255,7 +268,7 @@ enum PanelSnapshot {
         return (music, logo)
     }
 
-    /// `--render-client menu|character|faces|clothes|outfit|join|chat out.png`: a client screen, drawn off
+    /// `--render-client menu|character|faces|clothes|outfit|join|chat|leaderboard out.png`: a client screen, drawn off
     /// screen like `renderWindow`, for a player called Robin with a red torso. `chat` is
     /// a game in progress with the default chat open: its screen GUI over a plain sky,
     /// since the 3D view doesn't draw off screen.
@@ -275,6 +288,27 @@ enum PanelSnapshot {
             session.screen = .character
             CharacterEditorView.startingTab = screen == "faces" ? .face : screen == "clothes" ? .clothes : .accessories
         case "join": session.screen = .join
+        case "leaderboard":
+            // A game whose players have leaderstats: the list top right, the numbers below.
+            var stats = ScriptObject.blank(language: .luau)
+            stats.name = "Leaderstats"
+            stats.source = """
+            local player = game:GetService("Players").LocalPlayer
+            local leaderstats = Instance.new("Folder")
+            leaderstats.Name = "leaderstats"
+            leaderstats.Parent = player
+            for name, value in { Coins = 1250, Kills = 7 } do
+            \tlocal stat = Instance.new("IntValue")
+            \tstat.Name = name
+            \tstat.Value = value
+            \tstat.Parent = leaderstats
+            end
+            """
+            session.model.scripts.append(stats)
+            session.play()
+            if let player = session.player {
+                for _ in 0..<40 { player.step(dt: 1.0 / 60) }
+            }
         case "chat":
             session.play()
             if let player = session.player {
@@ -292,7 +326,7 @@ enum PanelSnapshot {
         }
         let size = NSRect(x: 0, y: 0, width: 1100, height: 680)
         let root: AnyView
-        if screen == "chat", let player = session.player {
+        if screen == "chat" || screen == "leaderboard", let player = session.player {
             root = AnyView(ZStack {
                 LinearGradient(colors: [Color(red: 0.45, green: 0.68, blue: 0.95), Color(red: 0.78, green: 0.88, blue: 0.98)],
                                startPoint: .top, endPoint: .bottom)

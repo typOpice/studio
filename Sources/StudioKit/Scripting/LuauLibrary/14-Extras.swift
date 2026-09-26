@@ -1,4 +1,4 @@
-// The Luau library, part 14 of 15: TweenService easing, Random and the math extensions.
+// The Luau library, part 14 of 16: TweenService easing, Random and the math extensions.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.

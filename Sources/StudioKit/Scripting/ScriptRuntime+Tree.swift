@@ -184,6 +184,12 @@ extension ScriptRuntime {
         for c in model.constraints where c.parentID == parent { list.append(("c:" + c.id.uuidString, c.name)) }
         if let parent {
             for s in model.sounds where s.parentID == parent { list.append(("s:" + s.id.uuidString, s.name)) }
+            for m in model.scripts where m.isModule && m.host == .scene && m.parentID == parent {
+                list.append(("m:" + m.id.uuidString, m.name))
+            }
+        }
+        for v in model.dataObjects(in: parent.map { .node($0) } ?? .workspace) {
+            list.append(("v:" + v.id.uuidString, v.name))
         }
         return list
     }

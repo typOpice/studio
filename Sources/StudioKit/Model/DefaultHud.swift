@@ -9,8 +9,11 @@ import Foundation
 enum DefaultHud {
     /// Scenes remember which HUD they were offered, so one saved before it existed gets
     /// it on opening — and one whose maker deleted it doesn't get it back.
-    static let version = 1
+    /// 1: PlayerHud. 2: the PlayerList (leaderboard) as well.
+    static let version = 2
     static let screenName = "PlayerHud"
+    static let listName = "PlayerList"
+    static let listScriptName = "LeaderboardScript"
     static let hudScriptName = "HudScript"
     static let keysScriptName = "FlyAndRespawn"
 
@@ -136,7 +139,35 @@ enum DefaultHud {
 
         var scripts = [script(hudScriptName, hudSource, in: screen)]
         if keys { scripts.append(script(keysScriptName, keysSource, in: screen)) }
-        return (objects, scripts)
+        let list = makeLeaderboard()
+        return (objects + list.objects, scripts + list.scripts)
+    }
+
+    /// The leaderboard: a ScreenGui of its own, top right, which its LocalScript fills
+    /// from each player's leaderstats — and shows only when someone has some.
+    static func makeLeaderboard() -> (objects: [StarterGuiObject], scripts: [ScriptObject]) {
+        func udim2(_ xs: Double, _ xo: Double, _ ys: Double, _ yo: Double) -> ScriptValue {
+            .list([.number(xs), .number(xo), .number(ys), .number(yo)])
+        }
+        func pair(_ a: Double, _ b: Double) -> ScriptValue { .list([.number(a), .number(b)]) }
+        var screen = StarterGuiObject(kind: .screenGui, name: listName, parentID: nil)
+        screen.properties = ["resetonspawn": .bool(false)]
+        var board = StarterGuiObject(kind: .frame, name: "Board", parentID: screen.id)
+        board.properties = [
+            "anchorpoint": pair(1, 0), "position": udim2(1, -14, 0, 14), "size": udim2(0, 0, 0, 0),
+            "automaticsize": .string("XY"), "backgroundcolor3": .triple(0, 0, 0),
+            "backgroundtransparency": .number(0.5), "visible": .bool(false),
+        ]
+        var corner = StarterGuiObject(kind: .uiCorner, name: "UICorner", parentID: board.id)
+        corner.properties = ["cornerradius": pair(0, 8)]
+        var stroke = StarterGuiObject(kind: .uiStroke, name: "UIStroke", parentID: board.id)
+        stroke.properties = ["color": .triple(1, 1, 1), "transparency": .number(0.9)]
+        var padding = StarterGuiObject(kind: .uiPadding, name: "UIPadding", parentID: board.id)
+        padding.properties = ["paddingleft": pair(0, 10), "paddingright": pair(0, 10),
+                              "paddingtop": pair(0, 7), "paddingbottom": pair(0, 7)]
+        var layout = StarterGuiObject(kind: .uiListLayout, name: "UIListLayout", parentID: board.id)
+        layout.properties = ["padding": pair(0, 2)]
+        return ([screen, board, corner, stroke, padding, layout], [script(listScriptName, leaderboardSource, in: screen.id)])
     }
 
     private static func script(_ name: String, _ source: String, in parent: UUID) -> ScriptObject {
@@ -302,6 +333,144 @@ enum DefaultHud {
     end)
     """
 
+    static let leaderboardSource = """
+    -- LeaderboardScript: the player list, top right, for a game that gives players
+    -- leaderstats — a Folder called "leaderstats" in each Player, holding IntValues,
+    -- NumberValues, StringValues or BoolValues, one column each. Players are sorted by
+    -- the first column, this player's row picked out. Tab hides it. It's ordinary GUI
+    -- in StarterGui > PlayerList: restyle it, change this script, or delete it.
+
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local UserInputService = game:GetService("UserInputService")
+
+    local player = Players.LocalPlayer
+    local board = script.Parent:WaitForChild("Board")
+
+    local NAME_WIDTH = 14
+    local COLUMN_WIDTH = 9
+    local hidden = false
+    local lines = {}
+
+    local function statsOf(someone)
+    	local values = {}
+    	local folder = someone:FindFirstChild("leaderstats")
+    	if folder then
+    		for _, value in folder:GetChildren() do
+    			if value:IsA("ValueBase") then
+    				values[value.Name] = value.Value
+    			end
+    		end
+    	end
+    	return values, folder ~= nil
+    end
+
+    local function cell(text, width)
+    	text = string.sub(tostring(text), 1, width - 1)
+    	return text .. string.rep(" ", width - #text)
+    end
+
+    local function shown(value)
+    	if type(value) == "number" then
+    		return if value == math.floor(value) then string.format("%d", value) else string.format("%.1f", value)
+    	end
+    	return tostring(value)
+    end
+
+    local function line(index)
+    	local label = lines[index]
+    	if label == nil then
+    		label = Instance.new("TextLabel")
+    		label.Name = "Line" .. index
+    		label.BackgroundTransparency = 1
+    		label.Size = UDim2.new(0, 0, 0, 15)
+    		label.AutomaticSize = Enum.AutomaticSize.X
+    		label.Font = Enum.Font.RobotoMono
+    		label.TextSize = 12
+    		label.TextXAlignment = Enum.TextXAlignment.Left
+    		label.LayoutOrder = index
+    		label.Parent = board
+    		lines[index] = label
+    	end
+    	return label
+    end
+
+    -- The HUD's numbers sit top right too: while the list shows, they go below it.
+    local function makeRoomFor(rows)
+    	local hud = player.PlayerGui:FindFirstChild("PlayerHud")
+    	local stats = hud and hud:FindFirstChild("Stats")
+    	if stats then
+    		stats.Position = UDim2.new(1, -14, 0, if rows > 0 then 14 + rows * 17 + 26 else 14)
+    	end
+    end
+
+    local function refresh()
+    	local columns, rows = {}, {}
+    	for _, someone in Players:GetPlayers() do
+    		local values, has = statsOf(someone)
+    		if has then
+    			table.insert(rows, { player = someone, values = values })
+    			local folder = someone:FindFirstChild("leaderstats")
+    			for _, value in folder:GetChildren() do
+    				if value:IsA("ValueBase") and not table.find(columns, value.Name) then
+    					table.insert(columns, value.Name)
+    				end
+    			end
+    		end
+    	end
+    	local showing = #rows > 0 and not hidden
+    	board.Visible = showing
+    	makeRoomFor(if showing then #rows + 1 else 0)
+    	if not showing then
+    		return
+    	end
+    	local first = columns[1]
+    	table.sort(rows, function(a, b)
+    		local x, y = a.values[first], b.values[first]
+    		if type(x) == "number" and type(y) == "number" and x ~= y then
+    			return x > y
+    		end
+    		return a.player.Name < b.player.Name
+    	end)
+    	local header = cell("Player", NAME_WIDTH)
+    	for _, column in columns do
+    		header ..= cell(column, COLUMN_WIDTH)
+    	end
+    	local top = line(1)
+    	top.Text = header
+    	top.TextColor3 = Color3.fromRGB(150, 150, 150)
+    	for index, row in rows do
+    		local text = cell(row.player.Name, NAME_WIDTH)
+    		for _, column in columns do
+    			text ..= cell(if row.values[column] ~= nil then shown(row.values[column]) else "-", COLUMN_WIDTH)
+    		end
+    		local label = line(index + 1)
+    		label.Visible = true
+    		label.Text = text
+    		label.TextColor3 = if row.player == player then Color3.fromRGB(255, 214, 102) else Color3.fromRGB(235, 235, 235)
+    	end
+    	for index = #rows + 2, #lines do
+    		lines[index].Visible = false
+    	end
+    end
+
+    local elapsed = 1
+    RunService.Heartbeat:Connect(function(dt)
+    	elapsed += dt
+    	if elapsed >= 0.2 then
+    		elapsed = 0
+    		refresh()
+    	end
+    end)
+
+    UserInputService.InputBegan:Connect(function(input)
+    	if input.KeyCode == Enum.KeyCode.Tab then
+    		hidden = not hidden
+    		refresh()
+    	end
+    end)
+    """
+
     static let keysSource = """
     -- FlyAndRespawn: two Studio conveniences for trying out a build. F flies (the
     -- ControlScript steers: W A S D, Space up, C down) and F again lands; R respawns.
@@ -354,13 +523,22 @@ extension SceneModel {
 }
 
 extension SceneState {
-    /// A scene from before the default HUD, given it; nothing else changes.
+    /// A scene from before the default HUD, given it; one from before the leaderboard
+    /// that still has the HUD, given that. Nothing else changes, and a HUD its maker
+    /// deleted stays deleted.
     func upgradedToDefaultHud() -> SceneState {
         guard defaultGui < DefaultHud.version else { return self }
         var state = self
-        let made = DefaultHud.make(keys: !SceneModel.handlesStudioKeys(scripts))
-        state.starterGui += made.objects
-        state.scripts += made.scripts
+        if defaultGui == 0 {
+            let made = DefaultHud.make(keys: !SceneModel.handlesStudioKeys(scripts))
+            state.starterGui += made.objects
+            state.scripts += made.scripts
+        } else if starterGui.contains(where: { $0.parentID == nil && $0.name == DefaultHud.screenName }),
+                  !starterGui.contains(where: { $0.parentID == nil && $0.name == DefaultHud.listName }) {
+            let list = DefaultHud.makeLeaderboard()
+            state.starterGui += list.objects
+            state.scripts += list.scripts
+        }
         state.defaultGui = DefaultHud.version
         return state
     }

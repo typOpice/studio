@@ -21,7 +21,9 @@ struct PropertiesView: View {
                 }
             }
 
-            if model.selection.isEmpty, let id = model.selectedSound, let sound = model.sound(id: id) {
+            if model.selection.isEmpty, let id = model.selectedDataObject, let object = model.dataObject(id: id) {
+                DataObjectInspector(model: model, object: object)
+            } else if model.selection.isEmpty, let id = model.selectedSound, let sound = model.sound(id: id) {
                 SoundInspector(model: model, sound: sound)
             } else if model.selection.isEmpty, let id = model.selectedAsset, let asset = model.asset(id: id) {
                 AssetInspector(model: model, session: session, asset: asset)
