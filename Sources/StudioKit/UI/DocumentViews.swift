@@ -227,7 +227,12 @@ struct ScriptDocumentView: View {
             CodeEditor(text: script.source,
                        isEditable: !session.isPlaying,
                        language: language,
-                       completions: { language.completions(in: $0, caret: $1) },
+                       completions: { [model, id = script.id] text, caret in
+                           // Luau sees the scene: what's in each place, and every module's code.
+                           language == .luau
+                               ? LuauCompletion.items(in: text, caret: caret, scene: model.luauScene(editing: id))
+                               : language.completions(in: text, caret: caret)
+                       },
                        cache: session.codeViews,
                        cacheKey: document.id,
                        showsLineNumbers: true,

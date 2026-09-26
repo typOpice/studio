@@ -26,6 +26,14 @@ enum CodeLanguage {
         }
     }
 
+    /// The text a chosen suggestion replaces: the word before the caret, or in Luau the
+    /// whole name typed so far inside `WaitForChild("…")`, spaces and all.
+    func completionRange(in text: String, caret: Int) -> NSRange {
+        let start = self == .luau ? LuauCompletion.replacementStart(in: text, caret: caret)
+                                  : WrenCompletion.partialWordRange(in: text, caret: caret).location
+        return NSRange(location: start, length: max(caret - start, 0))
+    }
+
     func completions(in text: String, caret: Int) -> [CompletionItem] {
         switch self {
         case .luau: return LuauCompletion.items(in: text, caret: caret)

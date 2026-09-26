@@ -244,6 +244,8 @@ private final class CompletionListView: NSView {
             case .variable: return ("v", NSColor(srgbRed: 0.40, green: 0.80, blue: 0.70, alpha: 1))
             case .type: return ("T", NSColor(srgbRed: 0.90, green: 0.75, blue: 0.40, alpha: 1))
             case .keyword: return ("k", NSColor(srgbRed: 0.95, green: 0.50, blue: 0.62, alpha: 1))
+            case .object: return ("o", NSColor(srgbRed: 0.95, green: 0.65, blue: 0.35, alpha: 1))
+            case .module: return ("M", NSColor(srgbRed: 0.55, green: 0.85, blue: 0.45, alpha: 1))
             }
         }()
         colour.withAlphaComponent(0.22).setFill()

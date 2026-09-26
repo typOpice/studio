@@ -261,6 +261,15 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    The list is new: a small dark panel under the word, with a letter for each kind (p property, f function, v variable, T type, k keyword), the type on the right, and a line saying which keys to use. It serves Luau, Wren and shaders.
    New file: UI/CompletionList.swift.
 
+23. Suggestions for require and ModuleScripts, 2026-09-26.
+   Typing require( now lists every ModuleScript in the place, each written as the path from the script you are in: script.Parent.Helper for one beside it, otherwise through your own local ReplicatedStorage = game:GetService(...) if the script has one, or through game:GetService. Tab puts in the whole path and the closing bracket.
+   The suggestions know what is really in the scene: ReplicatedStorage. lists what is in it, and so do workspace.Tower., script.Parent. and a Folder. Inside WaitForChild(" the names are suggested too, spaces and all, and the string and the call are closed for you. Inside require( only things that lead to a module are shown.
+   After local Utils = require(...), Utils. lists what the module returns: its functions (with their parameters) and its values (with what they are: number, string, table, Vector3...), and Utils: lists its methods. Tables inside it work too (Utils.colours.). For a class module, an object made with Enemy.new(...) offers the class's methods and its self. fields.
+   The module is read from its code, not run. The usual shapes are understood: local M = {} with M.x = ..., function M.x(...) and function M:x(...), then return M; or return { ... }.
+   Also: the variable being declared on a line is no longer suggested on that same line.
+   Luau only. Tested with a sample scene, a scene built in Studio, and Adventure Island's own modules.
+   New files: Editor/LuauScene.swift, Editor/LuauModuleShape.swift.
+
 
 THINGS TO KNOW
 

@@ -8,6 +8,10 @@ struct CompletionItem: Equatable {
         case variable = 2
         case type = 3
         case keyword = 4
+        /// Something in the scene, by name: a part, Model, Folder, remote…
+        case object = 5
+        /// A ModuleScript in the scene.
+        case module = 6
 
         static func < (a: Kind, b: Kind) -> Bool { a.rawValue < b.rawValue }
     }

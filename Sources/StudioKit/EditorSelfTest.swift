@@ -16,6 +16,7 @@ enum EditorSelfTest {
         testChangeForwarding(check)
         testHighlighting(check)
         testSuggestions(check)
+        testModuleSuggestions(check)
         testLuauEditing(check)
         testCopyAndPaste(check)
     }
@@ -414,6 +415,49 @@ enum EditorSelfTest {
         check("Metal: no swizzles after the dot in a number", !metal.list.isOpen, "\(metal.labels)")
         metal.type("5 * baseColor.")
         check("…but after a vector's dot, yes", metal.list.isOpen && metal.labels.contains("rgb"), "\(metal.labels)")
+    }
+
+    /// `require(` and what it gives, typed through the list with a scene behind it.
+    private static func testModuleSuggestions(_ check: Checker) {
+        print("\nScript editor: modules and the scene")
+        let scene = SyntaxSelfTest.sampleScene()
+        let editor = Typist(.luau, completions: { LuauCompletion.items(in: $0, caret: $1, scene: scene) })
+
+        editor.reset("local ReplicatedStorage = game:GetService(\"ReplicatedStorage\")\n")
+        editor.type("local Utils = require(")
+        check("require( opens the list at once, with the ModuleScripts",
+              editor.list.isOpen && editor.list.items.prefix(3).allSatisfy { $0.kind == .module }, "\(editor.labels)")
+        editor.type("Ut")
+        editor.key(tab)
+        check("Tab puts in the path to the module", editor.text.hasSuffix("local Utils = require(ReplicatedStorage.Utils)"),
+              editor.text)
+
+        editor.type("\nUtils.")
+        check("the module's functions and values follow", editor.list.isOpen && editor.labels.contains("lerp(a, b, t)"),
+              "\(editor.labels)")
+        editor.type("le")
+        editor.key(tab)
+        check("…and go in ready for their arguments", editor.text.hasSuffix("\nUtils.lerp("), editor.text)
+
+        editor.reset("local ReplicatedStorage = game:GetService(\"ReplicatedStorage\")\n")
+        editor.type("local Notify = ReplicatedStorage:WaitForChild(\"")
+        check("WaitForChild(\" opens the list at once, with the names there",
+              editor.list.isOpen && editor.labels == ["Notify", "Shared", "Utils"], "\(editor.labels)")
+        editor.type("No")
+        editor.key(tab)
+        check("…and closes the string and the call", editor.text.hasSuffix("WaitForChild(\"Notify\")"), editor.text)
+
+        editor.reset()
+        editor.type("local arm = workspace.Tower:WaitForChild(\"Left A")
+        check("a space in a name doesn't close the list", editor.list.isOpen && editor.labels == ["Left Arm"],
+              "\(editor.labels)")
+        editor.key(tab)
+        check("…and the whole name goes in", editor.text.hasSuffix("WaitForChild(\"Left Arm\")"), editor.text)
+
+        editor.reset()
+        editor.type("print(\"hello")
+        editor.pause()
+        check("an ordinary string still has no list", !editor.list.isOpen)
     }
 
     private static func textView(_ contents: String) -> NSTextView {

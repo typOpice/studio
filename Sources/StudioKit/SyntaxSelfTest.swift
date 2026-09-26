@@ -22,6 +22,247 @@ enum SyntaxSelfTest {
         testMetalCompletion(check)
         testLuauLexer(check)
         testLuauCompletion(check)
+        testModules(check)
+    }
+
+    // MARK: - Modules and the scene
+
+    static let utilsModule = """
+    -- Utils: small helpers.
+    local Utils = {}
+    Utils.VERSION = "1.2"
+    Utils.speed = 16
+    Utils.colours = { red = Color3.new(1, 0, 0), blue = Color3.new(0, 0, 1) }
+    Utils.origin = Vector3.new(0, 0, 0)
+
+    local function clamp01(x)
+    \treturn math.clamp(x, 0, 1)
+    end
+    Utils.clamp01 = clamp01
+
+    function Utils.lerp(a: number, b: number, t: number): number
+    \tif t > 1 then
+    \t\treturn b -- not the module's return
+    \tend
+    \treturn a + (b - a) * t
+    end
+
+    function Utils:describe()
+    \treturn "utils"
+    end
+
+    Utils.__private = true
+    return Utils
+    """
+
+    static let configModule = """
+    return {
+    \tmaxPlayers = 8,
+    \tspawn = Vector3.new(0, 5, 0),
+    \tgreet = function(name) return "hi " .. name end,
+    \tdebug = false,
+    \tcheck = function(a) return a == 1 end,
+    }
+    """
+
+    static let enemyModule = """
+    local Enemy = {}
+    Enemy.__index = Enemy
+
+    function Enemy.new(name, health)
+    \tlocal self = setmetatable({}, Enemy)
+    \tself.name = name
+    \tself.health = health or 100
+    \treturn self
+    end
+
+    function Enemy:TakeDamage(amount)
+    \tself.health -= amount
+    \tif self.health <= 0 then
+    \t\tself:Die()
+    \tend
+    end
+
+    function Enemy:Die()
+    \tprint(self.name .. " is gone")
+    end
+
+    return Enemy
+    """
+
+    /// ReplicatedStorage with Utils, a Shared folder holding Config, and a RemoteEvent;
+    /// Script Service with the Enemy class and the script being edited; a Tower in the
+    /// Workspace with a Door and a part whose name has a space.
+    static func sampleScene() -> LuauScene {
+        var scene = LuauScene()
+        let replicated = scene.places["ReplicatedStorage"]!
+        let shared = scene.add(.init(name: "Shared", className: "Folder", parent: replicated))
+        scene.add(.init(name: "Utils", className: "ModuleScript", parent: replicated, source: utilsModule))
+        scene.add(.init(name: "Config", className: "ModuleScript", parent: shared, source: configModule))
+        scene.add(.init(name: "Notify", className: "RemoteEvent", parent: replicated))
+        let service = scene.places["ServerScriptService"]!
+        scene.add(.init(name: "Enemy", className: "ModuleScript", parent: service, source: enemyModule))
+        scene.script = scene.add(.init(name: "Main", className: "Script", parent: service))
+        let tower = scene.add(.init(name: "Tower", className: "Model", parent: scene.places["Workspace"]!))
+        scene.add(.init(name: "Door", className: "Part", parent: tower))
+        scene.add(.init(name: "Left Arm", className: "Part", parent: tower))
+        return scene
+    }
+
+    private static func testModules(_ check: Checker) {
+        print("\nCompletion: modules, require and the scene")
+        let scene = sampleScene()
+        func items(_ source: String, caret: Int? = nil) -> [CompletionItem] {
+            LuauCompletion.items(in: source, caret: caret ?? (source as NSString).length, scene: scene)
+        }
+        func labels(_ source: String) -> [String] { items(source).map(\.label) }
+        func insert(_ label: String, _ source: String) -> String? { items(source).first { $0.label == label }?.insert }
+
+        // Reading a module.
+        let utils = LuauModuleShape.members(of: utilsModule)
+        let names = utils.map(\.name)
+        check("a module's values and functions are read", Set(names) == ["VERSION", "speed", "colours", "origin",
+                                                                            "clamp01", "lerp", "describe", "__private"],
+              "\(names)")
+        check("…its functions with their parameters, types left out",
+              utils.first { $0.name == "lerp" }?.parameters == "a, b, t", "\(utils.first { $0.name == "lerp" }.map { "\($0)" } ?? "-")")
+        check("…a local function handed out keeps its parameters", utils.first { $0.name == "clamp01" }?.parameters == "x")
+        check("…values with what they are", utils.first { $0.name == "VERSION" }?.detail == "string"
+                && utils.first { $0.name == "speed" }?.detail == "number" && utils.first { $0.name == "origin" }?.detail == "Vector3")
+        check("…a table's own fields", utils.first { $0.name == "colours" }?.fields.map(\.name) == ["red", "blue"])
+        check("…and a colon function is a method", utils.first { $0.name == "describe" }?.isMethod == true)
+        let config = LuauModuleShape.members(of: configModule).map(\.name)
+        check("a module returning a table outright", config == ["maxPlayers", "spawn", "greet", "debug", "check"], "\(config)")
+        check("a return inside a function isn't the module's", LuauModuleShape.members(of: "local M = {}\nfunction M.f()\n\treturn 1\nend\nreturn M").map(\.name) == ["f"])
+        check("a module that returns nothing useful has no members", LuauModuleShape.members(of: "print('hi')").isEmpty
+                && LuauModuleShape.members(of: "return 5").isEmpty)
+        let enemy = LuauModuleShape.members(of: enemyModule)
+        check("a class's constructor makes objects with its methods and fields",
+              Set(enemy.first { $0.name == "new" }?.makes.map(\.name) ?? []) == ["TakeDamage", "Die", "name", "health"],
+              "\(enemy.first { $0.name == "new" }?.makes.map(\.name) ?? [])")
+
+        // require( lists every ModuleScript, as the path from this script.
+        let required = items("local x = require(")
+        check("require( lists every ModuleScript", Set(required.filter { $0.kind == .module }.map(\.label)) == ["Utils", "Config", "Enemy"],
+              "\(required.prefix(6).map(\.label))")
+        check("…before anything else", required.prefix(3).allSatisfy { $0.kind == .module }, "\(required.prefix(4).map(\.label))")
+        check("…one beside the script through script.Parent", insert("Enemy", "local x = require(") == "script.Parent.Enemy)",
+              insert("Enemy", "local x = require(") ?? "-")
+        check("…one elsewhere through GetService", insert("Utils", "local x = require(") == "game:GetService(\"ReplicatedStorage\").Utils)",
+              insert("Utils", "local x = require(") ?? "-")
+        let withLocal = "local ReplicatedStorage = game:GetService(\"ReplicatedStorage\")\nlocal x = require("
+        check("…or through the script's own local for the place", insert("Config", withLocal) == "ReplicatedStorage.Shared.Config)",
+              insert("Config", withLocal) ?? "-")
+        check("…with where it is beside it", items(withLocal).first { $0.label == "Config" }?.detail == "ReplicatedStorage.Shared")
+        check("…then only what a path can start from", Set(labels(withLocal).dropFirst(3)) == ["ReplicatedStorage", "script", "game", "workspace"],
+              "\(labels(withLocal))")
+        check("…narrowed by name", labels("local x = require(Ut").first == "Utils")
+        check("a local isn't offered on the line that declares it", !labels("local count = 0\nlocal counter = cou").contains("counter")
+                && labels("local count = 0\nlocal counter = cou").first == "count")
+        check("…and no second ) when one is there", LuauCompletion.items(in: "local x = require()", caret: 18, scene: scene)
+                .first { $0.label == "Utils" }?.insert == "game:GetService(\"ReplicatedStorage\").Utils")
+        check("without the scene, require( offers no modules", !LuauCompletion.items(in: "require(", caret: 8).contains { $0.kind == .module })
+
+        // The places, by what's really in them.
+        let rs = "local RS = game:GetService(\"ReplicatedStorage\")\n"
+        check("a place lists what's in it", labels(rs + "RS.") == ["Notify", "Shared", "Utils"], "\(labels(rs + "RS."))")
+        check("…each as what it is", items(rs + "RS.").first { $0.label == "Utils" }?.kind == .module
+                && items(rs + "RS.").first { $0.label == "Notify" }?.detail == "RemoteEvent")
+        check("…and its methods after a colon", labels(rs + "RS:").contains("WaitForChild(name, timeout)"))
+        check("inside require(, only what leads to a module", labels(rs + "require(RS.") == ["Shared", "Utils"], "\(labels(rs + "require(RS."))")
+        check("into a folder", labels(rs + "require(RS.Shared.") == ["Config"])
+        check("a remote reached by name has its own members", labels(rs + "RS.Notify:").contains("FireAllClients(...)"))
+        check("WaitForChild(\" lists the names there", labels(rs + "RS:WaitForChild(\"") == ["Notify", "Shared", "Utils"],
+              "\(labels(rs + "RS:WaitForChild(\""))")
+        check("…closing the string and the call", insert("Utils", rs + "RS:WaitForChild(\"") == "Utils\")")
+        check("…but not twice", LuauCompletion.items(in: rs + "RS:WaitForChild(\"\")", caret: (rs as NSString).length + 17, scene: scene)
+                .first { $0.label == "Utils" }?.insert == "Utils")
+        check("…narrowed as the name is typed", labels(rs + "RS:WaitForChild(\"Sh") == ["Shared"])
+        check("…and only modules inside require(", labels(rs + "require(RS:WaitForChild(\"") == ["Shared", "Utils"])
+        check("WaitForChild through to the next step", labels(rs + "RS:WaitForChild(\"Shared\").").first == "Config",
+              "\(labels(rs + "RS:WaitForChild(\"Shared\")."))")
+        check("workspace's Models and parts by name", labels("workspace.Tower.").prefix(1) == ["Door"],
+              "\(labels("workspace.Tower."))")
+        check("…a name with a space only in WaitForChild(\"", !labels("workspace.Tower.").contains("Left Arm")
+                && labels("workspace.Tower:WaitForChild(\"Le") == ["Left Arm"])
+        check("script.Parent is where the script is", labels("script.Parent.") == ["Enemy", "Main"], "\(labels("script.Parent."))")
+        check("nothing in an ordinary string", labels("print(\"RS.").isEmpty)
+
+        // What a required module hands back.
+        let required1 = rs + "local Utils = require(RS.Utils)\n"
+        check("a required module's functions and values", labels(required1 + "Utils.") ==
+              ["clamp01(x)", "colours", "lerp(a, b, t)", "origin", "speed", "VERSION"], "\(labels(required1 + "Utils."))")
+        check("…a function inserted ready for its arguments", insert("lerp(a, b, t)", required1 + "Utils.le") == "lerp(")
+        check("…its methods after a colon", labels(required1 + "Utils:") == ["describe()"])
+        check("…into a table it holds", labels(required1 + "Utils.colours.") == ["blue", "red"])
+        check("…and through a value to its type", labels(required1 + "Utils.origin.").contains("Magnitude"))
+        check("…the local is marked as a module", items(required1 + "Uti").first { $0.label == "Utils" }?.detail == "module")
+        check("through WaitForChild too", labels(rs + "local U = require(RS:WaitForChild(\"Utils\"))\nU.l") == ["lerp(a, b, t)"])
+        check("straight from require(…)", labels(rs + "require(RS.Shared.Config).") ==
+              ["check(a)", "debug", "greet(name)", "maxPlayers", "spawn"], "\(labels(rs + "require(RS.Shared.Config)."))")
+        let classes = "local Enemy = require(script.Parent.Enemy)\n"
+        check("a class module offers its constructor", labels(classes + "Enemy.") == ["new(name, health)"],
+              "\(labels(classes + "Enemy."))")
+        let goblin = classes + "local goblin = Enemy.new(\"Goblin\", 50)\n"
+        check("…and what it makes has the methods", labels(goblin + "goblin:") == ["Die()", "TakeDamage(amount)"],
+              "\(labels(goblin + "goblin:"))")
+        check("…and the fields", labels(goblin + "goblin.") == ["health", "name"], "\(labels(goblin + "goblin."))")
+
+        // Built from a scene: a module in a part beside the script, one in a Folder in
+        // ReplicatedStorage, one in ServerStorage.
+        let built = SceneModel()
+        if let door = built.parts.first {
+            var logic = ScriptObject()
+            logic.name = "DoorLogic"
+            logic.kind = .module
+            logic.parentID = door.id
+            logic.source = "local M = {}\nfunction M.open(speed) end\nreturn M"
+            var main = ScriptObject()
+            main.name = "DoorScript"
+            main.parentID = door.id
+            let shared = DataObject(name: "Shared", className: .folder, parent: .replicatedStorage)
+            var maths = ScriptObject()
+            maths.name = "Maths"
+            maths.kind = .module
+            maths.host = .replicatedStorage
+            maths.parentID = shared.id
+            var secrets = ScriptObject()
+            secrets.name = "Secrets"
+            secrets.kind = .module
+            secrets.host = .serverStorage
+            built.scripts += [logic, main, maths, secrets]
+            built.dataObjects.append(shared)
+            let fromModel = built.luauScene(editing: main.id)
+            let paths = Dictionary(uniqueKeysWithValues: LuauCompletion.items(in: "require(", caret: 8, scene: fromModel)
+                .filter { $0.kind == .module }.map { ($0.label, $0.insert) })
+            check("from the model: a module in the script's part, through script.Parent",
+                  paths["DoorLogic"] == "script.Parent.DoorLogic)", "\(paths)")
+            check("…one in a Folder in ReplicatedStorage", paths["Maths"] == "game:GetService(\"ReplicatedStorage\").Shared.Maths)")
+            check("…and one in ServerStorage", paths["Secrets"] == "game:GetService(\"ServerStorage\").Secrets)")
+            check("…and the part's module is read", LuauCompletion.items(in: "local L = require(script.Parent.DoorLogic)\nL.", caret: 45,
+                                                                         scene: fromModel).map(\.label) == ["open(speed)"])
+        }
+
+        // The real thing: Adventure Island's modules, from its LocalScript.
+        let model = SceneModel()
+        model.loadAdventureIsland()
+        if let adventure = model.scripts.first(where: { $0.name == "Adventure" }) {
+            let island = model.luauScene(editing: adventure.id)
+            let upTo = (adventure.source as NSString).range(of: "local Dialogue = require(").upperBound
+            let source = (adventure.source as NSString).substring(to: upTo)
+            let found = LuauCompletion.items(in: source, caret: (source as NSString).length, scene: island)
+            check("Adventure Island: require( lists Dialogue and Zones", found.prefix(2).map(\.label) == ["Dialogue", "Zones"],
+                  "\(found.prefix(4).map(\.label))")
+            check("…through the script's own ReplicatedStorage local",
+                  found.first?.insert == "ReplicatedStorage.Dialogue)", found.first?.insert ?? "-")
+            let head = (adventure.source as NSString).substring(to: (adventure.source as NSString).range(of: "local Dialogue").location)
+            let waiting = head + "local Notify = ReplicatedStorage:WaitForChild(\""
+            let names = LuauCompletion.items(in: waiting, caret: (waiting as NSString).length, scene: island).map(\.label)
+            check("…and WaitForChild(\" knows what ReplicatedStorage holds",
+                  Set(names).isSuperset(of: ["Dialogue", "Zones", "Notify", "Quest"]), "\(names)")
+        } else {
+            check("Adventure Island has its LocalScript", false)
+        }
     }
 
     private static func metalKinds(_ source: String) -> [(String, SyntaxTokenKind)] {

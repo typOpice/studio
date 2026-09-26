@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2136 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2200 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1205,6 +1205,40 @@ The list is meant to help without getting in the way:
   before `Enum`), then your script's own locals, then keywords, globals and libraries.
 
 The same list serves Wren and the shader editor.
+
+**Luau suggestions know your scene and your ModuleScripts:**
+
+```lua
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Utils = require(          →  Utils, Config, Enemy …  every ModuleScript, as a path:
+                                   ReplicatedStorage.Utils), script.Parent.Enemy) …
+ReplicatedStorage.              →  Utils, Shared, Notify …   what's really in it
+ReplicatedStorage:WaitForChild("  →  the same names, closing the string and the call
+workspace.Tower.                →  Door, Roof …  and Model's properties
+script.Parent.                  →  whatever the script sits beside
+
+local Utils = require(ReplicatedStorage.Utils)
+Utils.                          →  lerp(a, b, t), speed, colours …  what the module returns
+Utils.colours.                  →  red, blue
+local goblin = Enemy.new("Goblin")
+goblin:                         →  TakeDamage(amount), Die()   a class's methods
+```
+
+After `require(` the list shows every ModuleScript in the place, each as the path from
+the script you're in. A module beside the script is reached through `script.Parent`.
+Anywhere else it goes through the script's own `local ReplicatedStorage =
+game:GetService(…)` if there is one, and through `game:GetService` otherwise. Inside
+`require(…)`, a place's list shows only what leads to a module.
+
+What a module hands back is read from its code, without running it:
+
+- `local M = {}` then `M.name = …`, `function M.name(…)` and `function M:name(…)`,
+  then `return M`
+- `return { … }`
+- a class whose constructor calls `setmetatable`: its objects get the class's methods
+  and their `self.` fields
+
+A module built some other way just isn't listed.
 
 ## Working on this
 
