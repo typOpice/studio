@@ -177,6 +177,26 @@ enum SyntaxSelfTest {
         check("concatenation is not member access", LuauCompletion.items(in: "local s = a ..", caret: 14).isEmpty)
         check("an unknown receiver offers nothing", LuauCompletion.items(in: "mystery.", caret: 8).isEmpty)
 
+        // The order: the case typed first, then the script's own locals, keywords, globals.
+        let order: [(String, String)] = [
+            ("en", "end"), ("En", "Enum"), ("sc", "script"), ("wo", "workspace"), ("an", "and"), ("Co", "Color3"),
+            ("local part = workspace.Part\npa", "part"), ("local count = 0\nco", "count"), ("re", "repeat"),
+        ]
+        for (source, first) in order {
+            let labels = luauLabels(source)
+            check("\(source.replacingOccurrences(of: "\n", with: " ⏎ ")) → \(first) first", labels.first == first, "\(labels)")
+        }
+        check("a name is listed once even when a local shadows a global",
+              luauLabels("local workspace = 1\nwork").filter { $0 == "workspace" }.count == 1)
+        for source in ["local pl", "local a, bo", "local x: Pa", "local function onTo", "function onTouched(hi",
+                       "function Module.new(na", "local handler = function(pa", "for i", "for _, pl", "\tlocal nam"] {
+            check("nothing while naming: \(source)", luauLabels(source).isEmpty, "\(luauLabels(source))")
+        }
+        for (source, wanted) in [("local x = pa", "pairs(t)"), ("for _, v in ip", "ipairs(t)"), ("for i = 1, ma", "math"),
+                                 ("local function f()\n\tretu", "return"), ("myfunction = pr", "print(...)")] {
+            check("…but the value is suggested: \(source)", luauLabels(source).first == wanted, "\(luauLabels(source))")
+        }
+
         let top = luauLabels("wor")
         check("globals are offered at the top level", top.contains("workspace"), "\(top)")
     }

@@ -10,25 +10,41 @@ import AppKit
 /// text *in* when it genuinely differs from what is on screen, preserving the
 /// selection when it does. It also turns off the smart quote and dash substitutions
 /// that would otherwise silently corrupt Wren string literals as you type.
-/// `NSTextView` with the completion behaviour the editor needs.
-///
-/// AppKit's completion panel only shows plain strings, so each suggestion is listed as
-/// `label  ·  detail` and the coordinator maps that display string back to the text to
-/// actually insert.
+/// `NSTextView` for code. Suggestions come from the editor's own `CompletionList`, not
+/// AppKit's completion (see there for why).
 final class CodeTextView: NSTextView {
     weak var source: CodeEditor.Coordinator?
+    private var scrollObserver: NSObjectProtocol?
 
-    /// The identifier characters immediately before the caret — empty right after a
-    /// dot, which is what makes member completion insert at the caret.
-    override var rangeForUserCompletion: NSRange {
-        WrenCompletion.partialWordRange(in: string, caret: selectedRange().location)
+    /// ⌥Esc and F5, AppKit's keys for completion, open the list by hand.
+    override func complete(_ sender: Any?) {
+        source?.suggest(in: self, typed: false)
     }
 
-    override func insertCompletion(_ word: String, forPartialWordRange charRange: NSRange,
-                                   movement: Int, isFinal: Bool) {
-        let actual = source?.insertion(forDisplay: word) ?? word
-        super.insertCompletion(actual, forPartialWordRange: charRange,
-                               movement: movement, isFinal: isFinal)
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { source?.completionList.hide() }
+        return resigned
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { source?.completionList.hide() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    /// The list stays under its word while the text scrolls, as it does when typing
+    /// reaches the bottom.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
+        scrollObserver = nil
+        guard window != nil, let clip = enclosingScrollView?.contentView else { return }
+        clip.postsBoundsChangedNotifications = true
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.source?.completionList.follow(self)
+        }
     }
 
     /// ⌘F and ⌘G, which the menu hands here while the editor has the keyboard.
@@ -274,6 +290,8 @@ struct CodeEditor: NSViewRepresentable {
         }
         coordinator.entry = entry
         let textView = entry.textView
+        // A kept text view may still have the last coordinator's list up.
+        textView.source?.completionList.hide()
         textView.source = coordinator
         textView.delegate = coordinator
         textView.isEditable = isEditable
@@ -440,14 +458,18 @@ struct CodeEditor: NSViewRepresentable {
         var completions: (String, Int) -> [CompletionItem]
         var isApplyingExternalChange = false
         var lastLength = 0
+        let completionList = CompletionList()
+        /// A list waiting for typing to pause.
+        private var pendingSuggestion: DispatchWorkItem?
+        /// Set while a chosen suggestion goes in, so it doesn't open the list again.
+        private var accepting = false
+        /// How long typing must pause before a list opens for a word (not after a dot).
+        static let pause: TimeInterval = 0.18
         /// The text view this coordinator is driving, and the undo history that goes with it.
         var entry: CodeEditorCache.Entry?
         var lastReveal: UUID?
         /// For a text view built without an entry, as the tests do.
         private lazy var ownUndo = UndoManager()
-
-        /// Display string → text to insert, rebuilt each time the panel is populated.
-        private var insertions: [String: String] = [:]
 
         init(onChange: @escaping (String) -> Void, indentWidth: Int,
              language: CodeLanguage = .luau,
@@ -458,10 +480,6 @@ struct CodeEditor: NSViewRepresentable {
             self.indentWidth = indentWidth
             self.language = language
             self.completions = completions
-        }
-
-        func insertion(forDisplay display: String) -> String {
-            insertions[display] ?? display
         }
 
         /// Each document keeps its own history, so ⌘Z in one tab never unpicks another.
@@ -479,57 +497,168 @@ struct CodeEditor: NSViewRepresentable {
             let length = (textView.string as NSString).length
             let grew = length > lastLength
             lastLength = length
-            if grew { offerCompletions(in: textView) }
+            if grew {
+                offerCompletions(in: textView)
+            } else if completionList.isOpen {
+                // Backspace widens the list again, or closes it once the word is too short.
+                suggest(in: textView, typed: true)
+            }
         }
 
-        /// Pops the suggestion list after a dot, or once a word is two characters long.
-        /// Deliberately restrained: firing on every single keystroke is noise.
+        /// After a dot (or a colon in Luau) the list opens at once. For a word it waits
+        /// until the word is two letters long and typing pauses, so a word typed straight
+        /// through never flashes a list. An open list just follows the typing.
         private func offerCompletions(in textView: NSTextView) {
-            let text = textView.string as NSString
+            pendingSuggestion?.cancel()
+            pendingSuggestion = nil
+            guard !accepting else { return }
+            if completionList.isOpen || Self.followsMemberAccess(textView.string as NSString,
+                                                                 caret: textView.selectedRange().location,
+                                                                 language: language) {
+                suggest(in: textView, typed: true)
+                return
+            }
+            let work = DispatchWorkItem { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                // Not if the keyboard went elsewhere in the meantime.
+                if let window = textView.window, window.firstResponder !== textView { return }
+                self.suggest(in: textView, typed: true)
+            }
+            pendingSuggestion = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.pause, execute: work)
+        }
+
+        /// Opens, refreshes or closes the list for the caret. `typed` is false when it was
+        /// asked for by hand (⌥Esc), which offers something even for a short word.
+        func suggest(in textView: NSTextView, typed: Bool) {
+            let text = textView.string
+            let ns = text as NSString
+            let selection = textView.selectedRange()
+            let word = WrenCompletion.partialWordRange(in: text, caret: selection.location)
+            guard selection.length == 0,
+                  Self.mayOffer(in: ns, word: word, typed: typed, language: language) else {
+                completionList.hide()
+                return
+            }
+            // A word already typed in full isn't worth a list: `end`, `then`, a local's
+            // whole name. Hiding it is what lets Return after it start a new line.
+            let typedWord = ns.substring(with: word)
+            let items = completions(text, selection.location).filter { !Self.isSameWord($0, typedWord) }
+            completionList.onClick = { [weak self, weak textView] row in
+                guard let self, let textView else { return }
+                self.completionList.select(row)
+                self.acceptSuggestion(in: textView)
+            }
+            completionList.show(items, anchor: word.location, in: textView)
+        }
+
+        /// Puts the highlighted suggestion in place of the word typed so far, as one undo step.
+        func acceptSuggestion(in textView: NSTextView) {
+            guard let item = completionList.highlighted else { return }
             let caret = textView.selectedRange().location
-            guard caret > 0, caret <= text.length else { return }
-
-            let previous = text.character(at: caret - 1)
-            let isDot = previous == UInt16(UInt8(ascii: "."))
-            let word = WrenCompletion.partialWordRange(in: textView.string, caret: caret)
-            guard isDot || word.length >= 2 else { return }
-            guard !language.isInCommentOrString(offset: caret, in: textView.string) else { return }
-
-            // Out of the current edit cycle, or the text system is still mid-update.
-            DispatchQueue.main.async { [weak textView] in
-                guard let textView, textView.window?.firstResponder === textView else { return }
-                textView.complete(nil)
-            }
+            let range = NSRange(location: completionList.anchor, length: max(caret - completionList.anchor, 0))
+            completionList.hide()
+            accepting = true
+            // Its own step, not merged into the typing before it.
+            textView.breakUndoCoalescing()
+            textView.insertText(item.insert, replacementRange: range)
+            accepting = false
         }
 
-        // MARK: Completion source
-
-        func textView(_ textView: NSTextView, completions words: [String],
-                      forPartialWordRange charRange: NSRange,
-                      indexOfSelectedItem index: UnsafeMutablePointer<Int>?) -> [String] {
-            let caret = charRange.location + charRange.length
-            let items = completions(textView.string, caret)
-            guard !items.isEmpty else { return [] }
-
-            insertions = [:]
-            var displays: [String] = []
-            for item in items {
-                // A unique display string per item, since the map is keyed on it.
-                var display = item.detail.isEmpty ? item.label : "\(item.label)  ·  \(item.detail)"
-                var attempt = 2
-                while insertions[display] != nil {
-                    display = "\(item.label)  ·  \(item.detail) (\(attempt))"
-                    attempt += 1
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard completionList.isOpen, let textView = notification.object as? NSTextView else { return }
+            let selection = textView.selectedRange()
+            let ns = textView.string as NSString
+            // Typing within the word keeps the list; moving off it closes it.
+            var onWord = selection.length == 0 && selection.location >= completionList.anchor
+                && selection.location <= ns.length
+            if onWord {
+                for index in completionList.anchor..<selection.location where !Self.isIdentifier(ns.character(at: index)) {
+                    onWord = false
+                    break
                 }
-                insertions[display] = item.insert
-                displays.append(display)
             }
-            index?.pointee = 0
-            return displays
+            if !onWord { completionList.hide() }
         }
+
+        // MARK: When to offer
+
+        static func mayOffer(in text: NSString, word: NSRange, typed: Bool, language: CodeLanguage) -> Bool {
+            let caret = word.location + word.length
+            guard caret <= text.length, !language.isInCommentOrString(offset: caret, in: text as String) else { return false }
+            // Editing inside a word: a suggestion would replace only half of it.
+            if caret < text.length, isIdentifier(text.character(at: caret)) { return false }
+            // `12`, `0x1F`: numbers aren't names.
+            if word.length > 0, isDigit(text.character(at: word.location)) { return false }
+            if followsMemberAccess(text, caret: word.location, language: language) { return true }
+            return typed ? word.length >= 2 : true
+        }
+
+        /// Right after `name.` (or `name:` in Luau), where the members are the suggestions.
+        /// Not after `0.`, which is a number being typed, nor `..`, which joins strings.
+        static func followsMemberAccess(_ text: NSString, caret: Int, language: CodeLanguage) -> Bool {
+            var start = caret
+            while start > 0, isIdentifier(text.character(at: start - 1)) { start -= 1 }
+            guard start > 0, start <= text.length else { return false }
+            let separator = text.character(at: start - 1)
+            guard separator == dot || (separator == colon && language == .luau) else { return false }
+            var receiver = start - 1
+            while receiver > 0, isIdentifier(text.character(at: receiver - 1)) { receiver -= 1 }
+            if receiver < start - 1 { return !isDigit(text.character(at: receiver)) }
+            // `)` or `]` before the dot is a call or index; another dot is `..`.
+            guard start >= 2 else { return false }
+            let before = text.character(at: start - 2)
+            return before == UInt16(UInt8(ascii: ")")) || before == UInt16(UInt8(ascii: "]"))
+        }
+
+        /// `print(...)` when `print` is typed, `end` when `end` is.
+        static func isSameWord(_ item: CompletionItem, _ word: String) -> Bool {
+            guard !word.isEmpty else { return false }
+            let name = item.label.prefix { $0 != "(" }
+            return item.insert == word || name == word
+        }
+
+        private static let dot = UInt16(UInt8(ascii: "."))
+        private static let colon = UInt16(UInt8(ascii: ":"))
+        static func isIdentifier(_ c: UInt16) -> Bool {
+            (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || isDigit(c) || c == UInt16(UInt8(ascii: "_"))
+        }
+        static func isDigit(_ c: UInt16) -> Bool { c >= 48 && c <= 57 }
+
+        // MARK: Keys
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if completionList.isOpen {
+                switch commandSelector {
+                case #selector(NSResponder.moveDown(_:)):
+                    completionList.move(by: 1, in: textView)
+                    return true
+                case #selector(NSResponder.moveUp(_:)):
+                    completionList.move(by: -1, in: textView)
+                    return true
+                case #selector(NSResponder.insertTab(_:)):
+                    acceptSuggestion(in: textView)
+                    return true
+                case #selector(NSResponder.insertNewline(_:)):
+                    if completionList.picked {
+                        acceptSuggestion(in: textView)
+                        return true
+                    }
+                    // Not picked: Return is a new line, just as if the list weren't there.
+                    completionList.hide()
+                case #selector(NSResponder.cancelOperation(_:)):
+                    completionList.hide()
+                    return true
+                default:
+                    break
+                }
+            }
             switch commandSelector {
+            case #selector(NSResponder.cancelOperation(_:)):
+                // AppKit would open its own completion on Esc.
+                pendingSuggestion?.cancel()
+                return true
+
             case #selector(NSResponder.insertTab(_:)):
                 // Tab indents instead of moving focus out of the editor.
                 let unit = language == .luau ? "\t" : String(repeating: " ", count: indentWidth)
@@ -538,6 +667,7 @@ struct CodeEditor: NSViewRepresentable {
                 return true
 
             case #selector(NSResponder.insertNewline(_:)):
+                pendingSuggestion?.cancel()
                 let indent = Coordinator.leadingWhitespace(in: textView.string,
                                                            before: textView.selectedRange().location)
                 guard !indent.isEmpty else { return false }

@@ -252,6 +252,15 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    To test one part of the self test while working: swift run StudioApp --selftest --only Adventure (or Remotes, Wardrobe, Mesh, and so on).
    New files: Model/AdventureIsland.swift, Model/AdventureIslandScripts.swift, AdventureSelfTest.swift.
 
+22. Calmer code suggestions, 2026-09-26.
+   The script editor's suggestion list was too pushy: it wrote its first guess into the code as soon as it opened, and took Return, so typing end, then or do and pressing Return needed Return twice. It also suggested things while you were naming a new variable, and put Enum before end.
+   Now nothing goes into the code until you choose. Tab puts in the highlighted suggestion. Return does only after you have picked one with the up and down arrows; otherwise Return is a new line. Esc closes the list, and Option-Esc opens it when you want it.
+   It opens at once after a dot or colon, and for a word only once two letters are typed and you pause.
+   It stays away when the word is already typed in full, when you are naming something (local x, for i, a function's name and parameters), in the middle of a word, after the dot in a number such as 0.5, and in comments and strings.
+   Better order: matches in the case you typed come first (en gives end before Enum), then your script's own locals, then keywords, globals and libraries.
+   The list is new: a small dark panel under the word, with a letter for each kind (p property, f function, v variable, T type, k keyword), the type on the right, and a line saying which keys to use. It serves Luau, Wren and shaders.
+   New file: UI/CompletionList.swift.
+
 
 THINGS TO KNOW
 

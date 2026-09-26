@@ -6,7 +6,9 @@ import Foundation
 /// that type's properties (`.`) or methods (`:`), walking chains through return
 /// types — including `game:GetService("RunService")`, which resolves by its string
 /// argument, because that is how nearly every Roblox script begins. Otherwise it
-/// offers keywords, globals and the locals declared above the caret.
+/// offers keywords, globals and the locals declared above the caret — except where a
+/// new name is being made up (`local x`, `for i`, a function's name and parameters),
+/// where any suggestion would only be in the way.
 ///
 /// Pure functions over `(source, caret)`, so it is tested without a UI.
 enum LuauCompletion {
@@ -39,10 +41,42 @@ enum LuauCompletion {
                 if separator == dot, range.location > 1, units[range.location - 2] == dot { return [] }
                 let candidates = memberItems(units: units, separatorIndex: range.location - 1,
                                              methodsOnly: separator == colon, text: text, caret: caret)
-                return rank(candidates, prefix: prefix)
+                return rank(candidates.map { ($0, $0.kind.rawValue) }, prefix: prefix)
             }
         }
+        var lineStart = range.location
+        while lineStart > 0, units[lineStart - 1] != newline { lineStart -= 1 }
+        if isNamingSomething(String(decoding: units[lineStart..<range.location], as: UTF16.self)) { return [] }
         return rank(globalItems(text: text, caret: caret), prefix: prefix)
+    }
+
+    /// Whether the line so far leaves the caret where a new name goes: `local na`,
+    /// `local a, b`, `local x: T`, `local function na`, `function na`, `for i`,
+    /// `for _, v`, or inside a function's parameter list.
+    static func isNamingSomething(_ lineBefore: String) -> Bool {
+        let line = lineBefore.drop { $0 == " " || $0 == "\t" }
+        if let keyword = lastWord("function", in: line) {
+            let rest = line[keyword.upperBound...]
+            if let open = rest.firstIndex(of: "(") { return !rest[open...].contains(")") }
+            // `function name` or `local function name`, before its parenthesis.
+            return rest.first == " " && rest.dropFirst().allSatisfy { $0.isLetter || $0.isNumber || "_.: ".contains($0) }
+        }
+        if line.hasPrefix("local ") { return !line.contains("=") }
+        if line.hasPrefix("for ") { return !line.contains("=") && !line.contains(" in ") }
+        return false
+    }
+
+    /// The last place `word` appears as a whole word.
+    private static func lastWord(_ word: String, in line: Substring) -> Range<Substring.Index>? {
+        var searchEnd = line.endIndex
+        while let found = line.range(of: word, options: .backwards, range: line.startIndex..<searchEnd) {
+            let before = found.lowerBound > line.startIndex ? line[line.index(before: found.lowerBound)] : " "
+            let after = found.upperBound < line.endIndex ? line[found.upperBound] : " "
+            let isPart: (Character) -> Bool = { $0.isLetter || $0.isNumber || $0 == "_" }
+            if !isPart(before) && !isPart(after) { return found }
+            searchEnd = found.lowerBound
+        }
+        return nil
     }
 
     // MARK: - Members
@@ -221,26 +255,28 @@ enum LuauCompletion {
 
     // MARK: - Top level
 
-    private static func globalItems(text: String, caret: Int) -> [CompletionItem] {
-        var items: [CompletionItem] = []
-        for keyword in LuauSyntax.keywords.sorted() {
-            items.append(CompletionItem(label: keyword, insert: keyword, detail: "keyword", kind: .keyword, returns: nil))
-        }
-        for (name, type) in LuauAPI.globalInstances {
-            items.append(CompletionItem(label: name, insert: name, detail: type, kind: .variable, returns: type))
-        }
-        for name in LuauAPI.staticMembers.keys where !name.contains(".") {
-            items.append(CompletionItem(label: name, insert: name, detail: "library", kind: .type, returns: nil))
-        }
-        items.append(contentsOf: LuauAPI.globalFunctions)
-        items.append(contentsOf: LuauAPI.snippets)
-
+    /// Everything in scope, each with its place in the order: the script's own locals
+    /// first (they're what it is about), then keywords, globals and functions, libraries,
+    /// and the whole-line snippets last.
+    private static func globalItems(text: String, caret: Int) -> [(CompletionItem, Int)] {
+        var items: [(CompletionItem, Int)] = []
         let before = String(decoding: Array(text.utf16)[0..<min(caret, text.utf16.count)], as: UTF16.self)
         for name in declaredLocals(in: before) {
             let type = localType(of: name, text: text, caret: caret, visiting: [])
-            items.append(CompletionItem(label: name, insert: name, detail: type ?? "local",
-                                        kind: .variable, returns: type))
+            items.append((CompletionItem(label: name, insert: name, detail: type ?? "local",
+                                         kind: .variable, returns: type), 0))
         }
+        for keyword in LuauSyntax.keywords.sorted() {
+            items.append((CompletionItem(label: keyword, insert: keyword, detail: "keyword", kind: .keyword, returns: nil), 1))
+        }
+        for (name, type) in LuauAPI.globalInstances {
+            items.append((CompletionItem(label: name, insert: name, detail: type, kind: .variable, returns: type), 2))
+        }
+        items += LuauAPI.globalFunctions.map { ($0, 2) }
+        for name in LuauAPI.staticMembers.keys where !name.contains(".") {
+            items.append((CompletionItem(label: name, insert: name, detail: "library", kind: .type, returns: nil), 3))
+        }
+        items += LuauAPI.snippets.map { ($0, 4) }
         return items
     }
 
@@ -276,17 +312,21 @@ enum LuauCompletion {
 
     // MARK: - Ranking
 
-    private static func rank(_ items: [CompletionItem], prefix: String) -> [CompletionItem] {
+    /// Matches for the typed prefix, best first. Case is ignored for matching but not for
+    /// order: `en` puts `end` before `Enum`, `Ve` puts `Vector3` before `velocity`.
+    /// Then by `group` (the caller's order of importance), then alphabetically.
+    private static func rank(_ items: [(CompletionItem, Int)], prefix: String) -> [CompletionItem] {
         let lowered = prefix.lowercased()
-        var seen: Set<String> = []
-        let matched = items.filter { item in
-            guard lowered.isEmpty || item.label.lowercased().hasPrefix(lowered) else { return false }
-            return seen.insert(item.label).inserted
+        let matched = items.filter { lowered.isEmpty || $0.0.label.lowercased().hasPrefix(lowered) }
+        let sorted = matched.sorted { a, b in
+            let caseA = a.0.label.hasPrefix(prefix), caseB = b.0.label.hasPrefix(prefix)
+            if caseA != caseB { return caseA }
+            if a.1 != b.1 { return a.1 < b.1 }
+            return a.0.label.localizedCaseInsensitiveCompare(b.0.label) == .orderedAscending
         }
-        return Array(matched.sorted { a, b in
-            if a.kind != b.kind { return a.kind < b.kind }
-            return a.label.localizedCaseInsensitiveCompare(b.label) == .orderedAscending
-        }.prefix(maximumItems))
+        // The same name from two places (a local shadowing a global) is listed once.
+        var seen: Set<String> = []
+        return Array(sorted.map(\.0).filter { seen.insert($0.label).inserted }.prefix(maximumItems))
     }
 
     // MARK: - Characters
@@ -295,6 +335,7 @@ enum LuauCompletion {
     private static let colon = UInt16(UInt8(ascii: ":"))
     private static let leftParen = UInt16(UInt8(ascii: "("))
     private static let rightParen = UInt16(UInt8(ascii: ")"))
+    private static let newline = UInt16(UInt8(ascii: "\n"))
 
     private static func isIdentifier(_ c: UInt16) -> Bool {
         (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c == UInt16(UInt8(ascii: "_"))

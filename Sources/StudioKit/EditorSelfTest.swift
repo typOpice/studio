@@ -15,7 +15,7 @@ enum EditorSelfTest {
         testSubstitutionsAreOff(check)
         testChangeForwarding(check)
         testHighlighting(check)
-        testCompletionPanel(check)
+        testSuggestions(check)
         testLuauEditing(check)
         testCopyAndPaste(check)
     }
@@ -189,63 +189,231 @@ enum EditorSelfTest {
         _ = wrenCoordinator.textView(wren, doCommandBy: #selector(NSResponder.insertTab(_:)))
         check("Tab inserts spaces in Wren", wren.string == "  ", "\(Array(wren.string.utf8))")
 
-        // The completion panel, driven by the Luau engine.
-        let completing = "local RunService = game:GetService(\"RunService\")\nRunService.Heartbeat:Con"
-        let panel = CodeTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
-        CodeEditor.configure(panel)
-        panel.string = completing
-        panel.setSelectedRange(NSRange(location: (completing as NSString).length, length: 0))
-        let luauCoordinator = CodeEditor.Coordinator(onChange: { _ in }, indentWidth: 2)
-        panel.source = luauCoordinator
-        let displays = luauCoordinator.textView(panel, completions: [],
-                                                forPartialWordRange: panel.rangeForUserCompletion,
-                                                indexOfSelectedItem: nil)
-        check("the panel offers Luau methods through GetService",
-              displays.contains { $0.hasPrefix("Connect(callback)") }, "\(displays)")
     }
 
-    private static func testCompletionPanel(_ check: Checker) {
-        print("\nScript editor: completion panel (Wren)")
-        let source = "import \"studio\" for Workspace\nWorkspace.fin"
-        let view = CodeTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
-        CodeEditor.configure(view)
-        view.string = source
-        let caret = (source as NSString).length
-        view.setSelectedRange(NSRange(location: caret, length: 0))
+    /// A code editor in a window, typed into the way the keyboard does it: characters
+    /// through `insertText`, keys through `doCommand`, which asks the coordinator first.
+    private final class Typist {
+        let entry = CodeEditor.makeEntry()
+        let coordinator: CodeEditor.Coordinator
+        let window = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 500, height: 300),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        var view: CodeTextView { entry.textView }
+        var list: CompletionList { coordinator.completionList }
+        var text: String { view.string }
 
-        let coordinator = CodeEditor.Coordinator(onChange: { _ in }, indentWidth: 2, language: .wren,
-                                                 completions: { WrenCompletion.items(in: $0, caret: $1) })
-        view.source = coordinator
-        view.delegate = coordinator
-
-        check("the partial word range is the typed prefix",
-              (source as NSString).substring(with: view.rangeForUserCompletion) == "fin",
-              (source as NSString).substring(with: view.rangeForUserCompletion))
-
-        let displays = coordinator.textView(view, completions: [],
-                                            forPartialWordRange: view.rangeForUserCompletion,
-                                            indexOfSelectedItem: nil)
-        check("the panel is offered suggestions", !displays.isEmpty, "\(displays)")
-        check("suggestions show the return type alongside the name",
-              displays.contains { $0.hasPrefix("find(name)") && $0.contains("Part") }, "\(displays)")
-        check("every display string is distinct", Set(displays).count == displays.count)
-
-        guard let first = displays.first(where: { $0.hasPrefix("find(name)") }) else {
-            check("find is offered", false)
-            return
+        init(_ language: CodeLanguage = .luau, completions: ((String, Int) -> [CompletionItem])? = nil) {
+            coordinator = CodeEditor.Coordinator(onChange: { _ in }, indentWidth: 2, language: language,
+                                                 completions: completions ?? { language.completions(in: $0, caret: $1) })
+            coordinator.entry = entry
+            view.delegate = coordinator
+            view.source = coordinator
+            window.contentView = entry.scrollView
+            window.makeFirstResponder(view)
         }
-        check("the display string maps back to the text to insert",
-              coordinator.insertion(forDisplay: first) == "find(",
-              coordinator.insertion(forDisplay: first))
-        check("an unknown display string is inserted verbatim",
-              coordinator.insertion(forDisplay: "something else") == "something else")
 
-        // Inserting must put the code in, not the decorated label.
-        view.insertCompletion(first, forPartialWordRange: view.rangeForUserCompletion,
-                              movement: 0, isFinal: true)
-        check("choosing a suggestion inserts real code",
-              view.string.hasSuffix("Workspace.find("), view.string)
-        check("the decoration is not inserted", !view.string.contains("·"), view.string)
+        func reset(_ contents: String = "", caret: Int? = nil) {
+            list.hide()
+            view.string = contents
+            coordinator.lastLength = (contents as NSString).length
+            view.setSelectedRange(NSRange(location: caret ?? (contents as NSString).length, length: 0))
+        }
+
+        func type(_ characters: String) {
+            for character in characters {
+                view.insertText(String(character), replacementRange: view.selectedRange())
+            }
+        }
+
+        /// A key on its own turn of the run loop, as a real key press is, so undo groups
+        /// the way it does for someone typing.
+        func key(_ selector: Selector) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+            view.doCommand(by: selector)
+        }
+
+        /// Long enough for a waiting list to open.
+        func pause() { RunLoop.current.run(until: Date().addingTimeInterval(CodeEditor.Coordinator.pause + 0.12)) }
+
+        var labels: [String] { list.items.map(\.label) }
+        var highlighted: String? { list.highlighted?.label }
+    }
+
+    private static let down = #selector(NSResponder.moveDown(_:))
+    private static let up = #selector(NSResponder.moveUp(_:))
+    private static let tab = #selector(NSResponder.insertTab(_:))
+    private static let enter = #selector(NSResponder.insertNewline(_:))
+    private static let escape = #selector(NSResponder.cancelOperation(_:))
+    private static let backspace = #selector(NSResponder.deleteBackward(_:))
+
+    /// The suggestion list: it waits, stays out of the text until chosen, never takes
+    /// Return unless a suggestion was picked, and keeps out of the way where it can't help.
+    private static func testSuggestions(_ check: Checker) {
+        print("\nScript editor: suggestions")
+        let editor = Typist()
+
+        editor.type("pr")
+        check("a word being typed doesn't open the list straight away", !editor.list.isOpen)
+        editor.pause()
+        check("…it opens when typing pauses", editor.list.isOpen && editor.highlighted == "print(...)", "\(editor.labels)")
+        check("…and nothing is written into the code until one is chosen", editor.text == "pr", editor.text)
+        editor.key(enter)
+        check("Return with nothing picked is a new line, in one press", editor.text == "pr\n" && !editor.list.isOpen,
+              "\"\(editor.text)\"")
+
+        editor.reset()
+        editor.type("workspace.Part.")
+        check("after a dot the members open at once", editor.list.isOpen && editor.highlighted == "Anchored",
+              "\(editor.labels)")
+        editor.type("Pos")
+        check("…and narrow as the name is typed", editor.labels == ["Position"], "\(editor.labels)")
+        editor.key(tab)
+        check("Tab puts the highlighted one in", editor.text == "workspace.Part.Position" && !editor.list.isOpen,
+              editor.text)
+        editor.pause()
+        check("…without the list coming straight back", !editor.list.isOpen)
+        editor.entry.undo.undo()
+        check("…and ⌘Z takes it out again", editor.text == "workspace.Part.Pos", editor.text)
+
+        editor.reset()
+        editor.type("workspace.Part.")
+        editor.key(down)
+        editor.key(down)
+        let chosen = editor.highlighted
+        editor.type("C")
+        check("a suggestion picked with the arrows stays picked as typing narrows the list",
+              chosen == "CanTouch" && editor.highlighted == "CanTouch" && editor.list.picked, "\(chosen ?? "-") \(editor.labels)")
+
+        editor.reset()
+        editor.type("re")
+        editor.pause()
+        check("keywords come before functions", editor.labels.prefix(3) == ["repeat", "return", "require(moduleScript)"],
+              "\(editor.labels)")
+        editor.key(up)
+        check("Up at the top stays there", editor.highlighted == "repeat")
+        editor.key(down)
+        check("Down moves the highlight", editor.highlighted == "return" && editor.list.picked)
+        editor.key(enter)
+        check("once one is picked with the arrows, Return puts it in", editor.text == "return" && !editor.list.isOpen,
+              "\"\(editor.text)\"")
+
+        editor.reset()
+        editor.type("ga")
+        editor.pause()
+        editor.key(escape)
+        check("Esc closes the list and leaves the text", !editor.list.isOpen && editor.text == "ga")
+        editor.key(escape)
+        check("Esc with no list opens none", !editor.list.isOpen && editor.text == "ga")
+        editor.view.complete(nil)
+        check("⌥Esc opens it by hand", editor.list.isOpen && editor.highlighted == "game", "\(editor.labels)")
+        editor.reset("p")
+        editor.view.complete(nil)
+        check("…even for one letter", editor.list.isOpen, "\(editor.labels)")
+
+        // The block words: typing one out and pressing Return must just start a new line.
+        editor.reset("if ready then\n\tgo()\n")
+        editor.type("en")
+        editor.pause()
+        check("`en` suggests end before Enum", editor.labels.prefix(2) == ["end", "Enum"], "\(editor.labels)")
+        editor.type("d")
+        check("a word typed in full closes the list", !editor.list.isOpen, "\(editor.labels)")
+        editor.key(enter)
+        check("…so end then Return is a new line in one press", editor.text.hasSuffix("\tgo()\nend\n"),
+              "\"\(editor.text)\"")
+        for word in ["then", "do", "else", "local", "function", "true"] {
+            editor.reset()
+            for letter in word {
+                editor.type(String(letter))
+                editor.pause()
+            }
+            editor.key(enter)
+            check("\(word) typed slowly, then Return, is a new line", editor.text == word + "\n", "\"\(editor.text)\"")
+        }
+        editor.reset("local count = 0\n")
+        editor.type("count")
+        editor.pause()
+        editor.key(enter)
+        check("…and so is a local's whole name", editor.text.hasSuffix("count\n"), "\"\(editor.text)\"")
+
+        // Where a new name is being made up, suggestions only get in the way.
+        for line in ["local pl", "local a, bo", "for i", "for _, pl", "local function onTo", "function onTouched(hi",
+                     "local handler = function(pa", "local x: Pa"] {
+            editor.reset()
+            editor.type(line)
+            editor.pause()
+            check("nothing is suggested while naming: \(line)", !editor.list.isOpen, "\(editor.labels)")
+        }
+        editor.reset()
+        editor.type("for _, v in pa")
+        editor.pause()
+        check("…but there is once the name is done", editor.highlighted == "pairs(t)", "\(editor.labels)")
+
+        editor.reset("workspace", caret: 3)
+        editor.type("x")
+        editor.pause()
+        check("no list while editing inside a word", !editor.list.isOpen)
+        editor.reset()
+        editor.type("local speed = 0.")
+        editor.pause()
+        check("no list after the dot in a number", !editor.list.isOpen, "\(editor.labels)")
+        editor.reset()
+        editor.type("-- workspace.")
+        editor.pause()
+        check("no list in a comment", !editor.list.isOpen)
+
+        editor.reset()
+        editor.type("workspace.Part.Pos")
+        let narrow = editor.list.items.count
+        editor.key(backspace)
+        check("Backspace widens the list", editor.list.isOpen && editor.list.items.count > narrow,
+              "\(narrow) → \(editor.list.items.count)")
+        editor.key(backspace)
+        editor.key(backspace)
+        check("…back to all the members after the dot", editor.list.isOpen && editor.highlighted == "Anchored")
+        editor.key(backspace)
+        check("…and deleting the dot closes it", !editor.list.isOpen)
+
+        editor.reset()
+        editor.type("workspace.Part.")
+        editor.view.setSelectedRange(NSRange(location: 0, length: 0))
+        check("moving off the word closes the list", !editor.list.isOpen)
+        editor.reset()
+        editor.type("workspace.Part.")
+        editor.type(" ")
+        check("…as does typing past it", !editor.list.isOpen)
+
+        editor.reset()
+        editor.type("workspace.Part.")
+        editor.list.onClick?(1)
+        check("clicking a row puts that one in", editor.text == "workspace.Part.CanCollide", editor.text)
+
+        editor.reset("local RunService = game:GetService(\"RunService\")\n")
+        editor.type("RunService.Heartbeat:Con")
+        check("methods through GetService", editor.highlighted == "Connect(callback)", "\(editor.labels)")
+
+        // Placed under the word, lined up with it.
+        editor.reset()
+        editor.type("workspace.Part.")
+        let word = editor.view.firstRect(forCharacterRange: NSRange(location: editor.list.anchor, length: 0), actualRange: nil)
+        let frame = editor.list.panelFrame
+        check("the list sits just under the word", frame.maxY <= word.minY && frame.maxY > word.minY - 8
+                && abs(frame.minX + 32 - word.minX) < 2, "panel \(frame), word \(word)")
+        editor.list.hide()
+
+        // Wren and the shader editor use the same list.
+        let wren = Typist(.wren)
+        wren.reset("import \"studio\" for Workspace\n")
+        wren.type("Workspace.fin")
+        check("Wren: members after a dot", wren.highlighted == "find(name)"
+                && wren.list.highlighted?.detail.contains("Part") == true, "\(wren.labels)")
+        wren.key(tab)
+        check("Wren: Tab inserts the code, not the label", wren.text.hasSuffix("Workspace.find("), wren.text)
+        let metal = Typist(.metal, completions: { MetalCompletion.items(in: $0, caret: $1) })
+        metal.type("float a = 0.")
+        metal.pause()
+        check("Metal: no swizzles after the dot in a number", !metal.list.isOpen, "\(metal.labels)")
+        metal.type("5 * baseColor.")
+        check("…but after a vector's dot, yes", metal.list.isOpen && metal.labels.contains("rgb"), "\(metal.labels)")
     }
 
     private static func textView(_ contents: String) -> NSTextView {

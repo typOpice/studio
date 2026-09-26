@@ -21,6 +21,7 @@ enum SelfTest {
                 "Adventure": AdventureSelfTest.run, "Remotes": RemotesSelfTest.run, "Wardrobe": WardrobeSelfTest.run,
                 "Mesh": MeshSelfTest.run, "Audio": AudioSelfTest.run, "Hud": HudSelfTest.run, "LAN": LANSelfTest.run,
                 "Gui": GuiSelfTest.run, "Player": PlayerSelfTest.run, "Script": ScriptSelfTest.run,
+                "Editor": { check in EditorSelfTest.run(check: check) }, "Syntax": { check in SyntaxSelfTest.run(check: check) },
             ]
             guard let suite = suites[CommandLine.arguments[flag + 1]] else {
                 print("No suite called \(CommandLine.arguments[flag + 1]): \(suites.keys.sorted().joined(separator: ", "))")

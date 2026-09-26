@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2068 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2136 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1185,8 +1185,26 @@ orb.               →  Position, Size, Color, Anchored …      (properties aft
 orb:               →  Destroy(), Clone(), IsA(className) …   (methods after :)
 ```
 
-`GetService` resolves by its string argument, locals are typed from what they were
-assigned (or from a type annotation), and nothing pops up inside comments or strings.
+`GetService` resolves by its string argument, and locals are typed from what they were
+assigned (or from a type annotation).
+
+The list is meant to help without getting in the way:
+
+- **Nothing goes into your code until you choose.** The list sits under the word; keep
+  typing and it narrows, or ignore it.
+- **Tab** puts in the highlighted suggestion. **Return** does only once you've picked one
+  with **↑** and **↓**; otherwise Return is a new line, even with the list open. So
+  `end`, `then` or `do` followed by Return never needs Return twice. **Esc** closes the
+  list, and **⌥Esc** opens it when you want it.
+- After a dot or colon it opens at once. For a word it waits until two letters are typed
+  and you pause, so words typed straight through don't flash a list.
+- It stays away where it can't help: a word already typed in full, a new name
+  (`local x`, `for i`, a function's name and parameters), the middle of a word, the dot
+  in a number (`0.5`), comments and strings.
+- **The best match comes first:** matches in the case you typed (`en` gives `end`
+  before `Enum`), then your script's own locals, then keywords, globals and libraries.
+
+The same list serves Wren and the shader editor.
 
 ## Working on this
 

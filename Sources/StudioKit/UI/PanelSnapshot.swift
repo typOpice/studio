@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 enum PanelSnapshot {
     @MainActor
     static func render(panel: String, to url: URL) -> Bool {
+        if panel == "suggestions" || panel == "picked" { return renderSuggestions(picked: panel == "picked", to: url) }
         let model = SceneModel()
         let session = EditorSession(model: model)
         let view: AnyView
@@ -53,7 +54,7 @@ enum PanelSnapshot {
             }
             .frame(width: 1400))
         default:
-            print("Unknown panel \"\(panel)\" — try animation, inspector, lighting, explorer or ribbon.")
+            print("Unknown panel \"\(panel)\" — try animation, inspector, lighting, explorer, ribbon, suggestions or picked.")
             return false
         }
         let renderer = ImageRenderer(content: view.background(Theme.panel).environment(\.colorScheme, .dark))
@@ -66,6 +67,61 @@ enum PanelSnapshot {
         }
         CGImageDestinationAddImage(destination, image, nil)
         guard CGImageDestinationFinalize(destination) else { return false }
+        print("Wrote \(url.path)")
+        return true
+    }
+
+    /// A script with the suggestion list open under `part.C`; `picked` after Down twice.
+    /// The list is its own little window, so it is drawn over the editor's picture here.
+    @MainActor
+    static func renderSuggestions(picked: Bool, to url: URL) -> Bool {
+        _ = NSApplication.shared
+        let size = NSRect(x: 0, y: 0, width: 640, height: 330)
+        let window = NSWindow(contentRect: size, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+        let container = NSView(frame: size)
+        window.contentView = container
+        let entry = CodeEditor.makeEntry()
+        entry.scrollView.frame = size
+        container.addSubview(entry.scrollView)
+        let coordinator = CodeEditor.Coordinator(onChange: { _ in }, indentWidth: 2)
+        coordinator.entry = entry
+        entry.textView.delegate = coordinator
+        entry.textView.source = coordinator
+        CodeEditor.setLineNumbers(true, on: entry)
+        let source = """
+        local Players = game:GetService("Players")
+        local part = workspace.Part
+
+        part.Touched:Connect(function(hit)
+        \tlocal humanoid = hit.Parent:FindFirstChild("Humanoid")
+        \tif humanoid then
+        \t\tpart.C
+        """
+        entry.textView.string = source
+        CodeEditor.highlight(entry.textView, language: .luau)
+        window.makeFirstResponder(entry.textView)
+        entry.textView.setSelectedRange(NSRange(location: (source as NSString).length, length: 0))
+        coordinator.suggest(in: entry.textView, typed: true)
+        if picked {
+            entry.textView.doCommand(by: #selector(NSResponder.moveDown(_:)))
+            entry.textView.doCommand(by: #selector(NSResponder.moveDown(_:)))
+        }
+        let list = coordinator.completionList
+        guard list.isOpen else { print("The list didn't open."); return false }
+        let rows = list.snapshotView()
+        rows.frame.origin = window.convertFromScreen(list.panelFrame).origin
+        container.addSubview(rows)
+        container.layoutSubtreeIfNeeded()
+        guard let rep = container.bitmapImageRepForCachingDisplay(in: container.bounds) else { return false }
+        container.cacheDisplay(in: container.bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return false }
+        do {
+            try data.write(to: url)
+        } catch {
+            print("Could not write \(url.path): \(error)")
+            return false
+        }
         print("Wrote \(url.path)")
         return true
     }
