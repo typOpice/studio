@@ -320,6 +320,17 @@ enum LuauAPI {
         "OrderedDataStore": dataStoreMembers + [
             method("GetSortedAsync", "ascending, pageSize, minValue, maxValue", "DataStorePages")
         ],
+        "PathfindingService": [
+            method("CreatePath", "agentParameters", "Path"), method("FindPathAsync", "start, finish", "Path"),
+            method("IsA", "className", "boolean")
+        ],
+        "Path": [
+            property("Status", "EnumItem"), property("Blocked", "RBXScriptSignal"),
+            method("ComputeAsync", "start, finish", "()"), method("GetWaypoints", "", "table"),
+            method("CheckOcclusionAsync", "start", "number"), method("Destroy", "", "()"),
+            method("IsA", "className", "boolean")
+        ],
+        "PathWaypoint": [property("Position", "Vector3"), property("Action", "EnumItem"), property("Label", "string")],
         "DataStorePages": [
             property("IsFinished", "boolean"), method("GetCurrentPage", "", "table"),
             method("AdvanceToNextPageAsync", "", "()"), method("IsA", "className", "boolean")
@@ -647,7 +658,8 @@ enum LuauAPI {
         "Animations": "Animations", "Lighting": "Lighting", "TextChatService": "TextChatService",
         "StarterPack": "StarterPack", "SoundService": "SoundService",
         "ReplicatedStorage": "ReplicatedStorage", "ServerScriptService": "ServerScriptService",
-        "ServerStorage": "ServerStorage", "LogService": "LogService", "DataStoreService": "DataStoreService"
+        "ServerStorage": "ServerStorage", "LogService": "LogService", "DataStoreService": "DataStoreService",
+        "PathfindingService": "PathfindingService"
     ]
 
     static let globalFunctions: [CompletionItem] = [

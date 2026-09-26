@@ -456,6 +456,10 @@ Enum = table.freeze({
 	DominantAxis = makeEnum("DominantAxis", { "Width", "Height" }),
 	CollisionFidelity = makeEnum("CollisionFidelity", { "Default", "Hull", "Box", "PreciseConvexDecomposition" }),
 	RaycastFilterType = makeEnum("RaycastFilterType", { "Exclude", "Include", "Blacklist", "Whitelist" }),
+	PathStatus = makeEnum("PathStatus", {
+		"Success", "ClosestNoPath", "ClosestOutOfRange", "FailStartNotEmpty", "FailFinishNotEmpty", "NoPath",
+	}),
+	PathWaypointAction = makeEnum("PathWaypointAction", { "Walk", "Jump", "Custom" }),
 	AccessoryType = makeEnum("AccessoryType", { "Hat", "Hair", "Face", "Neck", "Shoulder", "Front", "Back", "Waist" }),
 	MessageType = makeEnum("MessageType", { "MessageOutput", "MessageInfo", "MessageWarning", "MessageError" }),
 	Font = makeEnum("Font", {

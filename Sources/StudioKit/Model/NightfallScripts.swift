@@ -9,10 +9,12 @@ enum NightfallScripts {
     -- Horde: the zombies — cloned from the templates in ServerStorage, walked towards the
     -- nearest player round walls and trees, biting when they're close — and each player's
     -- fighting stats, which the sword, the blaster and the power-ups use. GameScript runs
-    -- the nights; the Sword tool calls Horde.swing, the Fire remote Horde.fire.
+    -- the nights; the Sword tool calls Horde.swing, the Fire remote Horde.fire. With a
+    -- wall or a house in the way, a zombie follows a path round it (PathfindingService).
     local Players = game:GetService("Players")
     local ServerStorage = game:GetService("ServerStorage")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local PathfindingService = game:GetService("PathfindingService")
     local Utils = require(ReplicatedStorage:WaitForChild("Utils"))
 
     local Horde = {}
@@ -200,6 +202,53 @@ enum NightfallScripts {
     -- Straight on first, then ever wider round whatever's in the way.
     local detours = { 0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9, 2.6, -2.6 }
 
+    -- Whether a zombie could walk straight to a point: nothing in the way between.
+    function Horde.clearLine(from, to, radius)
+    \tlocal flat = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
+    \tlocal steps = math.ceil(flat.Magnitude / 1.5)
+    \tfor step = 1, steps - 1 do
+    \t\tlocal at = from + flat * (step / steps)
+    \t\tif Horde.blocked(at.X, at.Z, radius) then
+    \t\t\treturn false
+    \t\tend
+    \tend
+    \treturn true
+    end
+
+    -- Where a zombie heads for: the goal when nothing's in the way; otherwise the next
+    -- waypoint of a path round, worked out again every second or so as the goal moves.
+    function Horde.towards(zombie, goal, now)
+    \tlocal position = zombie.position
+    \tif now >= (zombie.lookAt or 0) then
+    \t\tzombie.lookAt = now + 0.4
+    \t\tzombie.straight = Horde.clearLine(position, goal, zombie.radius)
+    \tend
+    \tif zombie.straight then
+    \t\tzombie.waypoints = nil
+    \t\treturn goal
+    \tend
+    \tif zombie.waypoints == nil or now >= zombie.repath then
+    \t\tzombie.repath = now + Horde.groans:NextNumber(1, 1.5)
+    \t\tzombie.path = zombie.path or PathfindingService:CreatePath({
+    \t\t\tAgentRadius = zombie.radius + 0.5, AgentHeight = 5, AgentCanJump = false, WaypointSpacing = 6,
+    \t\t})
+    \t\tzombie.path:ComputeAsync(position, goal)
+    \t\tzombie.waypoints = if zombie.path.Status == Enum.PathStatus.Success then zombie.path:GetWaypoints() else false
+    \t\tzombie.nextWaypoint = 2
+    \tend
+    \tif not zombie.waypoints then
+    \t\treturn goal
+    \tend
+    \twhile zombie.nextWaypoint <= #zombie.waypoints do
+    \t\tlocal point = zombie.waypoints[zombie.nextWaypoint].Position
+    \t\tif Vector3.new(point.X - position.X, 0, point.Z - position.Z).Magnitude > 2 then
+    \t\t\treturn point
+    \t\tend
+    \t\tzombie.nextWaypoint += 1
+    \tend
+    \treturn goal
+    end
+
     -- One step for every zombie: chase the nearest living player in sight (or drift to
     -- the camp), keep a little apart from the others, and bite anyone close enough.
     function Horde.step(dt)
@@ -248,7 +297,9 @@ enum NightfallScripts {
     \t\t\t\tend
     \t\t\tend
     \t\telseif distance > 1 then
-    \t\t\tlocal heading = flat / distance
+    \t\t\tlocal toward = Horde.towards(zombie, goal, now)
+    \t\t\tlocal way = Vector3.new(toward.X - position.X, 0, toward.Z - position.Z)
+    \t\t\tlocal heading = if way.Magnitude > 0.01 then way.Unit else flat / distance
     \t\t\tfor _, other in list do
     \t\t\t\tif other ~= zombie and not other.dead then
     \t\t\t\t\tlocal apart = Vector3.new(position.X - other.position.X, 0, position.Z - other.position.Z)

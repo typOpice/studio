@@ -66,6 +66,10 @@ final class ScriptRuntime {
     /// False on a player who joined a network game: the host runs the scene's scripts,
     /// and this machine only the player's and character's own.
     var runsSceneScripts = true
+    /// PathfindingService's view of the world, brought up to date before each search
+    /// (ScriptRuntime+Pathfinding).
+    let navigation = NavigationGrid()
+    var navigationSyncedAt = -1.0
 
     func start() {
         stop()
@@ -338,6 +342,7 @@ final class ScriptRuntime {
         case "part", "workspace": return partsCall(name, arguments)
         case "data": return dataCall(name, arguments)
         case "datastore": return dataStoreCall(name, arguments)
+        case "path": return pathCall(name, arguments)
         case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)

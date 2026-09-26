@@ -361,6 +361,14 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the joined player hears the host's music and jump pads; their checkpoint ding is heard only by them).
    New files: Play/BuiltinSounds.swift, GameSoundsSelfTest.swift.
 
+33. PathfindingService, 2026-09-26.
+   Scripts can now find a way round things with PathfindingService, as in Roblox: CreatePath (with the agent's radius, height, whether it can jump, waypoint spacing and costs per material), ComputeAsync, Status, GetWaypoints (each with a Position and an Action: Walk or Jump), the Blocked event and CheckOcclusionAsync.
+   Paths go over the ground and the tops of parts, round anything the agent can't fit past, up steps, and up onto platforms by jumping if the agent can jump.
+   Use it with Humanoid:MoveTo to walk a character round walls; the README has an example ("Finding the way: PathfindingService").
+   Nightfall's zombies now use it: when a wall or a house is between a zombie and the player it's chasing, it follows a path round instead of getting stuck.
+   Tested alone and with a host and a joined player (a zombie finds its way round a walled pen to bite the joined player).
+   New files: Play/Pathfinding.swift, Scripting/ScriptRuntime+Pathfinding.swift, PathfindingSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

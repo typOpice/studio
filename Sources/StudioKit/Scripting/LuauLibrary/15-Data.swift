@@ -1,6 +1,6 @@
 // The Luau library, part 15 of 16: data objects (Folders, Values, remotes), ModuleScripts
-// and require, ReplicatedStorage and ServerScriptService, DataStoreService, and
-// workspace:Raycast.
+// and require, ReplicatedStorage and ServerScriptService, DataStoreService,
+// PathfindingService, and workspace:Raycast.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -1150,6 +1150,137 @@ do
 		end,
 		IsA = function(_, className)
 			return className == "DataStoreService" or className == "Instance"
+		end,
+	})
+
+	--------------------------------------------------------------------------------
+	-- PathfindingService: a way round what's in the way (`path.*`), as waypoints to walk
+	-- or jump to — for Humanoid:MoveTo, or for anything a script moves. Paths go over
+	-- the tops of parts and the ground, round anything the agent can't fit past, and up
+	-- only as high as it can step or jump.
+
+	local paths = {}
+
+	PathWaypoint = table.freeze({
+		new = function(position, action, label)
+			if typeof(position) ~= "Vector3" then
+				raise("PathWaypoint.new expects a Vector3", 2)
+			end
+			local waypoint = table.freeze({
+				Position = position,
+				Action = action or Enum.PathWaypointAction.Walk,
+				Label = label or "",
+			})
+			typeTags[waypoint] = "PathWaypoint"
+			return waypoint
+		end,
+	})
+
+	-- The agent as the host takes it: radius, height, whether it jumps, spacing, costs.
+	function paths.agent(parameters)
+		if parameters ~= nil and type(parameters) ~= "table" then
+			raise("CreatePath expects a table of agent parameters", 3)
+		end
+		parameters = parameters or {}
+		local costs = {}
+		if type(parameters.Costs) == "table" then
+			for material, cost in parameters.Costs do
+				if type(cost) == "number" then
+					table.insert(costs, { tostring(material), if cost == math.huge then 1e30 else cost })
+				end
+			end
+		end
+		return {
+			tonumber(parameters.AgentRadius) or 2,
+			tonumber(parameters.AgentHeight) or 5,
+			parameters.AgentCanJump ~= false,
+			if parameters.WaypointSpacing == math.huge then -1 else tonumber(parameters.WaypointSpacing) or 4,
+			costs,
+		}
+	end
+
+	function paths.new(parameters)
+		local agent = paths.agent(parameters)
+		local state = { status = Enum.PathStatus.NoPath, waypoints = {}, raw = {}, left = {}, generation = 0 }
+		local blocked = makeSignal()
+
+		-- While a computed path is current, Blocked fires when something comes to stand in
+		-- its way (checked twice a second, and only when someone is listening).
+		local function watch(generation)
+			task.spawn(function()
+				local reported = -1
+				while state.generation == generation and not state.destroyed do
+					task.wait(0.5)
+					if state.generation ~= generation or state.destroyed then
+						break
+					end
+					if #blocked.connections > 0 then
+						local index = invoke("path.check", state.raw, agent, 1, state.left)
+						if index > 0 and index ~= reported then
+							reported = index
+							fire(blocked, index)
+						elseif index < 0 then
+							reported = -1
+						end
+					end
+				end
+			end)
+		end
+
+		return service("Path", {
+			Status = function()
+				return state.status
+			end,
+			Blocked = function()
+				return blocked
+			end,
+		}, {
+			ComputeAsync = function(_, start, finish)
+				if typeof(start) ~= "Vector3" or typeof(finish) ~= "Vector3" then
+					raise("ComputeAsync expects two Vector3s", 2)
+				end
+				local result = invoke("path.compute", { start[1], start[2], start[3] },
+					{ finish[1], finish[2], finish[3] }, agent)
+				state.status = Enum.PathStatus[result[1]] or Enum.PathStatus.NoPath
+				state.raw = result[2]
+				state.left = result[3] or {}
+				state.waypoints = {}
+				for _, point in result[2] do
+					table.insert(state.waypoints, PathWaypoint.new(vector(point[1], point[2], point[3]),
+						Enum.PathWaypointAction[point[4]]))
+				end
+				state.generation += 1
+				if #state.waypoints > 0 then
+					watch(state.generation)
+				end
+			end,
+			GetWaypoints = function()
+				return table.clone(state.waypoints)
+			end,
+			CheckOcclusionAsync = function(_, from)
+				return invoke("path.check", state.raw, agent, tonumber(from) or 1, state.left)
+			end,
+			Destroy = function()
+				state.destroyed = true
+			end,
+			IsA = function(_, className)
+				return className == "Path" or className == "Instance"
+			end,
+		})
+	end
+
+	services.PathfindingService = service("PathfindingService", nil, {
+		CreatePath = function(_, parameters)
+			return paths.new(parameters)
+		end,
+		-- The old way: a path with the default agent, already computed.
+		FindPathAsync = function(_, start, finish)
+			local path = paths.new(nil)
+			path:ComputeAsync(start, finish)
+			return path
+		end,
+		IsA = function(_, className)
+			return className == "PathfindingService" or className == "Instance"
 		end,
 	})
 

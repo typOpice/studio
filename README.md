@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2506 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2536 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1402,6 +1402,47 @@ Players.PlayerAdded:Connect(setUp)
 The sample games save too: Adventure Island your gems, wins and rewards; Nightfall
 your best score, with the top five after every run; Mega Obby your furthest stage and
 wins, so you carry on from there.
+
+### Finding the way: PathfindingService
+
+`game:GetService("PathfindingService"):CreatePath(agent)` makes a path for an agent
+of a size — `AgentRadius` (2), `AgentHeight` (5), `AgentCanJump` (true),
+`WaypointSpacing` (4) and `Costs` (by material, `math.huge` to keep out:
+`{ Water = 20, Neon = math.huge }`). `path:ComputeAsync(start, finish)` finds a way
+round anything in the between, over the tops of parts and the ground. It goes up
+only as high as a character can step (2 studs), or jump (about 6) if it may. Then
+`path.Status` is `Enum.PathStatus.Success` (or `NoPath`, `FailStartNotEmpty`,
+`FailFinishNotEmpty`). `path:GetWaypoints()` gives `PathWaypoint`s, each with
+`Position` and `Action` (`Walk`, or `Jump` for one to jump up to). `path.Blocked`
+fires with a waypoint's index when something comes to stand in the way, and
+`path:CheckOcclusionAsync(from)` says where now (or -1).
+
+The world is seen as a grid of 2-stud squares, so a gap has to be a little wider than
+the agent to get through. The agent's own body, where the path starts, doesn't count.
+
+```lua
+-- A LocalScript in StarterCharacterScripts: walk round anything in the way to the Flag.
+local PathfindingService = game:GetService("PathfindingService")
+local Players = game:GetService("Players")
+local character = Players.LocalPlayer.Character
+local humanoid = character:WaitForChild("Humanoid")
+local root = character:WaitForChild("HumanoidRootPart")
+
+local path = PathfindingService:CreatePath({ AgentRadius = 2, AgentCanJump = true })
+path:ComputeAsync(root.Position, workspace.Flag.Position)
+if path.Status == Enum.PathStatus.Success then
+	for _, waypoint in path:GetWaypoints() do
+		if waypoint.Action == Enum.PathWaypointAction.Jump then
+			humanoid.Jump = true
+		end
+		humanoid:MoveTo(waypoint.Position)
+		humanoid.MoveToFinished:Wait()
+	end
+end
+```
+
+Nightfall's zombies use it: when a wall or a house is between a zombie and whoever
+it's after, it follows a path round, worked out again every second or so.
 
 ## Wren, the second language
 

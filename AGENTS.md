@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2506 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2536 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -147,6 +147,7 @@ listed in §9.
 | `DataStoreSelfTest.swift` | DataStores: a place id for each new place and New Scene, saved and reopened, one from its path for an old file (the same each time, not marked edited), fixed ones for the sample games (from the home page too); kept on disk by place, store and scope, files named safely, read back, removed, cleared for one place only; from Luau: the same store each time, tables read back as copies, UpdateAsync (and nil leaving it), IncrementAsync, RemoveAsync, number keys, scopes, every refusal (Instance, Vector3, function, NaN, mixed and cyclic tables, nil, long keys, incrementing text, fractions in an ordered store) with nothing written, ordered pages both ways and between two values, GetGlobalDataStore, a LocalScript refused, Run mode; saved across plays, reopened, another place apart, cleared; completion; the README example; Mega Obby, Nightfall and Adventure Island carrying on next time; a joined player saving nothing themselves, the host keeping their stage by name, and on stage 4 when they join again |
 | `GamePickerSelfTest.swift` | The client's game picker: where it starts, the sample games and the Starter Scene with their pictures; places opened remembered (newest first, once each, not Studio's hand-over copy, kept between runs, a deleted one left out), one chosen opening on the menu, one that can't be opened saying so; the character and join screens returning where they came from; choosing, playing and choosing another game; a host choosing Mega Obby there and a joined player (from the picker) playing it |
 | `GameSoundsSelfTest.swift` | Built-in sounds: twenty effects and three loops, each mono, levelled, effects short, music without a gap at the loop, the same every time, made once, unknown names refused; a script's built-in Sound loaded with its length and playing, a scene Sound looping from the start, the README's coin; Nightfall (music and news sounds in SoundService, a groan in every zombie's head, day music then night music and a gong, groans from zombies, a bite's hit and your own hurt, a swing and a fall, your orb, dawn's chime and the day music back, the end of a run heard by you alone); Mega Obby (music, sounds in every jump pad and fading tile, your checkpoint ding, a boing from the pad, a crack, an oof); a joined player hearing the host's music and a pad the host boings for them, their checkpoint ding heard by them and not the host |
+| `PathfindingSelfTest.swift` | PathfindingService: the grid round a wall (start to goal, round the end and never through, evenly spaced and walkable, on the ground), none into a closed box, a step walked, a platform jumped onto (marked on the landing), none without jumping or too high, a gap one agent fits and a bigger doesn't, a Neon strip crossed or avoided by cost, a wall put down blocking an old path from where it meets it, a start inside the agent's own body; from Luau (CreatePath, ComputeAsync, Status, PathWaypoints, Blocked firing and CheckOcclusionAsync when a crate lands on the path, FindPathAsync, a bad start refused, PathWaypoint.new, completion); the README's example walking a character round a wall to a flag; a Nightfall zombie behind a pen's back wall going round and in to bite; the same for a joined player, seen from their game |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -294,6 +295,9 @@ Sources/StudioKit/
                                    and ServerStorage left out of what joined players get
   Scripting/ScriptRuntime+Data.swift  `data.*` (Folders, Values, remotes as data objects),
                                    `module.*`, `workspace.raycast`
+  Scripting/ScriptRuntime+Pathfinding.swift  `path.*`: PathfindingService's searches and checks
+  Play/Pathfinding.swift         NavigationGrid: the world as 2-stud cells of solid spans, kept
+                                 up to date part by part; A* over floors; waypoints
   Scripting/ScriptRuntime+DataStore.swift  `datastore.*`: DataStoreService's reads and writes,
                                    on the machine running the scene's scripts only
   Model/DataStores.swift           DataStoreFiles (what DataStores keep, a folder per place),
@@ -1251,10 +1255,14 @@ Roughly ordered by how much time they will cost you.
     up with "failed to produce diagnostic".
 
 104. **Nightfall's zombies are anchored Models moved by `Horde.step`**, 20 times a
-    second, on the host. They are not physics bodies and there's no pathfinding:
+    second, on the host. They are not physics bodies:
     - they steer round the boxes `Horde.findBlockers` reads *once* at the start
       (anything solid standing on the ground; a turned part as its widest square),
       trying ever wider turns when the way ahead is blocked;
+    - with a blocker on the straight line to their goal (`Horde.clearLine`, checked
+      every 0.4 s), they follow a PathfindingService path instead (`Horde.towards`,
+      recomputed every 1–1.5 s), with a radius half a stud wider than their own so the
+      waypoints keep off the walls their steering avoids;
     - a zombie spawning inside a blocker steps to the nearest free spot.
     The root part has no CFrame in Luau, so a player's facing (for swings and dashes)
     is their last `MoveDirection`. The character controller sets horizontal velocity
@@ -1327,6 +1335,19 @@ Roughly ordered by how much time they will cost you.
     and NightfallSelfTest's "they come for you" depends on that sequence. Sounds heard
     from a spot go in `workspace.Effects` (`Horde.sound`), which the blaster's ray
     ignores.
+
+110. **PathfindingService's grid is the runtime's, kept up to date part by part.**
+    `ScriptRuntime.navigation` (a `NavigationGrid`, Play/Pathfinding.swift) is synced
+    at most once a frame, before a search. Only parts whose pose, size, shape or
+    material changed are drawn again, so a moving part costs only its own cells.
+    - A part's span over a cell comes from exact vertical rays (`Picking.intersect`) at
+      the cell's centre and at its point nearest the part, so thin posts count.
+    - Clearance is measured to each part's box, not to cells.
+    - Parts containing the start point (the agent's own body) are left out of that
+      search and of its later `path.check`s (`state.left` in the library).
+    - Jumps are marked on the waypoint landed on, and can span two cells.
+    Nightfall's first search builds the grid: about 0.2 s in a debug build, 0.02 s in
+    release.
 
 ## 8. Recipes
 
@@ -1572,8 +1593,14 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   `GetRequestBudgetForRequestType` says 100), no versions or `DataStoreKeyInfo`, no
   `ListKeysAsync`/`ListDataStoresAsync`, no MemoryStoreService, and no size limit per
   key. They are kept on the host's disk, so a player's progress follows whoever hosts.
-- **Nightfall's zombies** don't path-find, and don't know about walls added after the
-  game starts; nor do they climb. With every way blocked they stand still.
+- **Nightfall's zombies** steer by walls read once at the start: a wall added later is
+  pathed round only if the straight line is already blocked by an old one, and walked
+  through otherwise. They don't climb. With every way blocked they stand still.
+- **Pathfinding** sees the world as 2-stud squares, so a gap must be a little wider than
+  the agent. No climbing (TrussParts), no swimming, no jumping across gaps (only up),
+  no PathfindingModifier or PathfindingLink. A search stays within 96 studs of the
+  line between its ends. `Blocked` is checked twice a second, and only while someone
+  listens.
 - **Screen effects** all read the world's depth (not an earlier effect's), run in
   Explorer order rather than an order of their own, and a shader that hangs the GPU
   takes the app with it; sixteen float parameters per shader. What a LocalScript
