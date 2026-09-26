@@ -10,6 +10,21 @@ protocol PlaceBuilding {
 }
 
 extension PlaceBuilding {
+    /// A Sound: in a part (heard from there, up to `reach` studs), or everywhere.
+    /// `playing` starts it when the game does.
+    @discardableResult
+    mutating func sound(_ name: String, _ soundId: String, in part: UUID? = nil, volume: Float = 0.5,
+                        looped: Bool = false, playing: Bool = false, reach: Float = 100) -> UUID {
+        var sound = SceneSound(name: name, parentID: part)
+        sound.soundId = soundId
+        sound.volume = volume
+        sound.looped = looped
+        sound.playing = playing
+        sound.rollOffMaxDistance = reach
+        state.sounds.append(sound)
+        return sound.id
+    }
+
     mutating func random(_ low: Float, _ high: Float) -> Float {
         seed = seed &* 1_664_525 &+ 1_013_904_223
         return low + Float(seed >> 8) / Float(1 << 24) * (high - low)

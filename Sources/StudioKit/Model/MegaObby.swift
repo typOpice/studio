@@ -116,6 +116,8 @@ enum MegaObby {
             }
             finish()
             data()
+            // The music, from the start, for everyone.
+            sound("Music", "builtin://ObbyRun", volume: 0.3, looped: true, playing: true)
             scripts()
             hud()
             state.defaultGui = DefaultHud.version

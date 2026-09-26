@@ -26,6 +26,8 @@ enum NightfallScripts {
 
     -- Every zombie in the world, by its Model.
     Horde.zombies = {}
+    -- When they groan: random, but not from math.random, which places them.
+    Horde.groans = Random.new(31)
     -- Each player's stats while they're in a run (Upgrades.fresh makes them).
     Horde.stats = {}
     -- Set by GameScript: a zombie fell at position, knocked down last by player (or nil).
@@ -136,6 +138,13 @@ enum NightfallScripts {
     \t\tspeed = kind.speed * (1 + 0.03 * (night - 1)), damage = math.floor(kind.damage * (1 + 0.1 * (night - 1))),
     \t\treach = kind.reach, radius = kind.radius, orbs = kind.orbs, y = y, nextBite = 0,
     \t}
+    \t-- Its groan (in its Head), lower for a Brute, higher for a Runner, now and then.
+    \tlocal head = model:FindFirstChild("Head")
+    \tzombie.groan = head and head:FindFirstChild("Groan")
+    \tif zombie.groan then
+    \t\tzombie.groan.PlaybackSpeed = if kindName == "Brute" then 0.72 elseif kindName == "Runner" then 1.25 else 1
+    \tend
+    \tzombie.nextGroan = time() + Horde.groans:NextNumber(0.5, 3.5)
     \tHorde.zombies[model] = zombie
     \treturn zombie
     end
@@ -156,6 +165,8 @@ enum NightfallScripts {
     \tzombie.health -= amount
     \tzombie.lastHit = player or zombie.lastHit
     \tzombie.value.Value = math.max(zombie.health, 0)
+    \tlocal where = zombie.model:GetPivot().Position
+    \tHorde.sound(if zombie.health > 0 then "builtin://Hit" else "builtin://ZombieDown", where, 0.8)
     \tif zombie.health > 0 then
     \t\tzombie.torso.Color = Color3.new(1, 1, 1)
     \t\ttask.delay(0.08, function()
@@ -210,6 +221,10 @@ enum NightfallScripts {
     \t\tif zombie.dead then
     \t\t\tcontinue
     \t\tend
+    \t\tif zombie.groan and now >= zombie.nextGroan then
+    \t\t\tzombie.nextGroan = now + Horde.groans:NextNumber(4, 9)
+    \t\t\tzombie.groan:Play()
+    \t\tend
     \t\tlocal position = zombie.position
     \t\tlocal best, bestDistance = nil, SIGHT
     \t\tfor _, target in targets do
@@ -226,6 +241,7 @@ enum NightfallScripts {
     \t\t\tif now >= zombie.nextBite then
     \t\t\t\tzombie.nextBite = now + 1
     \t\t\t\tbest.humanoid:TakeDamage(zombie.damage)
+    \t\t\t\tHorde.sound("builtin://Hit", best.position, 0.7)
     \t\t\t\tlocal stats = Horde.stats[best.player]
     \t\t\t\tif stats and stats.thorns > 0 then
     \t\t\t\t\tHorde.hurt(zombie, stats.thorns, best.player)
@@ -282,6 +298,33 @@ enum NightfallScripts {
     \tflash(Vector3.new(3, 3, 3), CFrame.new(position), Color3.fromRGB(120, 255, 140), 0.35)
     end
 
+    -- A sound heard from somewhere (a built-in one: "builtin://Hit"), from a small
+    -- invisible part that goes once it's done — in the Effects folder, which shots pass
+    -- through.
+    Horde.effects = Instance.new("Folder")
+    Horde.effects.Name = "Effects"
+    Horde.effects.Parent = workspace
+
+    function Horde.sound(soundId, position, volume)
+    \tlocal part = Instance.new("Part")
+    \tpart.Name = "SoundAt"
+    \tpart.Anchored = true
+    \tpart.CanCollide = false
+    \tpart.Transparency = 1
+    \tpart.Size = Vector3.new(0.2, 0.2, 0.2)
+    \tpart.Position = position
+    \tpart.Parent = Horde.effects
+    \tlocal sound = Instance.new("Sound")
+    \tsound.SoundId = soundId
+    \tsound.Volume = volume or 0.6
+    \tsound.RollOffMaxDistance = 120
+    \tsound.Parent = part
+    \tsound:Play()
+    \ttask.delay(3, function()
+    \t\tpart:Destroy()
+    \tend)
+    end
+
     -- A sword swing: every zombie in reach in front of you (or right beside you) is hit,
     -- and pushed back. Returns whether it hit anything.
     function Horde.swing(player)
@@ -296,6 +339,7 @@ enum NightfallScripts {
     \tend
     \tstats.nextSwing = now + stats.swingTime
     \tlocal origin = root.Position
+    \tHorde.sound("builtin://Swing", origin, 0.7)
     \tlocal struck = {}
     \tfor _, zombie in Horde.zombies do
     \t\tlocal offset = zombie.model:GetPivot().Position - origin
@@ -337,12 +381,13 @@ enum NightfallScripts {
     \tend
     \tstats.nextShot = now + stats.fireTime
     \tlocal origin = root.Position + Vector3.new(0, 1.5, 0)
+    \tHorde.sound("builtin://Shoot", origin, 0.6)
     \tlocal aim = target - origin
     \tif aim.Magnitude < 0.5 then
     \t\treturn false
     \tend
     \tlocal direction = aim.Unit * 160
-    \tlocal ignore = { workspace.Orbs, workspace.Keys }
+    \tlocal ignore = { workspace.Orbs, workspace.Keys, Horde.effects }
     \tfor _, other in Players:GetPlayers() do
     \t\tif other.Character then
     \t\t\ttable.insert(ignore, other.Character)
@@ -524,6 +569,7 @@ enum NightfallScripts {
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local ServerStorage = game:GetService("ServerStorage")
     local DataStoreService = game:GetService("DataStoreService")
+    local SoundService = game:GetService("SoundService")
 
     local Utils = require(ReplicatedStorage.Utils)
     local Horde = require(ServerStorage.Horde)
@@ -714,6 +760,7 @@ enum NightfallScripts {
 
     local function openGate(finder)
     \tStatus.GateOpen.Value = true
+    \tSoundService.GateOpens:Play()
     \tUtils.tween(gate.DoorLeft, 2, { Position = shut[1] - Vector3.new(9, 0, 0) })
     \tUtils.tween(gate.DoorRight, 2, { Position = shut[2] + Vector3.new(9, 0, 0) })
     \tgate.GateLight.Color = Color3.fromRGB(90, 240, 140)
@@ -740,6 +787,7 @@ enum NightfallScripts {
     \tentry.model:Destroy()
     \tlocal found = Status.KeysFound.Value + 1
     \tStatus.KeysFound.Value = found
+    \tSoundService.KeyFound:Play()
     \tlocal stats = Horde.stats[player]
     \tif stats then
     \t\tstats.keys += 1
@@ -782,10 +830,33 @@ enum NightfallScripts {
 
     -- MARK: Days and nights
 
+    -- The music follows the phase: calm by day and at dawn, tense at night, with a gong
+    -- as night falls and a chime at dawn.
+    local function music(phase, was)
+    \tif phase == was then
+    \t\treturn
+    \tend
+    \tif phase == "night" then
+    \t\tSoundService.DayMusic:Stop()
+    \t\tSoundService.NightMusic:Play()
+    \t\tSoundService.NightFalls:Play()
+    \telse
+    \t\tSoundService.NightMusic:Stop()
+    \t\tif not SoundService.DayMusic.IsPlaying then
+    \t\t\tSoundService.DayMusic:Play()
+    \t\tend
+    \t\tif phase == "dawn" then
+    \t\t\tSoundService.Dawn:Play()
+    \t\tend
+    \tend
+    end
+
     local function setPhase(phase, seconds)
+    \tlocal was = world.phase
     \tworld.phase = phase
     \tworld.endsAt = time() + (seconds or 0)
     \tStatus.Phase.Value = phase
+    \tmusic(phase, was)
     end
 
     local function resetWorld()
@@ -1128,9 +1199,11 @@ enum NightfallScripts {
     -- (click one, or press Z, X or C); how the run went when it ends; health bars over
     -- the zombies; the screen going red when you're hurt and cold at night — on this
     -- screen only. And what the server needs from here: where the blaster points, and Q.
+    -- Its sounds are this player's alone: an orb, a power-up, being hurt, the end of a run.
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local UserInputService = game:GetService("UserInputService")
+    local SoundService = game:GetService("SoundService")
 
     local player = Players.LocalPlayer
     local mouse = player:GetMouse()
@@ -1143,6 +1216,44 @@ enum NightfallScripts {
     local RunOver = ReplicatedStorage:WaitForChild("RunOver")
     local run = player:WaitForChild("Run")
     local orbsValue = run:WaitForChild("Orbs")
+
+    -- One Sound of each, made here so only this player hears it.
+    local sounds = {}
+    local function sfx(name, volume)
+    \tlocal sound = sounds[name]
+    \tif sound == nil then
+    \t\tsound = Instance.new("Sound")
+    \t\tsound.Name = name
+    \t\tsound.SoundId = "builtin://" .. name
+    \t\tsound.Volume = volume or 0.6
+    \t\tsound.Parent = SoundService
+    \t\tsounds[name] = sound
+    \tend
+    \tsound:Play()
+    end
+
+    local lastOrbs = orbsValue.Value
+    orbsValue.Changed:Connect(function(orbs)
+    \tif orbs > lastOrbs then
+    \t\tsfx("Pickup", 0.45)
+    \tend
+    \tlastOrbs = orbs
+    end)
+
+    local function watchHealth(character)
+    \tlocal humanoid = character:WaitForChild("Humanoid")
+    \tlocal health = humanoid.Health
+    \thumanoid.HealthChanged:Connect(function(now)
+    \t\tif now < health - 0.5 and now > 0 then
+    \t\t\tsfx("Hurt", 0.6)
+    \t\tend
+    \t\thealth = now
+    \tend)
+    end
+    player.CharacterAdded:Connect(watchHealth)
+    if player.Character then
+    \twatchHealth(player.Character)
+    end
     local neededValue = run:WaitForChild("OrbsNeeded")
     local dashValue = run:WaitForChild("Dash")
     local picksValue = run:WaitForChild("Picks")
@@ -1206,6 +1317,7 @@ enum NightfallScripts {
     local offered = nil
     local function choose(index)
     \tif offered and offered[index] then
+    \t\tsfx("Click", 0.5)
     \t\tChoose:FireServer(offered[index].id)
     \t\toffered = nil
     \t\tchooser.Visible = false
@@ -1335,6 +1447,7 @@ enum NightfallScripts {
 
     Offer.OnClientEvent:Connect(function(options)
     \toffered = options
+    \tsfx("PowerUp", 0.6)
     \tfor index, card in cards do
     \t\tlocal option = options[index]
     \t\tcard.Visible = option ~= nil
@@ -1371,6 +1484,7 @@ enum NightfallScripts {
     end)
 
     RunOver.OnClientEvent:Connect(function(result)
+    \tsfx(if result.escaped then "Victory" else "Defeat", 0.7)
     \toffered = nil
     \tchooser.Visible = false
     \tsummaryTitle.Text = if result.escaped then "You escaped!" else "You fell on night " .. result.night

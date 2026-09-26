@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2474 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2506 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -871,6 +871,48 @@ SoundService.Music.Playing = true -- one made in Studio
 `PlayLocalSound`. In a network game the host's Sounds are heard by everyone, from the
 same parts; a Sound a LocalScript makes (a button's click, say) is heard only on that
 player's machine — the host's own LocalScripts included.
+
+### Built-in sounds
+
+Studio also makes sounds of its own, with no file: set a SoundId to
+`"builtin://Name"`, or pick one under **Built in** in the SoundId menu. They're
+synthesized the first time they're played, so a place using them stays small and a
+network game sends only their names.
+
+| Effects | |
+| --- | --- |
+| `Swing`, `Hit`, `Shoot` | a sword's whoosh, a solid thump, a blaster's zap |
+| `Groan`, `ZombieDown` | a zombie's moan, and its fall |
+| `Hurt`, `Oof` | taking damage, and being knocked out |
+| `Pickup`, `Sparkle`, `PowerUp` | a coin or orb, something special found, a rising arpeggio |
+| `Click`, `Checkpoint`, `Jump`, `Boing` | a button, two bright bells, a hop, a jump pad |
+| `Crack`, `Rumble` | something giving way, heavy stone moving |
+| `Chime`, `Gong` | a soft morning bell, a deep gong |
+| `Victory`, `Defeat` | a short fanfare, falling notes |
+
+Music, which loops without a gap: `CalmDay` (gentle plucked chords), `NightHunt`
+(tense and driving) and `ObbyRun` (bright, bouncy chiptune).
+
+```lua
+-- A coin that goes "ding" for whoever picks it up.
+local Players = game:GetService("Players")
+local ding = Instance.new("Sound")
+ding.SoundId = "builtin://Pickup"
+ding.Parent = workspace.Coin
+
+workspace.Coin.Touched:Connect(function(hit)
+	if Players:GetPlayerFromCharacter(hit.Parent) then
+		ding:Play()
+	end
+end)
+```
+
+Nightfall and Mega Obby use them. In Nightfall the music follows the day and the night,
+with a gong as night falls and a chime at dawn; zombies groan, and swings, hits, shots
+and falls are heard from where they happen; your own orbs, power-ups, hurts and the
+end of a run are heard by you alone. Mega Obby has its music, jump pads that boing,
+tiles that crack as they fade, and your own checkpoint dings, finish fanfare and oofs.
+`swift run StudioApp --write-sounds <folder>` writes every one as a WAV file to listen to.
 
 ## MeshParts: 3D models
 

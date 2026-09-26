@@ -25,7 +25,7 @@ extension ScriptRuntime {
 
         case "sound.get":
             guard let sound = current(), arguments.count >= 2 else { return .nothing }
-            let asset = model.asset(named: sound.soundId)
+            let buffer = soundSystem?.buffer(forSoundId: sound.soundId, in: model)
             switch (arguments[1].asString ?? "").lowercased() {
             case "name": return .string(sound.name)
             case "soundid": return .string(sound.soundId)
@@ -35,8 +35,8 @@ extension ScriptRuntime {
             case "rolloffmaxdistance": return .number(Double(sound.rollOffMaxDistance))
             case "playing", "isplaying": return .bool(sound.playing)
             case "ispaused": return .bool(!sound.playing && sound.timePosition > 0)
-            case "isloaded": return .bool(asset.flatMap { soundSystem?.buffer(for: $0) } != nil)
-            case "timelength": return .number(asset.flatMap { soundSystem?.duration(of: $0) } ?? 0)
+            case "isloaded": return .bool(buffer != nil)
+            case "timelength": return .number(buffer.map { Double($0.frameLength) / $0.format.sampleRate } ?? 0)
             case "timeposition": return .number(soundSystem?.timePosition(of: sound, clock: clock()) ?? sound.timePosition)
             case "parent": return sound.parentID.map { .string("p:" + $0.uuidString) } ?? .string("g")
             default: return .nothing

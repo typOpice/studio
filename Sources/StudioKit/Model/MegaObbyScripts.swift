@@ -12,6 +12,7 @@ enum MegaObbyScripts {
     --   Spinner                turns at its Speed (degrees a second) and knocks you out
     --   FadeTile               gives way a moment after you step on it, then comes back
     --   JumpPad                throws you up at its Power
+    -- A FadeTile cracks and a JumpPad boings, heard from where they are.
     local RunService = game:GetService("RunService")
     local TweenService = game:GetService("TweenService")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,6 +23,20 @@ enum MegaObbyScripts {
     \tif humanoid and humanoid.Health > 0 then
     \t\thumanoid.Health = 0
     \tend
+    end
+
+    -- A part's own sound (made if it hasn't one), heard from it.
+    local function soundIn(part, name, soundId, volume)
+    \tlocal sound = part:FindFirstChild(name)
+    \tif sound == nil then
+    \t\tsound = Instance.new("Sound")
+    \t\tsound.Name = name
+    \t\tsound.SoundId = soundId
+    \t\tsound.Volume = volume
+    \t\tsound.RollOffMaxDistance = 80
+    \t\tsound.Parent = part
+    \tend
+    \treturn sound
     end
 
     local function number(part, name, default)
@@ -52,11 +67,13 @@ enum MegaObbyScripts {
     \t\t})
     \telseif name == "FadeTile" then
     \t\tlocal fading = false
+    \t\tlocal crack = soundIn(part, "Crack", "builtin://Crack", 0.6)
     \t\tpart.Touched:Connect(function(hit)
     \t\t\tif fading or Utils.getHumanoid(hit) == nil then
     \t\t\t\treturn
     \t\t\tend
     \t\t\tfading = true
+    \t\t\tcrack:Play()
     \t\t\tUtils.tween(part, 0.5, { Transparency = 0.8 })
     \t\t\ttask.wait(0.5)
     \t\t\tpart.CanCollide = false
@@ -69,11 +86,13 @@ enum MegaObbyScripts {
     \telseif name == "JumpPad" then
     \t\tlocal power = number(part, "Power", 90)
     \t\tlocal ready = Utils.cooldown(0.5)
+    \t\tlocal boing = soundIn(part, "Boing", "builtin://Boing", 0.8)
     \t\tpart.Touched:Connect(function(hit)
     \t\t\tlocal player = Utils.playerFromPart(hit)
     \t\t\tlocal root = Utils.getRoot(hit)
     \t\t\tif player and root and ready(player) then
     \t\t\t\troot.AssemblyLinearVelocity = Vector3.new(0, power, 0)
+    \t\t\t\tboing:Play()
     \t\t\tend
     \t\tend)
     \tend
@@ -267,10 +286,12 @@ enum MegaObbyScripts {
     static let screen = """
     -- ObbyScreen: your stage and world, how far along you are, your time and deaths; a
     -- stage picker (the arrows, or Q and E) to go back to any stage you've reached; R to
-    -- go back to your checkpoint; the stage number over every checkpoint; and news.
+    -- go back to your checkpoint; the stage number over every checkpoint; and news. Its
+    -- sounds are this player's alone: a new checkpoint, the finish, a fall, the picker.
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local UserInputService = game:GetService("UserInputService")
+    local SoundService = game:GetService("SoundService")
 
     local player = Players.LocalPlayer
     local Utils = require(ReplicatedStorage:WaitForChild("Utils"))
@@ -282,6 +303,40 @@ enum MegaObbyScripts {
     local run = player:WaitForChild("Run")
     local currentValue = run:WaitForChild("Current")
     local deathsValue = run:WaitForChild("Deaths")
+
+    -- One Sound of each, made here so only this player hears it.
+    local sounds = {}
+    local function sfx(name, volume)
+    \tlocal sound = sounds[name]
+    \tif sound == nil then
+    \t\tsound = Instance.new("Sound")
+    \t\tsound.Name = name
+    \t\tsound.SoundId = "builtin://" .. name
+    \t\tsound.Volume = volume
+    \t\tsound.Parent = SoundService
+    \t\tsounds[name] = sound
+    \tend
+    \tsound:Play()
+    end
+
+    local furthest = reachedValue.Value
+    reachedValue.Changed:Connect(function(stage)
+    \tif stage > furthest then
+    \t\tsfx("Checkpoint", 0.7)
+    \tend
+    \tfurthest = stage
+    end)
+
+    local function watch(character)
+    \tlocal humanoid = character:WaitForChild("Humanoid")
+    \thumanoid.Died:Connect(function()
+    \t\tsfx("Oof", 0.7)
+    \tend)
+    end
+    player.CharacterAdded:Connect(watch)
+    if player.Character then
+    \twatch(player.Character)
+    end
 
     local GOLD = Color3.fromRGB(255, 210, 80)
     local WHITE = Color3.new(1, 1, 1)
@@ -359,6 +414,9 @@ enum MegaObbyScripts {
     local news = {}
     local telling = false
     Notify.OnClientEvent:Connect(function(text)
+    \tif string.find(text, "^You beat all") then
+    \t\tsfx("Victory", 0.7)
+    \tend
     \ttable.insert(news, text)
     \tif telling then
     \t\treturn
@@ -380,6 +438,7 @@ enum MegaObbyScripts {
     local function go(step)
     \tlocal target = math.clamp(currentValue.Value + step, 1, reachedValue.Value)
     \tif target ~= currentValue.Value then
+    \t\tsfx("Click", 0.5)
     \t\tGoToStage:FireServer(target)
     \tend
     end

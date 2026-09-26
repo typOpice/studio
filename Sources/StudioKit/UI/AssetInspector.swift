@@ -101,8 +101,18 @@ struct SoundInspector: View {
                 LabeledRow("SoundId") {
                     Picker("", selection: Binding(get: { sound.soundId }, set: { id in change("Set SoundId") { $0.soundId = id } })) {
                         Text("None").tag("")
-                        ForEach(sounds) { Text($0.name).tag($0.reference) }
-                        if !sound.soundId.isEmpty && !sounds.contains(where: { $0.reference == sound.soundId }) {
+                        if !sounds.isEmpty {
+                            Section("This place") {
+                                ForEach(sounds) { Text($0.name).tag($0.reference) }
+                            }
+                        }
+                        Section("Built in") {
+                            ForEach(BuiltinSounds.catalog, id: \.name) { entry in
+                                Text("\(entry.name) — \(entry.summary)").tag(BuiltinSounds.prefix + entry.name)
+                            }
+                        }
+                        if !sound.soundId.isEmpty && !sounds.contains(where: { $0.reference == sound.soundId })
+                            && BuiltinSounds.name(of: sound.soundId) == nil {
                             Text(sound.soundId).tag(sound.soundId)
                         }
                     }
@@ -110,8 +120,8 @@ struct SoundInspector: View {
                     .pickerStyle(.menu)
                     .controlSize(.small)
                 }
-                if sounds.isEmpty {
-                    Text("Import a sound in the Explorer's Assets first.")
+                if sound.soundId.isEmpty {
+                    Text("Pick a built-in sound, or import your own in the Explorer's Assets.")
                         .font(.system(size: 10)).foregroundStyle(Color(red: 0.95, green: 0.7, blue: 0.4))
                 }
                 LabeledRow("Volume") {

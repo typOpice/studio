@@ -573,6 +573,11 @@ public enum StudioEditor {
             exit(AvatarSnapshot.renderScene(to: URL(fileURLWithPath: path), technology: technology,
                                             clockTime: clock) ? 0 : 1)
         }
+        if let flag = CommandLine.arguments.firstIndex(of: "--write-sounds") {
+            // Every built-in sound as a WAV file, to listen to.
+            let folder = URL(fileURLWithPath: flag + 1 < CommandLine.arguments.count ? CommandLine.arguments[flag + 1] : "Sounds")
+            exit(BuiltinSounds.writeAll(to: folder) ? 0 : 1)
+        }
         if let flag = CommandLine.arguments.firstIndex(of: "--make-adventure") {
             // Writes Adventure Island as a scene file.
             let path = flag + 1 < CommandLine.arguments.count ? CommandLine.arguments[flag + 1] : "Adventure Island.json"

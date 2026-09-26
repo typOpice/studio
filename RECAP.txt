@@ -352,6 +352,15 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host who chose Mega Obby on the picker and a player who joined from theirs.
    New files: UI/GamePickerView.swift, GamePickerSelfTest.swift.
 
+32. Sound for Nightfall and Mega Obby, 2026-09-26.
+   Studio now has built-in sounds that it makes itself, with no sound files: 20 effects (Swing, Hit, Shoot, Groan, ZombieDown, Hurt, Oof, Pickup, Sparkle, PowerUp, Click, Checkpoint, Boing, Jump, Crack, Chime, Gong, Rumble, Victory, Defeat) and 3 pieces of looping music (CalmDay, NightHunt, ObbyRun).
+   Use one by setting a Sound's SoundId to "builtin://Name" in a script, or by picking it under "Built in" in the SoundId menu in Studio. Places using them stay small, and network games only send the names.
+   Nightfall: calm music by day and tense music at night, a gong as night falls, a chime at dawn, zombies that groan, and swing, hit, blaster and zombie-falling sounds heard from where they happen. Picking up orbs, power-ups, getting hurt and the end of a run are heard only by you. Finding a key and the gate opening are heard by everyone.
+   Mega Obby: bouncy music, jump pads that boing, fading tiles that crack, and your own checkpoint ding, finish fanfare and "oof" when you fall.
+   To listen to them all as WAV files: swift run StudioApp --write-sounds SomeFolder
+   Tested alone and with a host and a joined player (the joined player hears the host's music and jump pads; their checkpoint ding is heard only by them).
+   New files: Play/BuiltinSounds.swift, GameSoundsSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

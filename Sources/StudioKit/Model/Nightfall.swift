@@ -64,9 +64,21 @@ enum Nightfall {
             templates()
             tools()
             data()
+            sounds()
             scripts()
             hud()
             state.defaultGui = DefaultHud.version
+        }
+
+        /// Heard everywhere: the day's music (playing from the start) and the night's, and
+        /// what GameScript sounds for everyone. The rest are made where they happen.
+        mutating func sounds() {
+            sound("DayMusic", "builtin://CalmDay", volume: 0.35, looped: true, playing: true)
+            sound("NightMusic", "builtin://NightHunt", volume: 0.4, looped: true)
+            sound("NightFalls", "builtin://Gong", volume: 0.9)
+            sound("Dawn", "builtin://Chime", volume: 0.8)
+            sound("KeyFound", "builtin://Sparkle", volume: 0.8)
+            sound("GateOpens", "builtin://Rumble", volume: 1)
         }
 
         func lighting() -> LightingSettings {
@@ -506,7 +518,9 @@ enum Nightfall {
             // Arms held out in front, as zombies do.
             part("Left Arm", at(-1.5, 3.5, -0.7), Vec3(1, 1, 2.2) * s, skin, in: model, collide: false)
             part("Right Arm", at(1.5, 3.5, -0.7), Vec3(1, 1, 2.2) * s, skin, in: model, collide: false)
-            part("Head", at(0, 4.6, 0), Vec3(1.2, 1.2, 1.2) * s, skin, in: model, collide: false)
+            let head = part("Head", at(0, 4.6, 0), Vec3(1.2, 1.2, 1.2) * s, skin, in: model, collide: false)
+            // Horde.step has it groan now and then.
+            sound("Groan", "builtin://Groan", in: head, volume: 0.9, reach: 70)
             for x in [Float(-0.25), 0.25] {
                 part("Eye", at(x, 4.75, -0.62), Vec3(0.26, 0.16, 0.05) * s, rgb(255, 60, 40), material: .neon,
                      in: model, collide: false)

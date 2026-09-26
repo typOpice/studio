@@ -140,6 +140,7 @@ final class PlayController: ViewportSource, PlayerBridge {
     /// StarterPlayerScripts, then StarterCharacterScripts for that character.
     func start() {
         model.clearLocalScreenShaders()
+        BuiltinSounds.prepare(for: model)
         scripts.runsSceneScripts = !worldFromHost
         settings = model.starterPlayer
         respawnTime = settings.respawnTime

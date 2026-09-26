@@ -166,6 +166,12 @@ final class SoundSystem {
         buffer(for: asset).map { Double($0.frameLength) / $0.format.sampleRate }
     }
 
+    /// What a SoundId plays: a built-in sound ("builtin://Name") or a sound asset.
+    func buffer(forSoundId soundId: String, in model: SceneModel) -> AVAudioPCMBuffer? {
+        if soundId.hasPrefix(BuiltinSounds.prefix) { return BuiltinSounds.buffer(for: soundId) }
+        return model.asset(named: soundId).flatMap(buffer(for:))
+    }
+
     /// Any audio file AVFoundation reads, mixed down to one channel.
     static func decode(_ data: Data, fileExtension: String) -> AVAudioPCMBuffer? {
         let url = FileManager.default.temporaryDirectory
@@ -222,7 +228,7 @@ final class SoundSystem {
             let part = sound.parentID.map { model.part(id: $0) }
             // In a part that's gone, or not playing, or nothing to play: silent.
             guard sound.playing, part.map({ $0 != nil }) ?? true, finished[sound.id] != sound.plays,
-                  let asset = model.asset(named: sound.soundId), let buffer = buffer(for: asset) else {
+                  let buffer = buffer(forSoundId: sound.soundId, in: model) else {
                 if voices[sound.id] != nil { stop(sound.id) }
                 continue
             }
