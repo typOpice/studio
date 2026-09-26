@@ -14,6 +14,10 @@ enum SelfTest {
         failures = 0
         // Nothing the tests play reaches the speakers.
         SoundSystem.makeOutput = { RecordingOutput() }
+        // …and nothing they save reaches the real DataStores: a folder of their own, gone after.
+        let savedData = FileManager.default.temporaryDirectory.appendingPathComponent("StudioSelfTest-\(UUID().uuidString)")
+        DataStoreFiles.shared.directory = savedData
+        defer { try? FileManager.default.removeItem(at: savedData) }
         // `--only Name` runs one suite — quicker while working on it; the whole suite
         // still has to pass before a change is done.
         if let flag = CommandLine.arguments.firstIndex(of: "--only"), flag + 1 < CommandLine.arguments.count {
@@ -23,7 +27,7 @@ enum SelfTest {
                 "Gui": GuiSelfTest.run, "Player": PlayerSelfTest.run, "Script": ScriptSelfTest.run,
                 "Editor": { check in EditorSelfTest.run(check: check) }, "Syntax": { check in SyntaxSelfTest.run(check: check) },
                 "Utils": UtilsSelfTest.run, "Home": HomeSelfTest.run, "Nightfall": NightfallSelfTest.run,
-                "Obby": MegaObbySelfTest.run, "ShiftLock": ShiftLockSelfTest.run,
+                "Obby": MegaObbySelfTest.run, "ShiftLock": ShiftLockSelfTest.run, "DataStore": DataStoreSelfTest.run,
             ]
             guard let suite = suites[CommandLine.arguments[flag + 1]] else {
                 print("No suite called \(CommandLine.arguments[flag + 1]): \(suites.keys.sorted().joined(separator: ", "))")
@@ -83,6 +87,7 @@ enum SelfTest {
         NightfallSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         MegaObbySelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         ShiftLockSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        DataStoreSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LANSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
 
         if failures == 0 {

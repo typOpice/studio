@@ -659,6 +659,7 @@ enum RemotesSelfTest {
     // MARK: - The README's examples
 
     /// The README's module, Utils, remote, leaderstats and raycast examples, as they are written.
+    /// (Its DataStore example is DataStoreSelfTest's.)
     private static func testReadmeExamples(_ check: Checker) {
         print("\nTogether: the README's examples")
         guard let readme = try? String(contentsOfFile: "README.md", encoding: .utf8),
@@ -669,8 +670,9 @@ enum RemotesSelfTest {
         }
         let section = String(readme[start.upperBound..<end.lowerBound])
         var blocks = section.components(separatedBy: "```lua\n").dropFirst().map { $0.components(separatedBy: "```")[0] }
-        guard blocks.count == 6 else {
-            check("the README has its six examples", false, "\(blocks.count)")
+        // The seventh, DataStores, is DataStoreSelfTest's.
+        guard blocks.count == 7 else {
+            check("the README has its seven examples", false, "\(blocks.count)")
             return
         }
         let model = world()

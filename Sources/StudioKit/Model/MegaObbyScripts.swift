@@ -91,10 +91,14 @@ enum MegaObbyScripts {
     -- ObbyGame: stages and checkpoints. Each Checkpoint has a Stage number: touch one and
     -- that's where you come back to; the highest you've reached is your Stage on the
     -- leaderboard. The Finish after the last stage is a Win, with your time. The screen's
-    -- stage picker (GoToStage) takes you to any stage you've reached.
+    -- stage picker (GoToStage) takes you to any stage you've reached. Your furthest stage
+    -- and your wins are saved (a DataStore), so next time you carry on from there.
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local DataStoreService = game:GetService("DataStoreService")
     local Utils = require(ReplicatedStorage.Utils)
+
+    local Progress = DataStoreService:GetDataStore("ObbyProgress")
 
     local Notify = ReplicatedStorage.Notify
     local GoToStage = ReplicatedStorage.GoToStage
@@ -119,6 +123,23 @@ enum MegaObbyScripts {
 
     -- Where each player comes back to, the furthest they've got, and when they began.
     local current, reached, startedAt = {}, {}, {}
+
+    -- Saved by name: the same player next time, whoever hosts.
+    local function saveKey(player)
+    \treturn "player_" .. player.Name
+    end
+
+    local function save(player)
+    \tif reached[player] == nil then
+    \t\treturn
+    \tend
+    \tlocal ok, problem = pcall(function()
+    \t\tProgress:SetAsync(saveKey(player), { Stage = reached[player], Wins = player.leaderstats.Wins.Value })
+    \tend)
+    \tif not ok then
+    \t\twarn("Couldn't save " .. player.Name .. "'s progress: " .. tostring(problem))
+    \tend
+    end
 
     local function sendTo(player, stage)
     \tlocal pad = checkpoints[stage]
@@ -156,8 +177,21 @@ enum MegaObbyScripts {
     \t\tvalue.Name = name
     \t\tvalue.Parent = run
     \tend
-    \trun.Current.Value = 1
-    \tcurrent[player], reached[player], startedAt[player] = 1, 1, time()
+    \t-- Back where they got to last time.
+    \tlocal ok, saved = pcall(function()
+    \t\treturn Progress:GetAsync(saveKey(player))
+    \tend)
+    \tlocal from = 1
+    \tif ok and type(saved) == "table" then
+    \t\tfrom = math.clamp(math.floor(tonumber(saved.Stage) or 1), 1, last)
+    \t\twins.Value = tonumber(saved.Wins) or 0
+    \tend
+    \tstage.Value = from
+    \trun.Current.Value = from
+    \tcurrent[player], reached[player], startedAt[player] = from, from, time()
+    \tif from > 1 then
+    \t\tNotify:FireClient(player, "Welcome back! You're on stage " .. from .. ".")
+    \tend
 
     \tlocal function arrived(character)
     \t\tsendTo(player, current[player])
@@ -187,6 +221,7 @@ enum MegaObbyScripts {
     \t\t\treached[player] = stage
     \t\t\tplayer.leaderstats.Stage.Value = stage
     \t\t\tNotify:FireClient(player, worlds[stage] or ("Stage " .. stage .. "!"))
+    \t\t\tsave(player)
     \t\tend
     \tend)
     end
@@ -199,6 +234,7 @@ enum MegaObbyScripts {
     \t\treturn
     \tend
     \tplayer.leaderstats.Wins.Value += 1
+    \tsave(player)
     \tlocal took = Utils.formatTime(time() - startedAt[player])
     \tNotify:FireClient(player, "You beat all " .. last .. " stages in " .. took .. "!")
     \tNotify:FireAllClients(player.Name .. " finished the Mega Obby!")
@@ -217,6 +253,7 @@ enum MegaObbyScripts {
     end)
 
     Players.PlayerRemoving:Connect(function(player)
+    \tsave(player)
     \tcurrent[player], reached[player], startedAt[player] = nil, nil, nil
     end)
 

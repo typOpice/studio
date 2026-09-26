@@ -40,7 +40,7 @@ final class ClientSession: ObservableObject {
 
     func open(_ url: URL) throws {
         let data = try Data(contentsOf: url)
-        try load(data, named: url.deletingPathExtension().lastPathComponent)
+        try load(data, named: url.deletingPathExtension().lastPathComponent, file: url)
     }
 
     /// The sample game: what the client opens on when started by itself.
@@ -78,10 +78,12 @@ final class ClientSession: ObservableObject {
         if wasPlaying { play() }
     }
 
-    private func load(_ data: Data, named name: String, upgrading: Bool = true) throws {
+    private func load(_ data: Data, named name: String, upgrading: Bool = true, file: URL? = nil) throws {
         let wasPlaying = player != nil
         stopPlaying()
         try model.loadScene(from: data, upgrading: upgrading)
+        // One from before places had ids: its DataStores go by where the file is.
+        if let file { model.ensurePlaceID(from: file) }
         sceneName = name
         if wasPlaying { play() }
     }

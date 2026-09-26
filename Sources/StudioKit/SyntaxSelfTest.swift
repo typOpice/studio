@@ -38,7 +38,7 @@ enum SyntaxSelfTest {
 
         check("GetService(\" lists every service", Set(labels("game:GetService(\"")) == Set(LuauAPI.services.keys),
               "\(labels("game:GetService(\""))")
-        check("…in order", labels("game:GetService(\"").prefix(3) == ["Animations", "Lighting", "LogService"],
+        check("…in order", labels("game:GetService(\"").prefix(3) == ["Animations", "DataStoreService", "Lighting"],
               "\(labels("game:GetService(\"").prefix(3))")
         check("…closing the string and the call", insert("Players", "game:GetService(\"") == "Players\")")
         check("…or not, when they're closed", insert("Players", "game:GetService(\"\")", caret: 17) == "Players")

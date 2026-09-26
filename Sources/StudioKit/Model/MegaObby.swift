@@ -17,8 +17,12 @@ enum MegaObby {
     static func state() -> SceneState {
         var builder = Builder()
         builder.build()
+        builder.state.placeID = placeID
         return builder.state
     }
+
+    /// The same place wherever it's opened, so what it saves (each player's stage) is kept.
+    static let placeID = UUID(uuidString: "0B1B0B1B-0060-4060-8060-000000000060")!
 
     static func rgb(_ r: Float, _ g: Float, _ b: Float) -> Vec3 { Vec3(r, g, b) / 255 }
 

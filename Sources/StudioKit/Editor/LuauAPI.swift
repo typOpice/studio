@@ -310,6 +310,20 @@ enum LuauAPI {
             property("MessageOut", "RBXScriptSignal"), method("GetLogHistory", "", "table"),
             method("IsA", "className", "boolean")
         ],
+        "DataStoreService": [
+            method("GetDataStore", "name, scope", "DataStore"),
+            method("GetOrderedDataStore", "name, scope", "OrderedDataStore"),
+            method("GetGlobalDataStore", "", "DataStore"),
+            method("GetRequestBudgetForRequestType", "requestType", "number"), method("IsA", "className", "boolean")
+        ],
+        "DataStore": dataStoreMembers,
+        "OrderedDataStore": dataStoreMembers + [
+            method("GetSortedAsync", "ascending, pageSize, minValue, maxValue", "DataStorePages")
+        ],
+        "DataStorePages": [
+            property("IsFinished", "boolean"), method("GetCurrentPage", "", "table"),
+            method("AdvanceToNextPageAsync", "", "()"), method("IsA", "className", "boolean")
+        ],
         "ServerStorage": [
             method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name, timeout", "Instance"),
             method("GetChildren", "", "table"), method("GetDescendants", "", "table")
@@ -611,6 +625,14 @@ enum LuauAPI {
         "TextChatService": "TextChatService", "StarterPack": "StarterPack", "SoundService": "SoundService"
     ]
 
+    /// A DataStore's members, and an OrderedDataStore's before its pages.
+    private static let dataStoreMembers: [CompletionItem] = [
+        property("Name", "string"),
+        method("GetAsync", "key", "any"), method("SetAsync", "key, value", "()"),
+        method("UpdateAsync", "key, transform", "any"), method("RemoveAsync", "key", "any"),
+        method("IncrementAsync", "key, delta", "number"), method("IsA", "className", "boolean")
+    ]
+
     /// A Value object's members.
     private static let valueMembers: [CompletionItem] = [
         property("Name", "string"), property("Value", "any"), property("Parent", "Instance"),
@@ -625,7 +647,7 @@ enum LuauAPI {
         "Animations": "Animations", "Lighting": "Lighting", "TextChatService": "TextChatService",
         "StarterPack": "StarterPack", "SoundService": "SoundService",
         "ReplicatedStorage": "ReplicatedStorage", "ServerScriptService": "ServerScriptService",
-        "ServerStorage": "ServerStorage", "LogService": "LogService"
+        "ServerStorage": "ServerStorage", "LogService": "LogService", "DataStoreService": "DataStoreService"
     ]
 
     static let globalFunctions: [CompletionItem] = [

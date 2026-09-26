@@ -24,8 +24,12 @@ enum Nightfall {
         model.state = builder.state
         model.setToolPlace(builder.sword, .starterPack)
         for id in builder.stored { model.setStorage(id, .serverStorage) }
+        model.placeID = placeID
         return model.state
     }
+
+    /// The same place wherever it's opened, so what it saves (the best run) is kept.
+    static let placeID = UUID(uuidString: "0B16B7FA-0000-4A11-8000-000013131313")!
 
     static func rgb(_ r: Float, _ g: Float, _ b: Float) -> Vec3 { Vec3(r, g, b) / 255 }
 

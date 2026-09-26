@@ -145,10 +145,14 @@ struct SceneState: Equatable, Codable {
     /// Which default HUD the scene has been given (`DefaultHud.version`); 0 is a scene
     /// from before there was one.
     var defaultGui = 0
+    /// Which place this is, for what its DataStores saved: made with the place, kept in
+    /// its file. The sample games have fixed ones, so their players' progress carries
+    /// from one session to the next. Nil in a file from before (see `ensurePlaceID`).
+    var placeID: UUID?
 
     private enum CodingKeys: String, CodingKey {
         case parts, scripts, shaders, screenShaderID, screenShaderIDs, starterPlayer, animations, lighting, groups
-        case attachments, constraints, starterGui, assets, sounds, dataObjects, defaultGui
+        case attachments, constraints, starterGui, assets, sounds, dataObjects, defaultGui, placeID
     }
 
     init(parts: [Part] = [], scripts: [ScriptObject] = [], shaders: [ShaderObject] = [],
@@ -158,8 +162,9 @@ struct SceneState: Equatable, Codable {
          groups: [SceneGroup] = [], attachments: [SceneAttachment] = [],
          constraints: [SceneConstraint] = [], starterGui: [StarterGuiObject] = [],
          assets: [SceneAsset] = [], sounds: [SceneSound] = [], dataObjects: [DataObject] = [],
-         defaultGui: Int = 0) {
+         defaultGui: Int = 0, placeID: UUID? = nil) {
         self.defaultGui = defaultGui
+        self.placeID = placeID
         self.dataObjects = dataObjects
         self.starterGui = starterGui
         self.assets = assets
@@ -196,6 +201,7 @@ struct SceneState: Equatable, Codable {
         sounds = try c.decodeIfPresent([SceneSound].self, forKey: .sounds) ?? []
         dataObjects = try c.decodeIfPresent([DataObject].self, forKey: .dataObjects) ?? []
         defaultGui = try c.decodeIfPresent(Int.self, forKey: .defaultGui) ?? 0
+        placeID = try c.decodeIfPresent(UUID.self, forKey: .placeID)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -217,6 +223,7 @@ struct SceneState: Equatable, Codable {
         if !sounds.isEmpty { try c.encode(sounds, forKey: .sounds) }
         if !dataObjects.isEmpty { try c.encode(dataObjects, forKey: .dataObjects) }
         if defaultGui > 0 { try c.encode(defaultGui, forKey: .defaultGui) }
+        try c.encodeIfPresent(placeID, forKey: .placeID)
     }
 }
 

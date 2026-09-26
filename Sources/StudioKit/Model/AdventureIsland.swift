@@ -17,8 +17,12 @@ enum AdventureIsland {
     static func state() -> SceneState {
         var builder = Builder()
         builder.build()
+        builder.state.placeID = placeID
         return builder.state
     }
+
+    /// The same place wherever it's opened, so what it saves (gems, wins) is kept.
+    static let placeID = UUID(uuidString: "AD7E0000-15A0-4D00-8000-000020260926")!
 
     /// Everything's colours, by name.
     static func rgb(_ r: Float, _ g: Float, _ b: Float) -> Vec3 { Vec3(r, g, b) / 255 }

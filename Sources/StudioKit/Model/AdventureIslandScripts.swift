@@ -199,10 +199,12 @@ enum AdventureIslandScripts {
     -- gems go to whoever touches them first and come back later; the Quest
     -- RemoteFunction trades gems for a crown; rewards (from here, or the Obby's
     -- BindableEvent) are accessories, put back on every time the character respawns.
+    -- Gems, Wins and rewards are saved (a DataStore) and back next time you play.
     local Players = game:GetService("Players")
     local RunService = game:GetService("RunService")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local ServerStorage = game:GetService("ServerStorage")
+    local DataStoreService = game:GetService("DataStoreService")
 
     local Notify = ReplicatedStorage:WaitForChild("Notify")
     local Quest = ReplicatedStorage:WaitForChild("Quest")
@@ -210,6 +212,25 @@ enum AdventureIslandScripts {
 
     local GEM_RETURN = 30
     local rewards = {}
+
+    -- Saved by name: the same player next time, whoever hosts.
+    local Saves = DataStoreService:GetDataStore("IslandProgress")
+    local function saveKey(player)
+    \treturn "player_" .. player.Name
+    end
+
+    local function save(player)
+    \tlocal stats = player:FindFirstChild("leaderstats")
+    \tif stats == nil or rewards[player] == nil then
+    \t\treturn
+    \tend
+    \tlocal ok, problem = pcall(function()
+    \t\tSaves:SetAsync(saveKey(player), { Gems = stats.Gems.Value, Wins = stats.Wins.Value, Rewards = rewards[player] })
+    \tend)
+    \tif not ok then
+    \t\twarn("Couldn't save " .. player.Name .. "'s progress: " .. tostring(problem))
+    \tend
+    end
 
     local function wear(player, item, name)
     \tlocal character = player.Character
@@ -229,6 +250,7 @@ enum AdventureIslandScripts {
     \tend
     \towned[name] = item
     \twear(player, item, name)
+    \tsave(player)
     \treturn true
     end
 
@@ -242,12 +264,35 @@ enum AdventureIslandScripts {
     \t\tvalue.Name = stat
     \t\tvalue.Parent = leaderstats
     \tend
+    \t-- What they had last time, then kept up to date.
+    \tlocal ok, saved = pcall(function()
+    \t\treturn Saves:GetAsync(saveKey(player))
+    \tend)
+    \tif ok and type(saved) == "table" then
+    \t\tleaderstats.Gems.Value = tonumber(saved.Gems) or 0
+    \t\tleaderstats.Wins.Value = tonumber(saved.Wins) or 0
+    \t\tfor name, item in (if type(saved.Rewards) == "table" then saved.Rewards else {}) do
+    \t\t\tif type(name) == "string" and type(item) == "string" then
+    \t\t\t\trewards[player][name] = item
+    \t\t\tend
+    \t\tend
+    \tend
+    \tfor _, stat in leaderstats:GetChildren() do
+    \t\tstat.Changed:Connect(function()
+    \t\t\tsave(player)
+    \t\tend)
+    \tend
     \tplayer.CharacterAdded:Connect(function()
     \t\ttask.wait()
     \t\tfor name, item in rewards[player] or {} do
     \t\t\twear(player, item, name)
     \t\tend
     \tend)
+    \tif player.Character then
+    \t\tfor name, item in rewards[player] do
+    \t\t\twear(player, item, name)
+    \t\tend
+    \tend
     end
 
     for _, player in Players:GetPlayers() do
@@ -255,6 +300,7 @@ enum AdventureIslandScripts {
     end
     Players.PlayerAdded:Connect(setUp)
     Players.PlayerRemoving:Connect(function(player)
+    \tsave(player)
     \trewards[player] = nil
     end)
 

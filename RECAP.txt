@@ -333,6 +333,18 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    New file: ShiftLockSelfTest.swift.
 
 
+30. Saving progress (DataStores), 2026-09-26.
+   Scripts can now save things between games with DataStoreService, as in Roblox: GetDataStore, then GetAsync, SetAsync, UpdateAsync, RemoveAsync and IncrementAsync. GetOrderedDataStore keeps numbers sorted for top-score boards (GetSortedAsync, in pages).
+   A value can be a number, a string, true/false, or a table of them. Anything else (a part, a Vector3, a function) is refused with Roblox's own error message.
+   Only server Scripts can use it; a LocalScript gets Roblox's "DataStore can't be accessed from client" error.
+   What's saved is kept on the Mac running the game (the host, in a network game), in Library/Application Support/Studio/DataStores, a folder per place. Every place now has its own id, saved in its file. Older files get one from where they are, without being marked as edited.
+   Studio's File menu has "Clear Saved Data for This Place..." to start over.
+   The sample games save: Adventure Island your gems, wins and rewards; Nightfall your best score, and shows the top five after every run; Mega Obby your furthest stage and wins, and you carry on from that checkpoint ("Welcome back!").
+   The README has a new section, "Saving progress: DataStores", with an example (coins that are still there next time).
+   The self tests save into a temporary folder, so they never touch your real saves.
+   Tested alone and with a host and a joined player. The joined player's own game saves nothing; the host keeps their stage by name, and they're back on it when they join again.
+   New files: Model/DataStores.swift, Scripting/ScriptRuntime+DataStore.swift, DataStoreSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

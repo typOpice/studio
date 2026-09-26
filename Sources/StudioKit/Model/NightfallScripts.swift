@@ -516,12 +516,14 @@ enum NightfallScripts {
     -- faster and tougher each night — then a short dawn and a power-up. Three keys are
     -- hidden in new places every run; find them all and the north gate opens. A run ends
     -- when you fall, or escape through the gate: you see how you did, and a new run
-    -- starts from nothing. The numbers to tune it by are in ServerStorage.Settings.
+    -- starts from nothing. The numbers to tune it by are in ServerStorage.Settings. Each
+    -- player's best score is saved (an OrderedDataStore), and the top five shown.
     local Players = game:GetService("Players")
     local RunService = game:GetService("RunService")
     local Lighting = game:GetService("Lighting")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local ServerStorage = game:GetService("ServerStorage")
+    local DataStoreService = game:GetService("DataStoreService")
 
     local Utils = require(ReplicatedStorage.Utils)
     local Horde = require(ServerStorage.Horde)
@@ -535,6 +537,23 @@ enum NightfallScripts {
     local Fire = ReplicatedStorage.Fire
     local Dash = ReplicatedStorage.Dash
     local RunOver = ReplicatedStorage.RunOver
+
+    -- Everyone's best, by name, sorted for the top scores.
+    local BestScores = DataStoreService:GetOrderedDataStore("BestScores")
+    local function saveKey(player)
+    \treturn "player_" .. player.Name
+    end
+
+    local function topScores()
+    \tlocal ok, top = pcall(function()
+    \t\tlocal list = {}
+    \t\tfor _, entry in BestScores:GetSortedAsync(false, 5):GetCurrentPage() do
+    \t\t\ttable.insert(list, { name = string.gsub(entry.key, "^player_", ""), score = entry.value })
+    \t\tend
+    \t\treturn list
+    \tend)
+    \treturn if ok then top else {}
+    end
 
     local gate = workspace.Gate
     local shut = { gate.DoorLeft.Position, gate.DoorRight.Position }
@@ -852,10 +871,16 @@ enum NightfallScripts {
     \t\tlocal record = score > best.Value
     \t\tif record then
     \t\t\tbest.Value = score
+    \t\t\tlocal ok, problem = pcall(function()
+    \t\t\t\tBestScores:SetAsync(saveKey(player), score)
+    \t\t\tend)
+    \t\t\tif not ok then
+    \t\t\t\twarn("Couldn't save " .. player.Name .. "'s best: " .. tostring(problem))
+    \t\t\tend
     \t\tend
     \t\tRunOver:FireClient(player, {
     \t\t\tescaped = escaped, night = world.night, nights = stats.nights, kills = stats.kills, keys = stats.keys,
-    \t\t\tpicks = stats.taken, score = score, best = best.Value, record = record,
+    \t\t\tpicks = stats.taken, score = score, best = best.Value, record = record, top = topScores(),
     \t\t})
     \tend
     \t-- The blaster belonged to that run.
@@ -897,6 +922,13 @@ enum NightfallScripts {
     \t\tlocal value = Instance.new("IntValue")
     \t\tvalue.Name = name
     \t\tvalue.Parent = leaderstats
+    \tend
+    \t-- Their best from last time.
+    \tlocal ok, saved = pcall(function()
+    \t\treturn BestScores:GetAsync(saveKey(player))
+    \tend)
+    \tif ok and type(saved) == "number" then
+    \t\tleaderstats.Best.Value = saved
     \tend
     \tlocal run = Instance.new("Folder")
     \trun.Name = "Run"
@@ -1209,7 +1241,7 @@ enum NightfallScripts {
     -- How the run went.
     local summary = make("Frame", {
     \tName = "RunOver", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42),
-    \tSize = UDim2.fromOffset(420, 250), BackgroundColor3 = Color3.fromRGB(14, 16, 22), BackgroundTransparency = 0.1,
+    \tSize = UDim2.fromOffset(420, 290), BackgroundColor3 = Color3.fromRGB(14, 16, 22), BackgroundTransparency = 0.1,
     \tVisible = false,
     }, screen)
     make("UICorner", { CornerRadius = UDim.new(0, 14) }, summary)
@@ -1350,6 +1382,14 @@ enum NightfallScripts {
     \t\t"",
     \t\t"Score: " .. result.score .. (if result.record then "  (a new best!)" else "   Best: " .. result.best),
     \t}
+    \tif result.top and #result.top > 0 then
+    \t\tlocal names = {}
+    \t\tfor _, entry in result.top do
+    \t\t\ttable.insert(names, entry.name .. " " .. entry.score)
+    \t\tend
+    \t\ttable.insert(lines, "")
+    \t\ttable.insert(lines, "Top scores: " .. table.concat(names, ", "))
+    \tend
     \tsummaryLines.Text = table.concat(lines, "\\n")
     \tsummary.Visible = true
     \ttask.delay(7, function()

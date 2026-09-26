@@ -8,10 +8,15 @@ import simd
 /// joined player each with their own stage.
 enum MegaObbySelfTest {
     static func run(check: Checker) {
+        // Stages are saved; each test starts at stage 1 (DataStoreSelfTest checks the saving).
+        let fresh = { DataStoreFiles.shared.clear(place: MegaObby.placeID) }
         testPlace(check)
         testEveryStageCanBeDone(check)
+        fresh()
         testPlaying(check)
+        fresh()
         testTogether(check)
+        fresh()
     }
 
     private static let frame: Float = 1.0 / 60

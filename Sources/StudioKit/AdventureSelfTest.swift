@@ -10,10 +10,17 @@ import simd
 enum AdventureSelfTest {
 
     static func run(check: Checker) {
+        // The island saves progress; each test starts with nothing saved (DataStoreSelfTest
+        // checks the saving).
+        let fresh = { DataStoreFiles.shared.clear(place: AdventureIsland.placeID) }
         testPlace(check)
+        fresh()
         testPlaying(check)
+        fresh()
         testObbyAndLab(check)
+        fresh()
         testTwoPlayers(check)
+        fresh()
     }
 
     private static let frame: Float = 1.0 / 60

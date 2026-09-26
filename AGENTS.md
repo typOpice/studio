@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2397 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2456 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -144,6 +144,7 @@ listed in §9.
 | `NightfallSelfTest.swift` | Nightfall: the place (areas, templates in ServerStorage, the sword in StarterPack, scripts, key spots and spawn points, four shaders compiled); played (a day, night 1's zombies coming for you and biting, the sword taking them down, an orb coming to you, dawn and a choice of three taken with Z, the armory's blaster on 2 shooting where the pointer is, three keys and the gate opening, escaping with a score, the world and the run starting again, falling and a new run); a host and a joined player (the night and zombies reaching them, their sword run by the host's tool script and the kill theirs, their own power-up choice, a key they find counting for everyone) |
 | `MegaObbySelfTest.swift` | Mega Obby: 60 numbered checkpoints in order, a stage between each, six named worlds, the finish, every kind of obstacle, heights, scripts, shaders; every stage possible (each gap and rise within a running jump worked out from the character's speed, jump and gravity; trusses tall enough; the jump pad reaching its landing); played (stage 1, checkpoints and the banner, a world's name, a kill brick and back at the checkpoint with a death counted, Q and E within what you've reached, fading tiles, movers, spinners, jump pads, R, the finish's Win); a host and a joined player each with their own stage, checkpoint and picker |
 | `ShiftLockSelfTest.swift` | Shift lock: on in new places, old files and every template; kept off when a place turns it off; the controls panel's line, the sample games keeping their own; Left Ctrl on (the pointer held, LockCenter and the crosshair, the camera over the right shoulder, the body turned with the camera and strafing), off again (the body turning to where it walks); a place with it off, and `Player.DevEnableMouseLock` read and set false by a script; a joined player's own shift lock, their facing seen by the host |
+| `DataStoreSelfTest.swift` | DataStores: a place id for each new place and New Scene, saved and reopened, one from its path for an old file (the same each time, not marked edited), fixed ones for the sample games (from the home page too); kept on disk by place, store and scope, files named safely, read back, removed, cleared for one place only; from Luau: the same store each time, tables read back as copies, UpdateAsync (and nil leaving it), IncrementAsync, RemoveAsync, number keys, scopes, every refusal (Instance, Vector3, function, NaN, mixed and cyclic tables, nil, long keys, incrementing text, fractions in an ordered store) with nothing written, ordered pages both ways and between two values, GetGlobalDataStore, a LocalScript refused, Run mode; saved across plays, reopened, another place apart, cleared; completion; the README example; Mega Obby, Nightfall and Adventure Island carrying on next time; a joined player saving nothing themselves, the host keeping their stage by name, and on stage 4 when they join again |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -288,6 +289,10 @@ Sources/StudioKit/
                                    and ServerStorage left out of what joined players get
   Scripting/ScriptRuntime+Data.swift  `data.*` (Folders, Values, remotes as data objects),
                                    `module.*`, `workspace.raycast`
+  Scripting/ScriptRuntime+DataStore.swift  `datastore.*`: DataStoreService's reads and writes,
+                                   on the machine running the scene's scripts only
+  Model/DataStores.swift           DataStoreFiles (what DataStores keep, a folder per place),
+                                   `UUID(stableFrom:)`, `ensurePlaceID`
   Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them
   Model/PlaceTemplates.swift       the home page's templates (Baseplate, Obby and its script,
                                    Starter Scene, Empty, Adventure Island) and `loadTemplate`
@@ -1279,6 +1284,21 @@ Roughly ordered by how much time they will cost you.
     The controls panel's lines are numbered by position. A game changing one uses
     `DefaultHud.relabel(key:)`, never a line number.
 
+107. **DataStores belong to a place, by `SceneState.placeID`.** New scenes (clearScene,
+    the starter scene) get a fresh id; the sample games a fixed one (`placeID` on
+    AdventureIsland, Nightfall, MegaObby), so they keep their data wherever opened.
+    - A file without one gets `UUID(stableFrom:)` its path when opened, through
+      `ensurePlaceID` (SceneDocument.open, ClientSession.open). It is set outside
+      `commit`, so opening never marks the place edited.
+    - `SceneState` has a hand-written `encode(to:)`: anything new in it must be added
+      there too. `placeID` once wasn't, and every save lost it.
+    - `DataStoreFiles.shared` writes through at once, as JSON of the library's own
+      encoding ("$t" lists). `datastore.*` answers nothing unless `runsSceneScripts`,
+      and the Luau library refuses LocalScripts before that.
+    - The self-tests point `DataStoreFiles.shared.directory` at a temporary folder (in
+      `SelfTest.run`), so they never touch real saves. The sample games' suites clear
+      their place between tests, since each test expects to start with nothing saved.
+
 ## 8. Recipes
 
 ### Add a GUI class or property
@@ -1519,6 +1539,10 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
 - **Script and shader text edits are not in the scene undo stack** — the text view owns
   its own undo. Deliberate.
 - **`Part.locked` excludes a part from picking but not from collision.**
+- **DataStores** have no request budgets or throttling (every call succeeds at once and
+  `GetRequestBudgetForRequestType` says 100), no versions or `DataStoreKeyInfo`, no
+  `ListKeysAsync`/`ListDataStoresAsync`, no MemoryStoreService, and no size limit per
+  key. They are kept on the host's disk, so a player's progress follows whoever hosts.
 - **Nightfall's zombies** don't path-find, and don't know about walls added after the
   game starts; nor do they climb. With every way blocked they stand still.
 - **Screen effects** all read the world's depth (not an earlier effect's), run in

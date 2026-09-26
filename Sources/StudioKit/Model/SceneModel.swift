@@ -52,6 +52,8 @@ final class SceneModel: ObservableObject {
     @Published var sounds: [SceneSound] = []
     /// Folders, Value objects and remotes (see DataObjects.swift), and the one selected.
     @Published var dataObjects: [DataObject] = []
+    /// Which place this is, for DataStores (SceneState.placeID).
+    @Published var placeID: UUID?
     @Published var selectedDataObject: UUID? {
         didSet { if selectedDataObject != nil { leaveOthers(for: \.selectedDataObject) } }
     }
@@ -223,7 +225,8 @@ final class SceneModel: ObservableObject {
                          screenShaderIDs: screenShaderIDs, starterPlayer: starterPlayer,
                          animations: animations, lighting: lighting, groups: groups,
                          attachments: attachments, constraints: constraints, starterGui: starterGui,
-                         assets: assets, sounds: sounds, dataObjects: dataObjects, defaultGui: defaultGui) }
+                         assets: assets, sounds: sounds, dataObjects: dataObjects, defaultGui: defaultGui,
+                         placeID: placeID) }
         set {
             parts = newValue.parts
             groups = newValue.groups
@@ -235,6 +238,7 @@ final class SceneModel: ObservableObject {
             dataObjects = newValue.dataObjects
             if let id = selectedDataObject, !dataObjects.contains(where: { $0.id == id }) { selectedDataObject = nil }
             defaultGui = newValue.defaultGui
+            placeID = newValue.placeID
             scripts = newValue.scripts
             shaders = newValue.shaders
             screenShaderIDs = newValue.screenShaderIDs
@@ -485,6 +489,8 @@ final class SceneModel: ObservableObject {
             assets = []
             sounds = []
             defaultGui = DefaultHud.version
+            // A new place, with nothing saved yet.
+            placeID = UUID()
             scripts = hud.scripts + [UtilsModule.make()]
             dataObjects = []
             shaders = []

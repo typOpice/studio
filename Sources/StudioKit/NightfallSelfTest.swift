@@ -7,9 +7,14 @@ import simd
 /// gate, escaping, falling and a new run; and a host and a joined player together.
 enum NightfallSelfTest {
     static func run(check: Checker) {
+        // Best scores are saved; each test starts with none (DataStoreSelfTest checks the saving).
+        let fresh = { DataStoreFiles.shared.clear(place: Nightfall.placeID) }
         testPlace(check)
+        fresh()
         testPlaying(check)
+        fresh()
         testTogether(check)
+        fresh()
     }
 
     private static let frame: Float = 1.0 / 60
@@ -61,7 +66,7 @@ enum NightfallSelfTest {
     }
 
     /// The zombies in the world: each Model in workspace.Zombies, and where it is.
-    private static func zombies(_ model: SceneModel) -> [(id: UUID, position: Vec3)] {
+    static func zombies(_ model: SceneModel) -> [(id: UUID, position: Vec3)] {
         guard let folder = model.groups.first(where: { $0.name == "Zombies" && $0.kind == .folder }) else { return [] }
         return model.groups.filter { $0.parentID == folder.id }.compactMap { group in
             model.pivot(of: group.id).map { (group.id, $0.position) }
@@ -69,7 +74,7 @@ enum NightfallSelfTest {
     }
 
     /// A place ready to play fast: a one-second day, a two-second dawn, two zombies a night.
-    private static func quick(_ model: SceneModel, day: Double = 1) {
+    static func quick(_ model: SceneModel, day: Double = 1) {
         model.loadTemplate(.nightfall)
         for (name, number) in [("DayLength", day), ("DawnLength", 2), ("FirstNight", 2), ("MorePerNight", 0)] {
             if let id = value(model, name)?.id { model.updateDataObject(id: id) { _ = $0.setValue(.number(number)) } }
@@ -86,7 +91,7 @@ enum NightfallSelfTest {
         return session.gui.objects.values.first { $0.name == name && $0.parent == outer.id }
     }
 
-    private static func press(_ session: PlayController, _ key: String) {
+    static func press(_ session: PlayController, _ key: String) {
         session.key(key, pressed: true)
         session.step(dt: frame)
         session.key(key, pressed: false)
@@ -112,7 +117,7 @@ enum NightfallSelfTest {
     }
 
     /// Swings at a zombie right in front (the way a still player faces, −Z) until it falls.
-    private static func slay(_ session: PlayController, _ model: SceneModel, zombie id: UUID) -> Bool {
+    static func slay(_ session: PlayController, _ model: SceneModel, zombie id: UUID) -> Bool {
         for _ in 0..<12 {
             guard model.group(id: id) != nil else { return true }
             place(model, zombie: id, at: session.character.position + Vec3(0, 0, -3))

@@ -52,6 +52,8 @@ final class SceneDocument: ObservableObject {
 
     func open(_ source: URL) throws {
         try model.loadScene(from: Data(contentsOf: source))
+        // One from before places had ids: its DataStores go by where the file is.
+        model.ensurePlaceID(from: source)
         url = source
         savedRevision = model.revision
         NSDocumentControllerNoteRecent(source)

@@ -114,6 +114,7 @@ extension SceneModel {
         let hud = DefaultHud.make()
         starterGui = hud.objects
         defaultGui = DefaultHud.version
+        placeID = UUID()
         assets = []
         sounds = []
         dataObjects = []

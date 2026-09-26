@@ -158,6 +158,8 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         add(to: fileMenu, "Save Selection as Model…", #selector(saveModel), "e")
         add(to: fileMenu, "Insert Model…", #selector(insertModel), "i")
         fileMenu.addItem(.separator())
+        add(to: fileMenu, "Clear Saved Data for This Place…", #selector(clearSavedData), "")
+        fileMenu.addItem(.separator())
         add(to: fileMenu, "Load Starter Scene", #selector(loadStarter), "")
         add(to: fileMenu, "Open \(AdventureIsland.name) (Sample Game)", #selector(loadAdventure), "")
         add(to: fileMenu, "Open \(Nightfall.name) (Sample Game)", #selector(loadNightfall), "")
@@ -374,6 +376,9 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         case #selector(groupModel): item.title = inCode ? "Find Next" : "Group as Model"
         case #selector(deleteSelection): item.title = inCode ? "Delete to Start of Line" : "Delete"
         case #selector(closeTab): return session.activeDocument != nil
+        // Only when there's something to clear, and not while the game is using it.
+        case #selector(clearSavedData):
+            return !session.isPlaying && model.placeID.map(DataStoreFiles.shared.hasData(place:)) == true
         default: break
         }
         return true
@@ -496,6 +501,20 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         }
     }
 
+    /// Forgets what this place's DataStores kept — every player's progress — once asked.
+    @objc private func clearSavedData() {
+        guard let place = model.placeID else { return }
+        let alert = NSAlert()
+        alert.messageText = "Clear everything this place's scripts saved?"
+        alert.informativeText = "What its DataStores kept — every player's progress — is forgotten. This can't be undone."
+        alert.addButton(withTitle: "Clear Saved Data")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        DataStoreFiles.shared.clear(place: place)
+        model.statusText = "Cleared this place's saved data"
+    }
+
     private func present(_ error: Error, _ message: String) {
         let alert = NSAlert()
         alert.messageText = message
@@ -510,6 +529,11 @@ public enum StudioEditor {
     public static func run() -> Never {
         if CommandLine.arguments.contains("--selftest") {
             exit(SelfTest.run())
+        }
+        // Pictures play the sample games; what they save goes nowhere that matters.
+        if CommandLine.arguments.contains(where: { $0.hasPrefix("--render") }) {
+            DataStoreFiles.shared.directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("StudioRender-\(UUID().uuidString)")
         }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-panel") {
             let arguments = CommandLine.arguments

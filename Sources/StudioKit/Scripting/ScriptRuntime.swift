@@ -337,6 +337,7 @@ final class ScriptRuntime {
         case "workspace" where name == "workspace.raycast": return raycast(arguments)
         case "part", "workspace": return partsCall(name, arguments)
         case "data": return dataCall(name, arguments)
+        case "datastore": return dataStoreCall(name, arguments)
         case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)

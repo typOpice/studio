@@ -1,5 +1,6 @@
 // The Luau library, part 15 of 16: data objects (Folders, Values, remotes), ModuleScripts
-// and require, ReplicatedStorage and ServerScriptService, and workspace:Raycast.
+// and require, ReplicatedStorage and ServerScriptService, DataStoreService, and
+// workspace:Raycast.
 //
 // The parts run in order as one chunk (see `LuauLibrary.inOrder` in StudioLibrary.swift),
 // so the locals of earlier parts are in scope here and later parts may use this one's.
@@ -932,6 +933,225 @@ do
 			return fallback(name) or dataKit.playerChild(number, name)
 		end, "Player", name, timeout)
 	end
+
+	--------------------------------------------------------------------------------
+	-- DataStoreService: what's kept between games, by the host (`datastore.*`) under the
+	-- place's id — for the server's scripts only, as in Roblox. A value must be one Roblox
+	-- could store: a boolean, a finite number, a string, or a table of them with either
+	-- list or name keys. What's read is a fresh copy each time.
+
+	local stores = { opened = {} }
+
+	-- The storable form of a value (tables as "$t" lists), or nil and what's wrong with it.
+	function stores.encode(value, seen)
+		local kind = typeof(value)
+		if kind == "boolean" or kind == "string" then
+			return value
+		elseif kind == "number" then
+			if value ~= value or value == math.huge or value == -math.huge then
+				return nil, "Cannot store NaN or infinity in data store"
+			end
+			return value
+		elseif kind == "table" then
+			seen = seen or {}
+			if seen[value] then
+				return nil, "Cannot store a table that contains itself in data store"
+			end
+			seen[value] = true
+			local list = { "$t" }
+			local named, listed = false, false
+			for key, item in value do
+				if type(key) == "string" then
+					named = true
+				elseif type(key) == "number" and key >= 1 and key % 1 == 0 then
+					listed = true
+				else
+					return nil, string.format("Cannot store a table with %s keys in data store", typeof(key))
+				end
+				if named and listed then
+					return nil, "Cannot store a table with both list and name keys in data store"
+				end
+				local stored, problem = stores.encode(item, seen)
+				if problem ~= nil then
+					return nil, problem
+				end
+				table.insert(list, key)
+				table.insert(list, stored)
+			end
+			seen[value] = nil
+			return list
+		end
+		return nil, string.format("Cannot store %s in data store", kind)
+	end
+
+	function stores.serverOnly(level)
+		if not onServer() then
+			raise("DataStore can't be accessed from client", level + 1)
+		end
+	end
+
+	-- A key or name as Roblox takes it: a string (a number is made one) of 1 to 50 characters.
+	function stores.name(value, index, level)
+		if type(value) == "number" then
+			value = tostring(value)
+		end
+		if type(value) ~= "string" or value == "" then
+			raise(string.format("Argument %d missing or nil", index), level + 1)
+		end
+		if #value > 50 then
+			raise("103: Key name exceeds the 50 character limit.", level + 1)
+		end
+		return value
+	end
+
+	function stores.open(name, file, scope, ordered)
+		local function read(key)
+			return dataKit.decode(invoke("datastore.get", file, scope, key))
+		end
+		-- Called by the methods below, so errors are the caller's (level 3).
+		local function write(key, value)
+			if ordered and (type(value) ~= "number" or value % 1 ~= 0) then
+				raise("104: OrderedDataStore values must be whole numbers", 3)
+			end
+			local stored, problem = stores.encode(value)
+			if problem ~= nil then
+				raise("104: " .. problem, 3)
+			end
+			invoke("datastore.set", file, scope, key, stored)
+		end
+		local function key(value)
+			stores.serverOnly(3)
+			return stores.name(value, 1, 3)
+		end
+		local className = if ordered then "OrderedDataStore" else "DataStore"
+		local methods = {
+			GetAsync = function(_, which)
+				return read(key(which))
+			end,
+			SetAsync = function(_, which, value)
+				which = key(which)
+				if value == nil then
+					raise("Argument 2 missing or nil", 2)
+				end
+				write(which, value)
+			end,
+			UpdateAsync = function(_, which, transform)
+				which = key(which)
+				if type(transform) ~= "function" then
+					raise("Argument 2 missing or nil", 2)
+				end
+				local new = transform(read(which))
+				-- Nil leaves it as it was.
+				if new == nil then
+					return nil
+				end
+				write(which, new)
+				return read(which)
+			end,
+			RemoveAsync = function(_, which)
+				which = key(which)
+				return dataKit.decode(invoke("datastore.remove", file, scope, which))
+			end,
+			IncrementAsync = function(_, which, delta)
+				which = key(which)
+				delta = if delta == nil then 1 else tonumber(delta)
+				if delta == nil then
+					raise("Unable to cast value to number", 2)
+				end
+				local old = read(which)
+				if old ~= nil and (type(old) ~= "number" or old % 1 ~= 0) then
+					raise("IncrementAsync can only increment a whole number", 2)
+				end
+				-- Whole numbers only, as Roblox's are.
+				local new = (old or 0) + (if delta < 0 then math.ceil(delta) else math.floor(delta))
+				write(which, new)
+				return new
+			end,
+			IsA = function(_, name)
+				return name == className or name == "GlobalDataStore" or name == "Instance"
+			end,
+		}
+		if ordered then
+			-- Pages of { key = …, value = … }, sorted by value (then key), between minValue
+			-- and maxValue if given.
+			methods.GetSortedAsync = function(_, ascending, pageSize, minValue, maxValue)
+				stores.serverOnly(2)
+				pageSize = tonumber(pageSize)
+				if pageSize == nil or pageSize < 1 or pageSize > 100 then
+					raise("GetSortedAsync: pageSize must be between 1 and 100", 2)
+				end
+				pageSize = math.floor(pageSize)
+				local all = {}
+				for _, pair in invoke("datastore.entries", file, scope) do
+					local value = pair[2]
+					if type(value) == "number" and (minValue == nil or value >= minValue)
+						and (maxValue == nil or value <= maxValue) then
+						table.insert(all, { key = pair[1], value = value })
+					end
+				end
+				table.sort(all, function(a, b)
+					if a.value ~= b.value then
+						return if ascending then a.value < b.value else a.value > b.value
+					end
+					return a.key < b.key
+				end)
+				local page = 1
+				local function finished()
+					return page * pageSize >= #all
+				end
+				return service("DataStorePages", { IsFinished = finished }, {
+					GetCurrentPage = function()
+						local list = {}
+						for index = (page - 1) * pageSize + 1, math.min(page * pageSize, #all) do
+							table.insert(list, { key = all[index].key, value = all[index].value })
+						end
+						return list
+					end,
+					AdvanceToNextPageAsync = function()
+						if not finished() then
+							page += 1
+						end
+					end,
+					IsA = function(_, name)
+						return name == "DataStorePages" or name == "Pages" or name == "Instance"
+					end,
+				})
+			end
+		end
+		return service(className, { Name = function() return name end }, methods)
+	end
+
+	-- The same object each time for the same store.
+	function stores.get(name, scope, ordered)
+		stores.serverOnly(3)
+		name = stores.name(name, 1, 3)
+		scope = if scope == nil then "global" else stores.name(scope, 2, 3)
+		local file = if ordered then "ordered " .. name else name
+		local id = file .. "\0" .. scope
+		stores.opened[id] = stores.opened[id] or stores.open(name, file, scope, ordered)
+		return stores.opened[id]
+	end
+
+	services.DataStoreService = service("DataStoreService", nil, {
+		GetDataStore = function(_, name, scope)
+			return stores.get(name, scope, false)
+		end,
+		GetOrderedDataStore = function(_, name, scope)
+			return stores.get(name, scope, true)
+		end,
+		GetGlobalDataStore = function()
+			stores.serverOnly(2)
+			stores.opened["$global"] = stores.opened["$global"] or stores.open("GlobalDataStore", "$global", "global", false)
+			return stores.opened["$global"]
+		end,
+		-- Nothing here is rationed.
+		GetRequestBudgetForRequestType = function()
+			return 100
+		end,
+		IsA = function(_, className)
+			return className == "DataStoreService" or className == "Instance"
+		end,
+	})
 
 	--------------------------------------------------------------------------------
 	-- workspace:Raycast

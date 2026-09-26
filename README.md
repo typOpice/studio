@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2397 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2456 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -105,7 +105,8 @@ Walk out from the fountain in the plaza; paths lead everywhere.
 | **Whispering Woods** | trees and rocks between it all |
 
 Five gems are hidden around the island (they come back after 30 seconds). Gems and
-Wins show on the leaderboard. Eight people live there; walk up to one and press **E**
+Wins show on the leaderboard, and are saved with your rewards for next time (see
+[DataStores](#saving-progress-datastores)). Eight people live there; walk up to one and press **E**
 to talk, then **1**, **2** or **3** to answer. They turn to face you as you pass.
 
 How it's made, script by script:
@@ -165,8 +166,8 @@ up the watchtower… Find them all and the **north gate** opens. Walk through it
 you've escaped.
 
 Your run ends when you escape or fall. You see how it went (nights, kills, keys,
-power-ups, score), your best score goes on the leaderboard, and a new run starts from
-nothing.
+power-ups, score, and the top five scores), your best score goes on the leaderboard
+and is saved for next time, and a new run starts from nothing.
 
 It's co-op on a network game:
 
@@ -216,7 +217,8 @@ Each stage ends at a **checkpoint** with its number over it. Fall, or touch anyt
 red, and you're back at your last one.
 
 - **The screen:** your stage and world, a progress bar, your time and your deaths.
-- **The leaderboard:** your furthest Stage, and your Wins.
+- **The leaderboard:** your furthest Stage, and your Wins. Both are saved: next time
+  you start at your furthest checkpoint.
 - **Q** and **E** (or the arrows at the bottom) take you back and forth between
   stages you've reached, and **R** takes you back to your checkpoint.
 - **The finish** after stage 60 is a Win, with your time.
@@ -1292,6 +1294,66 @@ if result then
 	print("hit", result.Instance.Name, "at", result.Position, victim and victim.Name)
 end
 ```
+
+### Saving progress: DataStores
+
+`game:GetService("DataStoreService")` keeps things between games, as Roblox's does.
+`GetDataStore(name, scope)` gives a store; `GetAsync(key)`, `SetAsync(key, value)`,
+`UpdateAsync(key, function(old) … end)` (return `nil` to leave it), `RemoveAsync(key)`
+and `IncrementAsync(key, delta)` read and write it. A value can be a boolean, a number,
+a string or a table of them — a list or a dictionary, not both. Parts, Vector3s,
+functions and the like are refused with Roblox's `104: Cannot store …` error. What
+`GetAsync` hands back is a fresh copy each time.
+
+`GetOrderedDataStore(name)` keeps whole numbers and hands them back sorted — a
+top-scores board. `GetSortedAsync(ascending, pageSize, min, max)` gives pages of
+`{ key = …, value = … }` (`GetCurrentPage`, `IsFinished`, `AdvanceToNextPageAsync`).
+
+Only the server's scripts can use them; a LocalScript gets `DataStore can't be
+accessed from client`. What's saved is kept by the machine running the game — in a
+network game, the host — under `~/Library/Application Support/Studio/DataStores`, a
+folder per place. Every place has an id of its own, saved in its file: a place saved
+under another name keeps its data, and a new place starts with none. Save players by
+`Name`, so they're the same person next time whoever hosts. Studio's Play and the
+client share what's saved; File › **Clear Saved Data for This Place…** starts over.
+
+```lua
+-- A Script in Script Service: coins that are still there next time.
+local Players = game:GetService("Players")
+local DataStoreService = game:GetService("DataStoreService")
+local CoinStore = DataStoreService:GetDataStore("Coins")
+
+local function key(player)
+	return "player_" .. player.Name
+end
+
+local function setUp(player)
+	local leaderstats = Instance.new("Folder")
+	leaderstats.Name = "leaderstats"
+	leaderstats.Parent = player
+
+	local coins = Instance.new("IntValue")
+	coins.Name = "Coins"
+	coins.Parent = leaderstats
+
+	local ok, saved = pcall(function()
+		return CoinStore:GetAsync(key(player))
+	end)
+	if ok and saved then
+		coins.Value = saved
+	end
+	coins.Changed:Connect(function(value)
+		CoinStore:SetAsync(key(player), value)
+	end)
+end
+
+for _, player in Players:GetPlayers() do setUp(player) end
+Players.PlayerAdded:Connect(setUp)
+```
+
+The sample games save too: Adventure Island your gems, wins and rewards; Nightfall
+your best score, with the top five after every run; Mega Obby your furthest stage and
+wins, so you carry on from there.
 
 ## Wren, the second language
 
