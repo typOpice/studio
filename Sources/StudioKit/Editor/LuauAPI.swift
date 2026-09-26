@@ -344,7 +344,7 @@ enum LuauAPI {
             property("Name", "string"), property("UserId", "number"), property("Character", "Model"),
             property("CharacterAdded", "RBXScriptSignal"), property("CharacterRemoving", "RBXScriptSignal"),
             property("CameraMode", "EnumItem"), property("CameraMinZoomDistance", "number"),
-            property("CameraMaxZoomDistance", "number"),
+            property("CameraMaxZoomDistance", "number"), property("DevEnableMouseLock", "boolean"),
             property("Position", "Vector3"), property("Velocity", "Vector3"),
             property("Speed", "number"), property("Grounded", "boolean"),
             property("PlayerGui", "PlayerGui"), property("Backpack", "Backpack"),

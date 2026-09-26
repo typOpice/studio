@@ -75,6 +75,8 @@ struct StarterPlayerInspector: View {
                     }
                     number("MinZoomDistance", \.cameraMinZoomDistance, range: 0.5...1000)
                     number("MaxZoomDistance", \.cameraMaxZoomDistance, range: 0.5...1000)
+                    Toggle("Shift lock (Left Ctrl)", isOn: toggle(\.enableMouseLockOption))
+                        .help("EnableMouseLockOption: Left Ctrl holds the pointer, puts the camera over the shoulder and turns the character with it")
                 }
 
                 Divider().overlay(Theme.stroke)

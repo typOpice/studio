@@ -324,6 +324,14 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (each has their own stage, checkpoint and stage picker).
    New files: Model/MegaObby.swift, Model/MegaObbyScripts.swift, MegaObbySelfTest.swift.
 
+29. Shift lock, 2026-09-26.
+   Shift lock is now on in every game: every place, old ones included, and every new one. Press Left Ctrl to turn it on and off; Shift still sprints.
+   With it on, the pointer is held in the middle (with the HUD's crosshair), moving the mouse turns the camera, the camera looks over your right shoulder, and your character always faces the way the camera looks, so A and D strafe.
+   A game can turn it off in StarterPlayer (the "Shift lock (Left Ctrl)" tick box, Roblox's EnableMouseLockOption). A script can take it away from one player with player.DevEnableMouseLock = false.
+   The controls panel on screen lists "Ctrl  shift lock" in new places and the sample games.
+   Tested alone and with a host and a joined player (each has their own; the host sees the joined player face their camera).
+   New file: ShiftLockSelfTest.swift.
+
 
 THINGS TO KNOW
 

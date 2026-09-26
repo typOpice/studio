@@ -394,13 +394,9 @@ enum MegaObby {
 
         mutating func hud() {
             var made = DefaultHud.make(keys: false)
-            for index in made.objects.indices {
-                switch made.objects[index].name {
-                case "Line7": made.objects[index].properties["text"] = .string("Q E        stage back, on")
-                case "Line8": made.objects[index].properties["text"] = .string("R          back to checkpoint")
-                default: break
-                }
-            }
+            // The F and R lines (fly, respawn) aren't this game's keys.
+            DefaultHud.relabel(&made.objects, key: "F", to: "Q E        stage back, on")
+            DefaultHud.relabel(&made.objects, key: "R", to: "R          back to checkpoint")
             state.starterGui = made.objects
             state.scripts += made.scripts
         }

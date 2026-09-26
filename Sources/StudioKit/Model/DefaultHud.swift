@@ -104,7 +104,7 @@ enum DefaultHud {
         add(.uiPadding, "UIPadding", in: controls, ["paddingleft": pair(0, 10), "paddingright": pair(0, 10),
                                                     "paddingtop": pair(0, 7), "paddingbottom": pair(0, 7)])
         add(.uiListLayout, "UIListLayout", in: controls, ["padding": pair(0, 1)])
-        let help = [("W A S D", "move"), ("Space", "jump"), ("Shift", "sprint"), ("right-drag", "look"),
+        let help = [("W A S D", "move"), ("Space", "jump"), ("Shift", "sprint"), ("Ctrl", "shift lock"), ("right-drag", "look"),
                     ("scroll", "zoom, first person"), ("Esc", "free the mouse"), ("F", "fly"), ("R", "respawn"),
                     ("/", "chat"), ("`", "script output"), ("H", "hide this")]
         for (order, (key, what)) in help.enumerated() {
@@ -498,6 +498,20 @@ enum DefaultHud {
     \tend
     end)
     """
+}
+
+extension DefaultHud {
+    /// Changes the controls panel's line for a key (as it's listed: "F", "R"), for a game
+    /// with keys of its own — by the key, since the lines are numbered by position.
+    static func relabel(_ objects: inout [StarterGuiObject], key: String, to text: String) {
+        let prefix = key.padding(toLength: 11, withPad: " ", startingAt: 0)
+        for index in objects.indices where objects[index].name.hasPrefix("Line") {
+            if case .string(let current)? = objects[index].properties["text"], current.hasPrefix(prefix) {
+                objects[index].properties["text"] = .string(text)
+                return
+            }
+        }
+    }
 }
 
 extension SceneModel {

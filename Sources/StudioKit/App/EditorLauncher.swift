@@ -563,6 +563,11 @@ public enum StudioEditor {
                 exit(1)
             }
         }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-shiftlock") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let path = arguments.first ?? "shiftlock.png"
+            exit(AvatarSnapshot.renderShiftLock(to: URL(fileURLWithPath: path), on: !arguments.contains("off")) ? 0 : 1)
+        }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-obby") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])
             let path = arguments.first ?? "obby.png"

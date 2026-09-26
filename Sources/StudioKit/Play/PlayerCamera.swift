@@ -13,8 +13,14 @@ struct PlayerCamera {
     var minZoom: Float = 0.5
     var maxZoom: Float = 40
     var lockFirstPerson = false
+    /// Shift lock: the camera looks over the right shoulder, as Roblox's does.
+    var shiftLock = false
+    static let shoulderOffset: Float = 1.75
 
     var isFirstPerson: Bool { lockFirstPerson || distance < Self.firstPersonThreshold }
+
+    /// To the camera's right, level.
+    var right: Vec3 { Vec3(cos(yaw), 0, -sin(yaw)) }
 
     mutating func look(deltaX: Float, deltaY: Float, sensitivity: Float = 0.0045) {
         yaw += deltaX * sensitivity
@@ -58,12 +64,13 @@ struct PlayerCamera {
         }
 
         var wanted = distance
+        let target = shiftLock ? eye + right * Self.shoulderOffset : eye
         // Keep the camera out of walls.
-        let probe = Ray(origin: eye, direction: -forward)
+        let probe = Ray(origin: target, direction: -forward)
         if let hit = Picking.pick(ray: probe, in: parts), hit.distance < wanted + 0.6 {
             wanted = max(1.4, hit.distance - 0.6)
         }
-        camera.target = eye
+        camera.target = target
         camera.distance = wanted
         return camera
     }

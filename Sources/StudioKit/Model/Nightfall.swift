@@ -596,13 +596,9 @@ enum Nightfall {
 
         mutating func hud() {
             var made = DefaultHud.make(keys: false)
-            for index in made.objects.indices {
-                switch made.objects[index].name {
-                case "Line7": made.objects[index].properties["text"] = .string("click      swing, shoot")
-                case "Line8": made.objects[index].properties["text"] = .string("Q          dash (power-up)")
-                default: break
-                }
-            }
+            // The F and R lines (fly, respawn) aren't this game's keys.
+            DefaultHud.relabel(&made.objects, key: "F", to: "click      swing, shoot")
+            DefaultHud.relabel(&made.objects, key: "R", to: "Q          dash (power-up)")
             state.starterGui = made.objects
             state.scripts += made.scripts
         }

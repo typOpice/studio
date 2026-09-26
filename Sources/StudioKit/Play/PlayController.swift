@@ -14,6 +14,8 @@ final class PlayHUD: ObservableObject {
     @Published var mouseCaptured = false
     /// A script asked for the pointer to be locked (UserInputService.MouseBehavior).
     @Published var mouseLock = false
+    /// Shift lock is on: the pointer is held in the middle.
+    @Published var shiftLock = false
 }
 
 /// Runs a play session: the player's character, its Humanoid, input and scripts.
@@ -91,6 +93,11 @@ final class PlayController: ViewportSource, PlayerBridge {
 
     var mouseCaptured = false {
         didSet { hud.mouseCaptured = mouseCaptured }
+    }
+
+    /// Player.DevEnableMouseLock: a script can take shift lock away from this player.
+    var devEnableMouseLock = true {
+        didSet { if !devEnableMouseLock { setShiftLock(false) } }
     }
 
     /// False in Studio's Run mode: the scene's scripts and physics run with no player —
@@ -441,6 +448,11 @@ final class PlayController: ViewportSource, PlayerBridge {
             humanoid.jump = false
             humanoid.enter(.jumping)
         }
+        // Shift lock turns the body with the camera, whichever way it walks — except
+        // sitting, climbing (facing the truss) or dead.
+        if camera.shiftLock, !humanoid.isDead, seatPart == nil, !character.climbing {
+            character.facingYaw = camera.yaw
+        }
         updateState()
 
         // Roblox destroys whatever falls out of the world; for a character that is death.
@@ -629,6 +641,7 @@ final class PlayController: ViewportSource, PlayerBridge {
     func key(_ name: String, pressed: Bool) {
         if pressed {
             guard heldKeys.insert(name).inserted else { return }   // ignore auto-repeat
+            if name == "LeftControl" { toggleShiftLock() }
         } else {
             guard heldKeys.remove(name) != nil else { return }
         }
@@ -652,6 +665,23 @@ final class PlayController: ViewportSource, PlayerBridge {
 
     func look(deltaX: Float, deltaY: Float) {
         camera.look(deltaX: deltaX, deltaY: deltaY)
+    }
+
+    // MARK: - Shift lock
+
+    /// Whether this player may use shift lock: the place allows it (StarterPlayer's
+    /// EnableMouseLockOption) and no script has turned it off (Player.DevEnableMouseLock).
+    var shiftLockAllowed: Bool { settings.enableMouseLockOption && devEnableMouseLock }
+
+    func toggleShiftLock() {
+        setShiftLock(!camera.shiftLock)
+    }
+
+    func setShiftLock(_ on: Bool) {
+        let wanted = on && shiftLockAllowed
+        guard camera.shiftLock != wanted else { return }
+        camera.shiftLock = wanted
+        DispatchQueue.main.async { [hud] in hud.shiftLock = wanted }
     }
 
     func zoom(_ amount: Float) {

@@ -1201,6 +1201,10 @@ local LocalPlayer = service("Player", {
 	CameraMaxZoomDistance = function()
 		return invoke("player.get", "cameramaxzoomdistance")
 	end,
+	-- Shift lock (Left Ctrl) for this player; false takes it away.
+	DevEnableMouseLock = function()
+		return invoke("player.get", "devenablemouselock")
+	end,
 	-- Studio extensions: where the character's feet are, and how it is moving.
 	Position = function()
 		return toVector(invoke("player.get", "position"))
@@ -1225,6 +1229,10 @@ local LocalPlayer = service("Player", {
 	elseif key == "CameraMinZoomDistance" or key == "CameraMaxZoomDistance" then
 		expect(value, "number", key)
 		invoke("player.set", string.lower(key), value)
+		return true
+	elseif key == "DevEnableMouseLock" then
+		expect(value, "boolean", key)
+		invoke("player.set", "devenablemouselock", value)
 		return true
 	end
 	return false

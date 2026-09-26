@@ -201,6 +201,37 @@ enum AvatarSnapshot {
         return renderPlace(model, setting, label: name, to: url, technology: technology, width: width, height: height)
     }
 
+    /// `StudioApp --render-shiftlock out.png [off]`: a play session on Adventure Island's
+    /// plaza, seen through its own camera, with shift lock on (or off): the camera over
+    /// the shoulder, the body turned with it.
+    static func renderShiftLock(to url: URL, on: Bool, width: Int = 1600, height: Int = 900) -> Bool {
+        guard let device = MTLCreateSystemDefaultDevice() else { return false }
+        let model = SceneModel()
+        model.loadAdventureIsland()
+        let session = PlayController(model: model, console: ScriptConsole())
+        session.start()
+        for _ in 0..<30 { session.step(dt: 1.0 / 60) }
+        if on { session.key("LeftControl", pressed: true) }
+        session.look(deltaX: -120, deltaY: 30)
+        for _ in 0..<20 { session.step(dt: 1.0 / 60) }
+        let view = MTKView(frame: CGRect(x: 0, y: 0, width: width, height: height), device: device)
+        guard let renderer = Renderer(device: device, view: view, source: session) else { return false }
+        for shader in model.shaders { renderer.shaderLibrary.compileNow(shader) }
+        let deadline = Date().addingTimeInterval(8)
+        while model.shaders.contains(where: { renderer.shaderLibrary.pipeline(for: $0.id, rayTraced: false) == nil }),
+              Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        guard let image = renderer.snapshot(width: width, height: height),
+              let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
+        else { return false }
+        CGImageDestinationAddImage(destination, image, nil)
+        session.stop()
+        guard CGImageDestinationFinalize(destination) else { return false }
+        print("Wrote \(url.path) (shift lock \(on ? "on" : "off"))")
+        return true
+    }
+
     /// Mega Obby's views: along the course, a world at a time. The views are found from
     /// the checkpoints, so they follow the course if it changes.
     static let megaObbyViews = ["start", "world2", "world3", "world4", "world5", "world6", "finish"]

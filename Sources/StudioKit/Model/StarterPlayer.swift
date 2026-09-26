@@ -69,6 +69,10 @@ struct StarterPlayerSettings: Codable, Equatable {
     var cameraMode: CameraMode = .classic
     var cameraMinZoomDistance: Float = 0.5
     var cameraMaxZoomDistance: Float = 40
+    /// Shift lock (Roblox's EnableMouseLockOption): Left Ctrl holds the pointer in the
+    /// middle, puts the camera over the shoulder and turns the character with it. On in
+    /// every place unless it says otherwise — older files lack the key and get it too.
+    var enableMouseLockOption = true
 
     /// Seconds between dying and the next character appearing (Roblox's Players.RespawnTime).
     var respawnTime: Float = 5
@@ -88,8 +92,8 @@ struct StarterPlayerSettings: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case bodyColors, walkSpeed, jumpPower, useJumpPower, jumpHeight, maxHealth, maxSlopeAngle,
-             autoRotate, cameraMode, cameraMinZoomDistance, cameraMaxZoomDistance, respawnTime, playersCollide,
-             look, playersWearOwnLook
+             autoRotate, cameraMode, cameraMinZoomDistance, cameraMaxZoomDistance, enableMouseLockOption, respawnTime,
+             playersCollide, look, playersWearOwnLook
     }
 
     init(from decoder: Decoder) throws {
@@ -106,6 +110,7 @@ struct StarterPlayerSettings: Codable, Equatable {
         cameraMode = try c.decodeIfPresent(CameraMode.self, forKey: .cameraMode) ?? d.cameraMode
         cameraMinZoomDistance = try c.decodeIfPresent(Float.self, forKey: .cameraMinZoomDistance) ?? d.cameraMinZoomDistance
         cameraMaxZoomDistance = try c.decodeIfPresent(Float.self, forKey: .cameraMaxZoomDistance) ?? d.cameraMaxZoomDistance
+        enableMouseLockOption = try c.decodeIfPresent(Bool.self, forKey: .enableMouseLockOption) ?? d.enableMouseLockOption
         respawnTime = try c.decodeIfPresent(Float.self, forKey: .respawnTime) ?? d.respawnTime
         playersCollide = try c.decodeIfPresent(Bool.self, forKey: .playersCollide) ?? d.playersCollide
         look = try c.decodeIfPresent(AvatarLook.self, forKey: .look) ?? d.look

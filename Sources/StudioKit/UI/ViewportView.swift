@@ -27,10 +27,12 @@ final class StudioMTKView: MTKView {
                     guard let self, focused != nil, self.showsWorld else { return }
                     self.window?.makeFirstResponder(self)
                 }
-                // First person, or a script's MouseBehavior, holds the pointer.
+                // First person, shift lock, or a script's MouseBehavior holds the pointer.
                 if let hud = player?.hud {
-                    captureWatch = hud.$firstPerson.combineLatest(hud.$mouseLock)
-                        .sink { [weak self] firstPerson, locked in self?.wantsCapture = firstPerson || locked }
+                    captureWatch = hud.$firstPerson.combineLatest(hud.$mouseLock, hud.$shiftLock)
+                        .sink { [weak self] firstPerson, locked, shiftLock in
+                            self?.wantsCapture = firstPerson || locked || shiftLock
+                        }
                 }
             }
         }

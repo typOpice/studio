@@ -316,9 +316,10 @@ extension PlayController {
             if let behavior = arguments.first?.asString, ["Default", "LockCenter", "LockCurrentPosition"].contains(behavior) {
                 mouseBehavior = behavior
             }
-            // In first person the pointer is held in the middle, as Roblox's camera
-            // holds it — so scripts see LockCenter there (the HUD's crosshair does).
-            return .string(mouseBehavior == "Default" && camera.isFirstPerson ? "LockCenter" : mouseBehavior)
+            // In first person, or with shift lock on, the pointer is held in the middle, as
+            // Roblox's camera holds it — so scripts see LockCenter (the HUD's crosshair does).
+            let held = camera.isFirstPerson || camera.shiftLock
+            return .string(mouseBehavior == "Default" && held ? "LockCenter" : mouseBehavior)
 
         // MARK: physics
         case "physics.get":
@@ -458,6 +459,7 @@ extension PlayController {
         case "cameramaxzoomdistance": return scalar(camera.maxZoom)
         case "respawntime": return scalar(respawnTime)
         case "gravity": return scalar(gravity)
+        case "devenablemouselock": return .bool(devEnableMouseLock)
         default: return .nothing
         }
     }
@@ -481,6 +483,8 @@ extension PlayController {
             if let t = value.asFloat { respawnTime = max(t, 0) }
         case "gravity":
             if let g = value.asFloat { gravity = g }
+        case "devenablemouselock":
+            if let on = value.asBool { devEnableMouseLock = on }
         default:
             break
         }

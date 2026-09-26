@@ -566,13 +566,9 @@ enum AdventureIsland {
         /// Tower), its controls list telling of E and Tab instead.
         mutating func hud() {
             var made = DefaultHud.make(keys: false)
-            for index in made.objects.indices {
-                switch made.objects[index].name {
-                case "Line7": made.objects[index].properties["text"] = .string("E          talk")
-                case "Line8": made.objects[index].properties["text"] = .string("Tab        leaderboard")
-                default: break
-                }
-            }
+            // The F and R lines (fly, respawn) aren't this game's keys.
+            DefaultHud.relabel(&made.objects, key: "F", to: "E          talk")
+            DefaultHud.relabel(&made.objects, key: "R", to: "Tab        leaderboard")
             state.starterGui = made.objects
             state.scripts += made.scripts
         }

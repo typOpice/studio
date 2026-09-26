@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2376 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2397 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -910,7 +910,8 @@ models and pictures with it, and joined players get them with the world. Luau on
 | Move | `W A S D` |
 | Jump | `Space` |
 | Sprint | `Shift` |
-| Look | right-drag; in first person, move the mouse (`Esc` frees it, a click takes it back) |
+| Shift lock | `Left Ctrl`, on and off |
+| Look | right-drag; in first person or shift lock, move the mouse (`Esc` frees it, a click takes it back) |
 | Click something | left-click — a part with a ClickDetector, a GUI button |
 | Zoom out/in, first person | scroll |
 | Free fly | `F` |
@@ -940,6 +941,20 @@ collapses when it dies — each change blended rather than snapped.
 
 Scroll all the way in for first person; the third-person camera pulls in automatically
 when scenery comes between it and your head.
+
+**Shift lock**, as in Roblox, but on **Left Ctrl**, since Shift sprints here. It works
+in every game:
+
+- the pointer is held in the middle of the screen, with the HUD's crosshair;
+- moving the mouse turns the camera, which looks over your right shoulder;
+- your character always faces the way the camera looks, so `A` and `D` strafe
+  instead of turning;
+- scripts see `UserInputService.MouseBehavior` as `LockCenter`.
+
+It's on in every place, and in every new one: StarterPlayer's **Shift lock (Left
+Ctrl)**, Roblox's `EnableMouseLockOption`. Old places are included. Untick it for a
+game that shouldn't have it. A script can also take it away from one player with
+`player.DevEnableMouseLock = false`.
 
 **The default HUD.** Nothing on the screen in play is built into the app — in Studio's
 play test or the client. What a new scene shows is **StarterGui › PlayerHud**, an
