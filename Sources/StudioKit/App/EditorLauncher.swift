@@ -160,6 +160,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         fileMenu.addItem(.separator())
         add(to: fileMenu, "Load Starter Scene", #selector(loadStarter), "")
         add(to: fileMenu, "Open \(AdventureIsland.name) (Sample Game)", #selector(loadAdventure), "")
+        add(to: fileMenu, "Open \(Nightfall.name) (Sample Game)", #selector(loadNightfall), "")
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 
@@ -274,6 +275,10 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         openTemplate(.adventure)
     }
 
+    @objc private func loadNightfall() {
+        openTemplate(.nightfall)
+    }
+
     @objc private func goHome() {
         showHome(canGoBack: true)
     }
@@ -351,6 +356,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
     /// edits a place waits until one is open.
     private static let homeActions: Set<Selector> = [
         #selector(goHome), #selector(newScene), #selector(openScene), #selector(loadStarter), #selector(loadAdventure),
+        #selector(loadNightfall),
     ]
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
@@ -551,6 +557,13 @@ public enum StudioEditor {
                 print("Could not write \(path): \(error)")
                 exit(1)
             }
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-nightfall") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let path = arguments.first ?? "nightfall.png"
+            let view = arguments.dropFirst().first { $0 != "ray" } ?? "overview"
+            let technology: LightingTechnology = arguments.contains("ray") ? .rayTraced : .conventional
+            exit(AvatarSnapshot.renderNightfall(to: URL(fileURLWithPath: path), view: view, technology: technology) ? 0 : 1)
         }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-adventure") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])

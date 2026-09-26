@@ -44,8 +44,9 @@ enum HomeSelfTest {
 
     private static func testTemplates(_ check: Checker) {
         print("\nHome: the templates")
-        check("four to start from and the sample game", PlaceTemplate.starters == [.baseplate, .obby, .starter, .empty]
-              && PlaceTemplate.allCases.count == 5)
+        check("four to start from and two sample games", PlaceTemplate.starters == [.baseplate, .obby, .starter, .empty]
+              && PlaceTemplate.samples == [.adventure, .nightfall] && PlaceTemplate.allCases.count == 6)
+        check("the sample games say what's in them", PlaceTemplate.samples.allSatisfy { $0.tags.count >= 4 })
         check("each has a title, a line about it and a symbol", PlaceTemplate.allCases.allSatisfy {
             !$0.title.isEmpty && !$0.summary.isEmpty && NSImage(systemSymbolName: $0.symbol, accessibilityDescription: nil) != nil
         })
@@ -71,6 +72,7 @@ enum HomeSelfTest {
         let empty = PlaceTemplate.empty.state()
         check("Empty: no parts, just the HUD and Utils", empty.parts.isEmpty && hasBasics(empty))
         check("Adventure Island is itself", PlaceTemplate.adventure.state().parts.count == AdventureIsland.state().parts.count)
+        check("so is Nightfall", PlaceTemplate.nightfall.state().parts.count == Nightfall.state().parts.count)
 
         let model = SceneModel()
         model.selection = Set(model.parts.prefix(1).map(\.id))
@@ -288,6 +290,10 @@ enum HomeSelfTest {
         delegate.showHome(recentURLs: [])
         session.home.open(.adventure)
         check("Adventure Island opens from its card", delegate.model.groups.contains { $0.name == "MirrorLab" }
+              && delegate.document.url == nil && !session.showingHome)
+        delegate.showHome(recentURLs: [])
+        session.home.open(.nightfall)
+        check("…and Nightfall from its", delegate.model.groups.contains { $0.name == "Graveyard" }
               && delegate.document.url == nil && !session.showingHome)
     }
 }

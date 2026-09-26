@@ -298,6 +298,20 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Fixed: the README example for Utils broke a self-test in the last pushed version (the test counts and runs the README's script examples). The example now runs as written and is tested.
    New files: Model/PlaceTemplates.swift, Render/PlaceThumbnail.swift, UI/HomeView.swift, HomeSelfTest.swift.
 
+27. A second sample game: Nightfall, 2026-09-26.
+   A roguelike. Open it from the home page, from Studio's File menu, or from the client's File menu.
+   You start at a campfire in a walled valley: an old town with an armory, a graveyard with a crypt, a dark forest with a cabin and a watchtower, a farm with a barn and a turning windmill, a mine and some ruins, and the north gate.
+   Explore by day. At night zombies come, more each night and tougher: Walkers, Runners from night 2, Brutes from night 3. They chase the nearest player round walls and trees, and bite.
+   Fight with the sword you start with (1, then click) and the blaster from the armory (2, then click where you want to shoot).
+   Zombies drop green orbs. Fill the bar, and at every dawn, and you choose one of three power-ups (click, or press Z, X or C). There are 14, stacking for the whole run: speed, jump, sword damage, reach and swing speed, blaster damage and fire rate, more health, healing on kills, thorns, lucky double hits, an orb magnet, a Q dash, and a full heal.
+   Three keys are hidden in new places each run. Find them all and the north gate opens; walk through it to escape.
+   The run ends when you escape or fall: you see nights, kills, keys, power-ups and your score, the best goes on the leaderboard, and a new run starts from nothing.
+   Co-op in network games: the nights, zombies and keys are shared; power-ups, orbs, the blaster and scores are each player's own.
+   Screen effects: red at the edges when you're badly hurt, cold and dark at night, on your screen only.
+   Numbers to tune it by are in ServerStorage > Settings (day length, zombies per night and more).
+   Tested alone (a whole run, from the first night to escaping, then falling) and with a host and a joined player.
+   New files: Model/PlaceBuilding.swift (shared with Adventure Island now), Model/Nightfall.swift, Model/NightfallScripts.swift, NightfallSelfTest.swift.
+
 
 THINGS TO KNOW
 

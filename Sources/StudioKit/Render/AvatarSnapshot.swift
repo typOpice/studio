@@ -149,12 +149,64 @@ enum AvatarSnapshot {
     /// `adventureViews`, its shaders compiled first, that area's screen effect on.
     static func renderAdventure(to url: URL, view name: String, technology: LightingTechnology,
                                 width: Int = 1600, height: Int = 900) -> Bool {
-        guard let device = MTLCreateSystemDefaultDevice(), let setting = adventureViews[name] else {
+        guard let setting = adventureViews[name] else {
             print("Views: \(adventureViews.keys.sorted().joined(separator: ", "))")
             return false
         }
         let model = SceneModel()
         model.loadAdventureIsland()
+        return renderPlace(model, setting, label: name, to: url, technology: technology, width: width, height: height)
+    }
+
+    /// Nightfall's views, as Adventure Island's; "night" is the camp after dark, with
+    /// one of each kind of zombie closing in.
+    static let nightfallViews: [String: (Vec3, Float, Float, Float, String?, Vec3?)] = [
+        "overview": (Vec3(0, 0, 0), .pi / 2 + 0.3, 0.85, 440, nil, nil),
+        "camp": (Vec3(0, 2, 10), -.pi / 2 + 0.35, 0.3, 36, nil, Vec3(-4, 0.4, 15)),
+        "town": (Vec3(95, 3, 95), -.pi / 2 - 0.5, 0.35, 75, nil, Vec3(90, 0.4, 88)),
+        "graveyard": (Vec3(-100, 3, 110), -.pi / 2 + 0.5, 0.32, 55, nil, Vec3(-98, 0.4, 92)),
+        "forest": (Vec3(-100, 4, -95), .pi / 4, 0.3, 50, nil, Vec3(-92, 0.8, -78)),
+        "farm": (Vec3(100, 4, -95), 3 * .pi / 4, 0.3, 65, nil, Vec3(92, 0.4, -80)),
+        "mine": (Vec3(165, 4, 5), .pi, 0.25, 48, nil, Vec3(152, 0.4, 5)),
+        "gate": (Vec3(0, 8, 185), -.pi / 2, 0.22, 52, nil, Vec3(0, 0.4, 172)),
+        "night": (Vec3(0, 2, 10), -.pi / 2 + 0.35, 0.3, 40, "Night", Vec3(-4, 0.4, 15)),
+    ]
+
+    /// `StudioApp --render-nightfall out.png [view] [ray]`.
+    static func renderNightfall(to url: URL, view name: String, technology: LightingTechnology,
+                                width: Int = 1600, height: Int = 900) -> Bool {
+        guard let setting = nightfallViews[name] else {
+            print("Views: \(nightfallViews.keys.sorted().joined(separator: ", "))")
+            return false
+        }
+        let model = SceneModel()
+        model.loadNightfall()
+        if name == "overview" {
+            // From this high up the valley would be all fog.
+            model.lighting.fogStart = 100_000
+            model.lighting.fogEnd = 100_000
+        }
+        if name == "night" {
+            model.lighting.clockTime = 22.5
+            // The templates, brought out of ServerStorage to stand in the dark.
+            for (kind, feet) in [("Walker", Vec3(9, 0.2, 2)), ("Runner", Vec3(-10, 0.2, 0)), ("Brute", Vec3(3, 0.2, -8))] {
+                guard let group = model.groups.first(where: { $0.name == kind }), let pivot = model.pivot(of: group.id)
+                else { continue }
+                model.setStorage(group.id, nil)
+                let height = pivot.position.y - Nightfall.groundTop
+                let facing = simd_quatf(angle: atan2(feet.x, feet.z - 10), axis: Vec3(0, 1, 0))
+                model.movePivot(of: group.id, to: Pose(position: feet + Vec3(0, height, 0), orientation: facing))
+            }
+        }
+        return renderPlace(model, setting, label: name, to: url, technology: technology, width: width, height: height)
+    }
+
+    /// Draws a place from one of its views: its shaders compiled first, the view's
+    /// screen effect on, a character standing where the view says.
+    private static func renderPlace(_ model: SceneModel, _ setting: (Vec3, Float, Float, Float, String?, Vec3?),
+                                    label name: String, to url: URL, technology: LightingTechnology,
+                                    width: Int, height: Int) -> Bool {
+        guard let device = MTLCreateSystemDefaultDevice() else { return false }
         model.lighting.technology = technology
         if let effect = setting.4, let shader = model.shaders.first(where: { $0.name == effect }) {
             model.screenShaderIDs = [shader.id]

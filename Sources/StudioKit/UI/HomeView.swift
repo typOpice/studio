@@ -121,7 +121,15 @@ struct HomeView: View {
                         }
                     }
                 }
-                section("Sample game") { adventure }
+                section("Sample games") {
+                    VStack(spacing: 18) {
+                        ForEach(PlaceTemplate.samples) { template in
+                            HoverCard(action: { home.open(template) }) { hovering in
+                                SampleCard(template: template, picture: home.pictures[template.id], hovering: hovering)
+                            }
+                        }
+                    }
+                }
                 section("Recent", trailing: home.recents.isEmpty ? nil : AnyView(
                     Button("Clear Recents") { home.clearRecents() }
                         .buttonStyle(.plain)
@@ -193,12 +201,6 @@ struct HomeView: View {
         }
     }
 
-    private var adventure: some View {
-        HoverCard(action: { home.open(.adventure) }) { hovering in
-            AdventureCard(picture: home.pictures[PlaceTemplate.adventure.id], hovering: hovering)
-        }
-    }
-
     private func section<Content: View>(_ title: String, trailing: AnyView? = nil,
                                         @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -214,12 +216,11 @@ struct HomeView: View {
     }
 }
 
-/// Adventure Island's card: its picture beside what's in it.
-private struct AdventureCard: View {
+/// A sample game's card: its picture beside what's in it.
+private struct SampleCard: View {
+    let template: PlaceTemplate
     let picture: CGImage?
     let hovering: Bool
-    private let template = PlaceTemplate.adventure
-    private static let tagNames = ["Explore", "8 NPCs", "Obby tower", "Ray tracing", "Shaders", "Multiplayer"]
 
     var body: some View {
         HStack(alignment: .top, spacing: 22) {
@@ -262,7 +263,7 @@ private struct AdventureCard: View {
 
     private var tags: some View {
         HStack(spacing: 6) {
-            ForEach(Self.tagNames, id: \.self) { tag in
+            ForEach(template.tags, id: \.self) { tag in
                 Text(tag)
                     .font(.system(size: 10, weight: .medium))
                     .padding(.horizontal, 8)

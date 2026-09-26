@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2304 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2345 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -141,6 +141,7 @@ listed in §9.
 | `AdventureSelfTest.swift` | The sample game, played: every area, NPC, gem, script, data object and shader there (all seven compiled), saved and reopened, opened in Studio, the spawn; the talk prompt, dialogue and its keys, walking away closing it, NPCs turning; each area's screen effect and the underwater one while swimming; a gem, the baker's trade, the crown worn again after respawning; the obby's checkpoint, lava, respawning at the checkpoint, jump pad, trophy (a win, the time, the party hat, back to the start), mover and spinner; the lab's lever switching the lighting and its sign, the colour button; with two players: no errors, the joiner's own dialogue and screen effect, the joiner's gem counted for them, the lever's lighting reaching them |
 | `UtilsSelfTest.swift` | The Utils module: in the starter scene and a new scene (which no longer keep the last place's data objects), not added to an old place, Insert Utils Module (named, one undo step, Utils1, saved); every maths, table and text function run in Luau (random ranges, cycles and parts in deepCopy, a class's metatable, thousands, K/M/B, titles); the game helpers in play on a real character (getCharacter/Humanoid/Root from a player, a character and a body part, playerFromPart, isAlive, distance, positionOf, debounce and cooldown over time, weld, tween); suggested with every function, parameters and its comment; a host's script and a joined player's LocalScript each using it |
 | `HomeSelfTest.swift` | The home page: every template built (Baseplate locked and just above the grid, Obby's Course and script, the HUD and Utils in each, Starter Scene as before, Empty, Adventure Island) and opened as a new place; the Obby played (start, checkpoint, kill brick, back at the checkpoint, finish and its Win, back to the start) and by a host and a joined player; recent places (missing and repeated files dropped, twelve at most, "Edited 2 hours ago", ~); pictures (drawn, none for an empty place, framing past a baseplate, a saved place's kept and read back, drawn again when the file changes); opening from the page through the app delegate (File › Home ⇧⌘H, editing menu items waiting, a template untitled with nothing to undo, back, a recent file, the starter scene after a file untitled, Adventure Island) |
+| `NightfallSelfTest.swift` | Nightfall: the place (areas, templates in ServerStorage, the sword in StarterPack, scripts, key spots and spawn points, four shaders compiled); played (a day, night 1's zombies coming for you and biting, the sword taking them down, an orb coming to you, dawn and a choice of three taken with Z, the armory's blaster on 2 shooting where the pointer is, three keys and the gate opening, escaping with a score, the world and the run starting again, falling and a new run); a host and a joined player (the night and zombies reaching them, their sword run by the host's tool script and the kill theirs, their own power-up choice, a key they find counting for everyone) |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -293,6 +294,11 @@ Sources/StudioKit/
   UI/HomeView.swift                the home page (HomeView), what it shows (HomeModel), RecentPlace
   Model/UtilsModule.swift          the Utils ModuleScript every new place has (Luau source), and
                                    `insertUtilsModule()` for older places
+  Model/PlaceBuilding.swift        what the places built in code share: part, group, script,
+                                   shader, light and a seeded random (Adventure Island, Nightfall)
+  Model/Nightfall.swift            the second sample game's world (`Builder`), templates and tools
+  Model/NightfallScripts.swift     its Luau (GameScript, Horde, Upgrades, Ambience, SwordScript,
+                                   the Nightfall LocalScript) and shaders
   Model/AdventureIsland.swift      the sample game's world, built in code (`Builder`), and
                                    `loadAdventureIsland()`
   Model/AdventureIslandScripts.swift  its Luau scripts, dialogue, zones and shader bodies
@@ -1227,6 +1233,23 @@ Roughly ordered by how much time they will cost you.
     physics `Capsule` struct: write `SwiftUI.Capsule()` in views, or the compiler gives
     up with "failed to produce diagnostic".
 
+104. **Nightfall's zombies are anchored Models moved by `Horde.step`**, 20 times a
+    second, on the host. They are not physics bodies and there's no pathfinding:
+    - they steer round the boxes `Horde.findBlockers` reads *once* at the start
+      (anything solid standing on the ground; a turned part as its widest square),
+      trying ever wider turns when the way ahead is blocked;
+    - a zombie spawning inside a blocker steps to the nearest free spot.
+    The root part has no CFrame in Luau, so a player's facing (for swings and dashes)
+    is their last `MoveDirection`. The character controller sets horizontal velocity
+    from input every frame, so a dash moves the root part in hops rather than setting
+    its velocity.
+    The Hurt and Night screen effects keep their parameters fixed, and each player's
+    LocalScript switches them on and off. Shader parameters set on the host reach every
+    player, so a changing parameter would leak one player's health onto another's
+    screen.
+    The test hooks are data, not code: `quick` in NightfallSelfTest shortens the day and
+    the nights through ServerStorage.Settings.
+
 ## 8. Recipes
 
 ### Add a GUI class or property
@@ -1467,6 +1490,8 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
 - **Script and shader text edits are not in the scene undo stack** — the text view owns
   its own undo. Deliberate.
 - **`Part.locked` excludes a part from picking but not from collision.**
+- **Nightfall's zombies** don't path-find, and don't know about walls added after the
+  game starts; nor do they climb. With every way blocked they stand still.
 - **Screen effects** all read the world's depth (not an earlier effect's), run in
   Explorer order rather than an order of their own, and a shader that hangs the GPU
   takes the app with it; sixteen float parameters per shader. What a LocalScript
@@ -1512,6 +1537,7 @@ swift run StudioApp --render-car /tmp/car.png 1.6             # welds and motori
 swift run StudioApp --render-adventure /tmp/lab.png lab ray    # the sample game, one area
 swift run StudioApp --render-client talk /tmp/talk.png         # the client talking to an NPC
 swift run StudioApp --render-home /tmp/home.png                # the home page, with two recents
+swift run StudioApp --render-nightfall /tmp/nf.png night      # Nightfall, one view (the camp after dark)
 ```
 
 **`ps -o %cpu` is not evidence of anything.** It reports CPU time over the process's

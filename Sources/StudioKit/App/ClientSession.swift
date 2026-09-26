@@ -52,6 +52,15 @@ final class ClientSession: ObservableObject {
         if wasPlaying { play() }
     }
 
+    /// The second sample game.
+    func loadNightfall() {
+        let wasPlaying = player != nil
+        leaveGame()
+        model.loadNightfall()
+        sceneName = Nightfall.name
+        if wasPlaying { play() }
+    }
+
     func loadStarterScene() {
         let wasPlaying = player != nil
         leaveGame()

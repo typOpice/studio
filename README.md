@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2304 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2345 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -74,7 +74,7 @@ with a button to go back to the place you were in.
   them and a Wins leaderboard), **Starter Scene** (parts, a script, shaders and an
   animation to learn from) or **Empty**. Each opens as a new, untitled place with the
   default HUD and the Utils module.
-- **Sample game**: Adventure Island, to play or take apart.
+- **Sample games**: Adventure Island and Nightfall, to play or take apart.
 - **Recent**: the places you've opened or saved, newest first, with a picture of each.
   Right-click one to show it in Finder, or **Clear Recents**. **Open…** finds any other.
 
@@ -126,6 +126,73 @@ effects, and gems, wins and the lab's lighting are shared.
 For a picture without opening a window: `swift run StudioApp --render-adventure out.png
 [overview|plaza|village|obby|lab|caves|garden|lake|lighthouse] [ray]`, and
 `--make-adventure Island.json` writes it as a scene file.
+
+## The second sample game: Nightfall
+
+A roguelike. Open it from the home page, **File › Open Nightfall (Sample Game)** in
+Studio, or **File › Load Nightfall** in the client.
+
+You wake at a campfire in a walled valley. By day, explore:
+
+- the **old town**, where the **armory** holds a blaster;
+- the **graveyard** and its crypt;
+- the **dark forest**, with a cabin and a watchtower;
+- the **farm**, with its barn and windmill;
+- the **mine** and the **ruins**.
+
+When night falls the zombies come, more of them each night, faster and tougher:
+
+- **Walkers**;
+- **Runners**, from night 2;
+- **Brutes**, from night 3.
+
+Fight with the **sword** you start with (**1**, then click) and the **blaster** from
+the armory (**2**, then click where you want to shoot).
+
+Zombies drop green **orbs**. Fill the bar at the top and, at every dawn, you choose
+one of three **power-ups** (click one, or press **Z**, **X** or **C**). There are 14,
+and they stack for the rest of the run:
+
+- faster feet and higher jumps;
+- a harder, wider or quicker sword;
+- a harder or faster blaster;
+- more health, healing on every kill, thorns and lucky double hits;
+- a magnet for orbs;
+- a **Q** dash.
+
+Three **keys** are hidden in new places every run: on the water tower, in the crypt,
+up the watchtower… Find them all and the **north gate** opens. Walk through it and
+you've escaped.
+
+Your run ends when you escape or fall. You see how it went (nights, kills, keys,
+power-ups, score), your best score goes on the leaderboard, and a new run starts from
+nothing.
+
+It's co-op on a network game:
+
+- the nights, the zombies and the keys are shared;
+- each player's power-ups, orbs, blaster and score are their own;
+- the world starts again when everyone's run has ended.
+
+How it's made:
+
+- **GameScript** (Script Service) runs the days and nights, the keys and the gate,
+  orbs, power-up offers and runs.
+- **Horde** and **Upgrades** are ModuleScripts in ServerStorage:
+  - Horde moves the zombies, walking them round walls and trees, and does the sword,
+    the blaster and the dash;
+  - Upgrades holds the power-ups.
+- The **Sword** in StarterPack has a script that calls `Horde.swing`.
+- The **Nightfall** LocalScript is each player's screen. It also sends the blaster's
+  aim and Q to the server, and switches the Hurt and Night screen effects on that
+  screen only.
+- **ServerStorage.Settings** holds the numbers to tune it by: DayLength, DawnLength,
+  FirstNight, MorePerNight, MaxZombies, KeysNeeded.
+- The scripts use **Utils** throughout.
+
+`swift run StudioApp --render-nightfall out.png
+[overview|camp|town|graveyard|forest|farm|mine|gate|night] [ray]` draws it without a
+window.
 
 ## The player character
 
