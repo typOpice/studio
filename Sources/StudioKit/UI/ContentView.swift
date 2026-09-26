@@ -6,6 +6,14 @@ struct ContentView: View {
     @ObservedObject var session: EditorSession
 
     var body: some View {
+        if session.showingHome {
+            HomeView(home: session.home)
+        } else {
+            editor
+        }
+    }
+
+    private var editor: some View {
         VStack(spacing: 0) {
             RibbonView(model: model, session: session)
 

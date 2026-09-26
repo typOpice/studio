@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2262 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2304 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -63,6 +63,24 @@ aloud), MeshParts and their collision, what characters wear, modules, remotes, r
 
 `--only <suite>` runs one suite (Adventure, Remotes, Wardrobe, Mesh, Audio, Hud, LAN,
 Gui, Player or Script) while you work on it; the whole suite still has to pass.
+
+## The home page
+
+Studio opens on its **home page**; **File › Home** (⇧⌘H) brings it back at any time,
+with a button to go back to the place you were in.
+
+- **New place**: start from a template. **Baseplate** (a big grey baseplate and a spawn
+  pad), **Obby** (jumps, kill bricks, checkpoints and a finish, with the script that runs
+  them and a Wins leaderboard), **Starter Scene** (parts, a script, shaders and an
+  animation to learn from) or **Empty**. Each opens as a new, untitled place with the
+  default HUD and the Utils module.
+- **Sample game**: Adventure Island, to play or take apart.
+- **Recent**: the places you've opened or saved, newest first, with a picture of each.
+  Right-click one to show it in Finder, or **Clear Recents**. **Open…** finds any other.
+
+The pictures are drawn off screen from the places themselves; a saved place's is kept in
+`~/Library/Caches/Studio/Thumbnails` and drawn again only when the file changes.
+`swift run StudioApp --render-home home.png [empty]` draws the page without a window.
 
 ## The sample game: Adventure Island
 
@@ -987,10 +1005,11 @@ most games end up writing for themselves. Use it from any Script or LocalScript:
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Utils = require(ReplicatedStorage.Utils)
 
-part.Touched:Connect(Utils.debounce(1, function(hit)
+-- Once a second at most, however many body parts touch the pad.
+workspace.Pad.Touched:Connect(Utils.debounce(1, function(hit)
 	local player = Utils.playerFromPart(hit)
 	if player then
-		print(player.Name, "touched it at", Utils.formatTime(time()))
+		print(player.Name, "stepped on the pad at", Utils.formatTime(time()))
 	end
 end))
 ```

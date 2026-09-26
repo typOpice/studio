@@ -69,6 +69,9 @@ final class EditorSession: ObservableObject {
     @Published var dockHeight: CGFloat = 200
     /// Which set of ribbon groups is showing.
     @Published var ribbonTab: RibbonTab = .home
+    /// The home page is showing instead of the editor: at launch, and File › Home.
+    @Published var showingHome = false
+    let home = HomeModel()
 
     /// Open scripts and shaders, in the order their tabs were opened.
     @Published private(set) var documents: [EditorDocument] = []

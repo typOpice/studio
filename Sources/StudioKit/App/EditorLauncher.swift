@@ -37,6 +37,9 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         RecentDocuments.note = { url in
             NSDocumentController.shared.noteNewRecentDocumentURL(url)
         }
+        wireHome()
+        // At launch, the home page — unless a file was opened with the app.
+        if document.url == nil { showHome(canGoBack: false) }
         // Keep the title bar's name and edited dot in step with the document.
         titleObserver = model.$revision
             .receive(on: RunLoop.main)
@@ -45,9 +48,52 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
     }
 
     private func refreshTitle() {
-        window.title = document.windowTitle
-        window.isDocumentEdited = document.isDirty
-        window.representedURL = document.url
+        guard let window else { return }
+        window.title = session.showingHome ? "Studio" : document.windowTitle
+        window.isDocumentEdited = !session.showingHome && document.isDirty
+        window.representedURL = session.showingHome ? nil : document.url
+    }
+
+    // MARK: - Home
+
+    /// What the home page's cards and buttons do.
+    func wireHome() {
+        let home = session.home
+        home.open = { [weak self] template in self?.openTemplate(template) }
+        home.openFile = { [weak self] url in
+            guard let self, self.confirmDiscardingChanges(verb: "open another scene") else { return }
+            self.openDocument(url)
+        }
+        home.browse = { [weak self] in self?.openScene() }
+        home.goBack = { [weak self] in self?.closeHome() }
+        home.clearRecents = { [weak self] in
+            NSDocumentController.shared.clearRecentDocuments(nil)
+            self?.session.home.refresh(recentURLs: [])
+        }
+    }
+
+    /// The home page over the editor. From the menu there's a place open behind it to go
+    /// back to; at launch there isn't one worth going back to.
+    func showHome(canGoBack: Bool = true, recentURLs: [URL]? = nil, drawNow: Bool = false) {
+        session.stopPlay()
+        session.home.canGoBack = canGoBack
+        session.home.currentName = document.displayName
+        session.home.refresh(recentURLs: recentURLs ?? NSDocumentController.shared.recentDocumentURLs, drawNow: drawNow)
+        session.showingHome = true
+        refreshTitle()
+    }
+
+    func closeHome() {
+        session.showingHome = false
+        refreshTitle()
+    }
+
+    /// A template as a new, untitled place.
+    func openTemplate(_ template: PlaceTemplate) {
+        guard confirmDiscardingChanges(verb: "open \(template.title)") else { return }
+        session.stopPlay()
+        document.startNew { model.loadTemplate(template) }
+        closeHome()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -92,6 +138,8 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
 
         let fileItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
+        add(to: fileMenu, "Home", #selector(goHome), "H", modifiers: [.command, .shift])
+        fileMenu.addItem(.separator())
         add(to: fileMenu, "New Scene", #selector(newScene), "n")
         add(to: fileMenu, "Open…", #selector(openScene), "o")
 
@@ -211,21 +259,23 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         guard confirmDiscardingChanges(verb: "start a new scene") else { return }
         session.stopPlay()
         document.reset()
-        refreshTitle()
+        closeHome()
     }
 
-    @objc private func loadStarter() {
+    @objc func loadStarter() {
         guard confirmDiscardingChanges(verb: "load the starter scene") else { return }
         session.stopPlay()
-        model.loadStarterScene()
-        refreshTitle()
+        // A new, untitled place: Save mustn't write it over the file that was open.
+        document.startNew { model.loadTemplate(.starter) }
+        closeHome()
     }
 
     @objc private func loadAdventure() {
-        guard confirmDiscardingChanges(verb: "open \(AdventureIsland.name)") else { return }
-        session.stopPlay()
-        model.loadAdventureIsland()
-        refreshTitle()
+        openTemplate(.adventure)
+    }
+
+    @objc private func goHome() {
+        showHome(canGoBack: true)
     }
 
     @objc private func newScript() {
@@ -297,7 +347,16 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
 
     /// Menu items say what they will do: with a code editor in charge, ⌘F finds rather
     /// than focusing the camera, ⌘G finds the next match rather than grouping.
+    /// What the File menu can still do while the home page is showing; everything that
+    /// edits a place waits until one is open.
+    private static let homeActions: Set<Selector> = [
+        #selector(goHome), #selector(newScene), #selector(openScene), #selector(loadStarter), #selector(loadAdventure),
+    ]
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if session.showingHome, item.target === self, let action = item.action {
+            return Self.homeActions.contains(action)
+        }
         let inCode = keyResponder is CodeTextView
         switch item.action {
         case #selector(focusSelection): item.title = inCode ? "Find…" : "Focus Selection"
@@ -377,7 +436,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         session.stopPlay()
         do {
             try document.open(url)
-            refreshTitle()
+            closeHome()
         } catch {
             present(error, "Could not open \(url.lastPathComponent)")
         }
@@ -446,6 +505,14 @@ public enum StudioEditor {
             let panel = flag + 1 < arguments.count ? arguments[flag + 1] : "animation"
             let path = flag + 2 < arguments.count ? arguments[flag + 2] : "\(panel).png"
             let ok = MainActor.assumeIsolated { PanelSnapshot.render(panel: panel, to: URL(fileURLWithPath: path)) }
+            exit(ok ? 0 : 1)
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-home") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let path = arguments.first ?? "home.png"
+            let ok = MainActor.assumeIsolated {
+                PanelSnapshot.renderHome(to: URL(fileURLWithPath: path), withRecents: !arguments.contains("empty"))
+            }
             exit(ok ? 0 : 1)
         }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-client") {

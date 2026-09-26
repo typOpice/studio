@@ -149,6 +149,47 @@ enum PanelSnapshot {
         return true
     }
 
+    /// `--render-home out.png [empty]`: Studio's home page with two saved places as recents
+    /// (or none), every picture drawn first.
+    @MainActor
+    static func renderHome(to url: URL, withRecents: Bool = true, height: CGFloat = 1120) -> Bool {
+        _ = NSApplication.shared
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("StudioHomeSnapshot", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        PlaceThumbnail.shared.directory = folder.appendingPathComponent("Thumbnails", isDirectory: true)
+        var recents: [URL] = []
+        if withRecents {
+            for (name, template) in [("My Obby", PlaceTemplate.obby), ("Shader Playground", .starter)] {
+                let file = folder.appendingPathComponent("\(name).\(SceneDocument.sceneExtension)")
+                if let data = try? JSONEncoder().encode(template.state()) { try? data.write(to: file) }
+                recents.append(file)
+            }
+        }
+        let home = HomeModel()
+        home.canGoBack = true
+        home.currentName = "Untitled"
+        home.refresh(recentURLs: recents, drawNow: true)
+        let size = NSRect(x: 0, y: 0, width: 1400, height: height)
+        let hosting = NSHostingView(rootView: HomeView(home: home))
+        hosting.frame = size
+        let window = NSWindow(contentRect: size, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = hosting
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        hosting.layoutSubtreeIfNeeded()
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return false }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return false }
+        do {
+            try data.write(to: url)
+        } catch {
+            print("Could not write \(url.path): \(error)")
+            return false
+        }
+        print("Wrote \(url.path)")
+        return true
+    }
+
     /// The whole editor window, laid out in an off-screen window and drawn with
     /// `cacheDisplay`, which — unlike ImageRenderer — draws AppKit views such as the code
     /// editor. The Metal viewport and SwiftUI's checkboxes and pickers don't show.

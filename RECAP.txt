@@ -287,6 +287,17 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone, in play with a real character, and with a host and a joined player.
    New files: Model/UtilsModule.swift, UtilsSelfTest.swift.
 
+26. A home page for Studio, 2026-09-26.
+   Studio now opens on a home page. File > Home (Shift-Command-H) brings it back at any time, with a button to go back to the place you were in.
+   New place: Baseplate (a big grey baseplate and a spawn pad), Obby (jumps, kill bricks, checkpoints and a finish, with the script that runs them and a Wins leaderboard), Starter Scene (the scene Studio always opened with) and Empty. Each opens as a new, untitled place with the HUD and Utils.
+   Sample game: Adventure Island, with a picture and what's in it.
+   Recent: the places you have opened or saved, newest first, with a picture of each. Right-click to show one in Finder; Clear Recents empties the list; Open... finds any other place.
+   The pictures are drawn from the places themselves. A saved place's picture is kept and only drawn again when the file changes.
+   The Obby's script uses Utils, and was tested alone and with a host and a joined player.
+   Fixed: loading the starter scene (or Adventure Island) while a saved place was open, then pressing Command-S, saved it over that place's file. Now they open untitled.
+   Fixed: the README example for Utils broke a self-test in the last pushed version (the test counts and runs the README's script examples). The example now runs as written and is tested.
+   New files: Model/PlaceTemplates.swift, Render/PlaceThumbnail.swift, UI/HomeView.swift, HomeSelfTest.swift.
+
 
 THINGS TO KNOW
 

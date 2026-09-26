@@ -658,7 +658,7 @@ enum RemotesSelfTest {
 
     // MARK: - The README's examples
 
-    /// The README's module, remote, leaderstats and raycast examples, as they are written.
+    /// The README's module, Utils, remote, leaderstats and raycast examples, as they are written.
     private static func testReadmeExamples(_ check: Checker) {
         print("\nTogether: the README's examples")
         guard let readme = try? String(contentsOfFile: "README.md", encoding: .utf8),
@@ -669,8 +669,8 @@ enum RemotesSelfTest {
         }
         let section = String(readme[start.upperBound..<end.lowerBound])
         var blocks = section.components(separatedBy: "```lua\n").dropFirst().map { $0.components(separatedBy: "```")[0] }
-        guard blocks.count == 5 else {
-            check("the README has its five examples", false, "\(blocks.count)")
+        guard blocks.count == 6 else {
+            check("the README has its six examples", false, "\(blocks.count)")
             return
         }
         let model = world()
@@ -688,6 +688,11 @@ enum RemotesSelfTest {
         rack.size = Vec3(4, 6, 4)
         rack.position = Vec3(0, 3, 0)
         model.parts.append(rack)
+        var pad = coin
+        pad.id = UUID()
+        pad.name = "Pad"
+        model.parts.append(pad)
+        model.scripts.append(UtilsModule.make())
         let sword = SceneGroup(name: "Sword", kind: .model)
         var blade = Part()
         blade.name = "Blade"
@@ -702,19 +707,22 @@ enum RemotesSelfTest {
         let parts = blocks[0].components(separatedBy: "-- any Script or LocalScript\n")
         add(model, parts[0], name: "Weapons", host: .replicatedStorage, module: true)
         add(model, parts[1], name: "UsesWeapons")
-        add(model, blocks[1], name: "Swords")
+        add(model, blocks[1], name: "UsesUtils")
+        add(model, blocks[2], name: "Swords")
         // The remote example: the LocalScript, then the Script.
-        let remote = blocks[2].components(separatedBy: "-- A Script: the server decides.\n")
+        let remote = blocks[3].components(separatedBy: "-- A Script: the server decides.\n")
         add(model, remote[0], name: "Shopper", host: .starterPlayer)
         add(model, "local ReplicatedStorage = game:GetService(\"ReplicatedStorage\")\n" + remote[1], name: "Shop")
-        add(model, blocks[3], name: "Leaderstats")
-        blocks[4] = blocks[4].replacingOccurrences(of: "print(\"hit\"", with: "print(\"ray hit\"")
-        add(model, "task.wait(0.3)\n" + blocks[4], name: "Ray", host: .starterPlayer)
+        add(model, blocks[4], name: "Leaderstats")
+        blocks[5] = blocks[5].replacingOccurrences(of: "print(\"hit\"", with: "print(\"ray hit\"")
+        add(model, "task.wait(0.3)\n" + blocks[5], name: "Ray", host: .starterPlayer)
         let session = play(model, seconds: 0.3)
         session.character.position = coin.position - Vec3(0, 3, 0)
         step(session, seconds: 0.5)
         let output = said(session)
         check("the module example prints what it says", output.contains("Sword does 25 damage"), "\(output)")
+        check("the Utils example sees who stepped on the pad, once",
+              output.filter { $0.contains("stepped on the pad at 0:0") }.count == 1, "\(output)")
         check("the leaderstats example gives coins for touching the coin, and the shop turns them away",
               session.model.dataObjects.contains { $0.name == "Coins" && $0.number >= 1 }
               && output.contains("Not enough coins"), "\(output) \(session.model.dataObjects.map(\.name))")

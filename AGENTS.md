@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2262 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2304 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -140,6 +140,7 @@ listed in §9.
 | `RemotesSelfTest.swift` | Scripts working together: ModuleScripts and data objects in the scene (made, saved, old files, deleted and undone, copied and deleted with a part); `require` (once, the same value to every script, ReplicatedStorage, Script Service and parts, never by themselves, loops, nothing returned, errors, compile errors, wrong arguments); Values (IntValue rounding, StringValue from a number, BoolValue refusing, Folders, Clone, WaitForChild waiting, Changed with each value, Destroy, a Folder becoming a Player's leaderstats); remotes played alone (FireServer with tables, Vector3s and parts, FireClient, FireAllClients, InvokeServer and its errors, the wrong side refused); Raycast (first hit and all its fields, IgnoreWater, RespectCanCollide, Exclude and Include, too short, bad params, characters and excluding them); the leaderboard (hidden with no leaderstats, columns and rows, the HUD numbers moved, Tab); storage (a Model kept in ServerStorage by Studio, left out of what joiners get, saved, undone; its module and Value reached, a clone coming into the world with its script, a part into ReplicatedStorage and back, a LocalScript seeing ServerStorage empty); ObjectValue, Vector3Value, Color3Value, CFrameValue, BindableEvent, BindableFunction, UnreliableRemoteEvent and RunService:IsServer/IsClient; remotes queuing events until a handler connects and carrying Sounds, GUI objects and the Workspace; the README's examples; a host and a joined player (modules on each, FireServer as that player with a part, FireClient back, InvokeServer, leaderstats and Changed reaching the player, a late remote waited for, both on the joiner's leaderboard, the host's rays meeting the joiner, leaderstats leaving with the player); and with two players: ServerStorage never sent and empty to the joiner, a clone from it reaching them, an event queued for a late handler, an UnreliableRemoteEvent, a GUI object from another machine arriving as nil, and an InvokeClient failing when its player leaves |
 | `AdventureSelfTest.swift` | The sample game, played: every area, NPC, gem, script, data object and shader there (all seven compiled), saved and reopened, opened in Studio, the spawn; the talk prompt, dialogue and its keys, walking away closing it, NPCs turning; each area's screen effect and the underwater one while swimming; a gem, the baker's trade, the crown worn again after respawning; the obby's checkpoint, lava, respawning at the checkpoint, jump pad, trophy (a win, the time, the party hat, back to the start), mover and spinner; the lab's lever switching the lighting and its sign, the colour button; with two players: no errors, the joiner's own dialogue and screen effect, the joiner's gem counted for them, the lever's lighting reaching them |
 | `UtilsSelfTest.swift` | The Utils module: in the starter scene and a new scene (which no longer keep the last place's data objects), not added to an old place, Insert Utils Module (named, one undo step, Utils1, saved); every maths, table and text function run in Luau (random ranges, cycles and parts in deepCopy, a class's metatable, thousands, K/M/B, titles); the game helpers in play on a real character (getCharacter/Humanoid/Root from a player, a character and a body part, playerFromPart, isAlive, distance, positionOf, debounce and cooldown over time, weld, tween); suggested with every function, parameters and its comment; a host's script and a joined player's LocalScript each using it |
+| `HomeSelfTest.swift` | The home page: every template built (Baseplate locked and just above the grid, Obby's Course and script, the HUD and Utils in each, Starter Scene as before, Empty, Adventure Island) and opened as a new place; the Obby played (start, checkpoint, kill brick, back at the checkpoint, finish and its Win, back to the start) and by a host and a joined player; recent places (missing and repeated files dropped, twelve at most, "Edited 2 hours ago", ~); pictures (drawn, none for an empty place, framing past a baseplate, a saved place's kept and read back, drawn again when the file changes); opening from the page through the app delegate (File › Home ⇧⌘H, editing menu items waiting, a template untitled with nothing to undo, back, a recent file, the starter scene after a file untitled, Adventure Island) |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -285,6 +286,11 @@ Sources/StudioKit/
   Scripting/ScriptRuntime+Data.swift  `data.*` (Folders, Values, remotes as data objects),
                                    `module.*`, `workspace.raycast`
   Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them
+  Model/PlaceTemplates.swift       the home page's templates (Baseplate, Obby and its script,
+                                   Starter Scene, Empty, Adventure Island) and `loadTemplate`
+  Render/PlaceThumbnail.swift      pictures of places, drawn off screen by one shared renderer,
+                                   a saved place's cached by path and modification date
+  UI/HomeView.swift                the home page (HomeView), what it shows (HomeModel), RecentPlace
   Model/UtilsModule.swift          the Utils ModuleScript every new place has (Luau source), and
                                    `insertUtilsModule()` for older places
   Model/AdventureIsland.swift      the sample game's world, built in code (`Builder`), and
@@ -1209,6 +1215,18 @@ Roughly ordered by how much time they will cost you.
     comment above every `function Utils.name`, which is what the editor shows; keep
     that shape, and add a test in `UtilsSelfTest` for anything added.
 
+103. **The home page replaces the editor while it shows** (`session.showingHome`, in
+    `ContentView.body`), so the viewport isn't drawing behind it. Everything that makes a
+    new place from something built in — a template, the starter scene, Adventure Island,
+    File › New — goes through `SceneDocument.startNew`, which leaves the document
+    untitled: before, loading the starter scene over an open file and pressing ⌘S wrote
+    it over that file. While the page shows, `validateMenuItem` allows only
+    `homeActions`. The editor's thumbnails come from one `PlaceThumbnail.shared` renderer
+    (making a Renderer compiles its shaders — slow), one picture per run-loop turn, so
+    the page answers clicks while they come. SwiftUI's `Capsule` is hidden by the
+    physics `Capsule` struct: write `SwiftUI.Capsule()` in views, or the compiler gives
+    up with "failed to produce diagnostic".
+
 ## 8. Recipes
 
 ### Add a GUI class or property
@@ -1493,6 +1511,7 @@ swift run StudioApp --render-physics /tmp/p.png 0.9           # crates hit by a 
 swift run StudioApp --render-car /tmp/car.png 1.6             # welds and motorised hinges
 swift run StudioApp --render-adventure /tmp/lab.png lab ray    # the sample game, one area
 swift run StudioApp --render-client talk /tmp/talk.png         # the client talking to an NPC
+swift run StudioApp --render-home /tmp/home.png                # the home page, with two recents
 ```
 
 **`ps -o %cpu` is not evidence of anything.** It reports CPU time over the process's

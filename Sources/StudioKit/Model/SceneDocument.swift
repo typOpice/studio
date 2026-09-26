@@ -59,7 +59,13 @@ final class SceneDocument: ObservableObject {
     }
 
     func reset() {
-        model.clearScene()
+        startNew { model.clearScene() }
+    }
+
+    /// A new, untitled place made by `make` — a template, the starter scene: saving it
+    /// asks where, rather than writing over the file that was open before.
+    func startNew(_ make: () -> Void) {
+        make()
         url = nil
         savedRevision = model.revision
     }
