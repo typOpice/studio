@@ -238,22 +238,24 @@ Screen = service("Screen", {
 		if typeTags[shader] ~= "Shader" then
 			raise("AddShader expects a Shader, got " .. typeof(shader), 2)
 		end
-		invoke("screen.add", shaderIdOf[shader])
+		-- A LocalScript's effect is its own machine's (a zone's tint, say); a script's is
+		-- everyone's.
+		invoke("screen.add", shaderIdOf[shader], dataKit.isLocal())
 	end,
 	RemoveShader = function(_, shader)
 		if typeTags[shader] ~= "Shader" then
 			raise("RemoveShader expects a Shader, got " .. typeof(shader), 2)
 		end
-		invoke("screen.remove", shaderIdOf[shader])
+		invoke("screen.remove", shaderIdOf[shader], dataKit.isLocal())
 	end,
 }, function(key, value)
 	if key ~= "Shader" then
 		return false
 	end
 	if value == nil then
-		invoke("screen.set", nil)
+		invoke("screen.set", nil, dataKit.isLocal())
 	elseif typeTags[value] == "Shader" then
-		invoke("screen.set", shaderIdOf[value])
+		invoke("screen.set", shaderIdOf[value], dataKit.isLocal())
 	else
 		raise(string.format("Unable to assign property Shader. Shader expected, got %s", typeof(value)), 3)
 	end

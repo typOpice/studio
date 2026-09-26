@@ -29,6 +29,9 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 NSLog("Could not open \(path): \(error)")
             }
+        } else {
+            // On its own, the client opens on the sample game, ready to play or host.
+            session.loadAdventureIsland()
         }
 
         buildMenu()
@@ -55,6 +58,7 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
         let fileMenu = NSMenu(title: "File")
         add(to: fileMenu, "Open Scene…", #selector(openScene), "o")
         add(to: fileMenu, "Load Starter Scene", #selector(loadStarter), "")
+        add(to: fileMenu, "Load \(AdventureIsland.name)", #selector(loadAdventure), "")
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 
@@ -89,6 +93,7 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func loadStarter() { session.loadStarterScene() }
+    @objc private func loadAdventure() { session.loadAdventureIsland() }
 
     @objc private func openScene() {
         let panel = NSOpenPanel()

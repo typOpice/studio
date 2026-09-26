@@ -36,6 +36,10 @@ final class SceneModel: ObservableObject {
     /// The screen shader in front of the camera, or nil for an untouched picture.
     /// The screen effects switched on, run in shader order (see `activeScreenShaders`).
     @Published var screenShaderIDs: [UUID] = []
+    /// Screen effects this machine's LocalScripts switched on or off during play: not
+    /// scene data, never saved or sent.
+    @Published var localScreenAdded: Set<UUID> = []
+    @Published var localScreenRemoved: Set<UUID> = []
     /// GUIs made in Studio (StarterGui), and the one selected in the Explorer.
     @Published var starterGui: [StarterGuiObject] = []
     @Published var selectedGui: UUID? {

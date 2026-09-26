@@ -53,7 +53,8 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2023 checks — THE test suite, ~50–70s
+swift run StudioApp --selftest       # 2068 checks — THE test suite, ~60–95s
+swift run StudioApp --selftest --only Adventure   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
 ./make_app.sh release                # produce Studio.app and StudioClient.app
@@ -137,6 +138,7 @@ listed in §9.
 | `MeshSelfTest.swift` | MeshParts (OBJ, STL and PLY made in memory): decoding (triangles, size, texture coordinates, hard edges kept when a file has no normals, squeezed into the unit cube, the hull and its volume, a broken file refused); inserting (size, on the ground, too-big models rescaled, fidelity and picture undoable, Reset Size, saving, old files); an arch clicked through its opening whatever it collides as, and walked into by each CollisionFidelity (Precise lets a capsule stand in the opening, Hull and Box push it out, pillars push sideways, turned); Jolt with a cup (a block lands inside a Precise one, on top of a Hull or Box one) and an unanchored MeshPart resting and weighing its hull; drawn plain, textured and ray traced and read back; the Luau MeshPart API (Instance.new, ClassName, IsA, MeshId → MeshSize, TextureID, CollisionFidelity, the errors, Clone); saved Models carrying models and pictures and renaming a clash; a joiner getting the models, walking through a Precise arch, and seeing a host script's MeshPart |
 | `WardrobeSelfTest.swift` | What characters wear: every catalog accessory's mesh (sane size, wound outwards), faces and clothing pictures (sizes, a tee's sleeves, shorts to the knee); Roblox's clothing template on the torso, arms and hands, the face patch; a place's and a player's looks combined (own look kept or not, ten at most, built-in only for players), saving, old files, renaming a picture (and undo); accessories hung from their attachments, turning, nodding and lying down with the body, imported models by their anchor; drawn and read back (shirt over pants, pants, a top hat, a face picture in place of the smile, ray traced); in play (StarterPlayer over the player's look, afresh each character, the Animation Editor's rig); the Luau API (Accessory, AddAccessory, parenting, Shirt, Pants, Head.face, errors, GetAppliedDescription, Destroy, ApplyDescription with body colours, RemoveAccessories); the profile (kept, old profiles, applied); two players seeing each other's looks and a host script dressing a joined player, read back at once |
 | `RemotesSelfTest.swift` | Scripts working together: ModuleScripts and data objects in the scene (made, saved, old files, deleted and undone, copied and deleted with a part); `require` (once, the same value to every script, ReplicatedStorage, Script Service and parts, never by themselves, loops, nothing returned, errors, compile errors, wrong arguments); Values (IntValue rounding, StringValue from a number, BoolValue refusing, Folders, Clone, WaitForChild waiting, Changed with each value, Destroy, a Folder becoming a Player's leaderstats); remotes played alone (FireServer with tables, Vector3s and parts, FireClient, FireAllClients, InvokeServer and its errors, the wrong side refused); Raycast (first hit and all its fields, IgnoreWater, RespectCanCollide, Exclude and Include, too short, bad params, characters and excluding them); the leaderboard (hidden with no leaderstats, columns and rows, the HUD numbers moved, Tab); storage (a Model kept in ServerStorage by Studio, left out of what joiners get, saved, undone; its module and Value reached, a clone coming into the world with its script, a part into ReplicatedStorage and back, a LocalScript seeing ServerStorage empty); ObjectValue, Vector3Value, Color3Value, CFrameValue, BindableEvent, BindableFunction, UnreliableRemoteEvent and RunService:IsServer/IsClient; remotes queuing events until a handler connects and carrying Sounds, GUI objects and the Workspace; the README's examples; a host and a joined player (modules on each, FireServer as that player with a part, FireClient back, InvokeServer, leaderstats and Changed reaching the player, a late remote waited for, both on the joiner's leaderboard, the host's rays meeting the joiner, leaderstats leaving with the player); and with two players: ServerStorage never sent and empty to the joiner, a clone from it reaching them, an event queued for a late handler, an UnreliableRemoteEvent, a GUI object from another machine arriving as nil, and an InvokeClient failing when its player leaves |
+| `AdventureSelfTest.swift` | The sample game, played: every area, NPC, gem, script, data object and shader there (all seven compiled), saved and reopened, opened in Studio, the spawn; the talk prompt, dialogue and its keys, walking away closing it, NPCs turning; each area's screen effect and the underwater one while swimming; a gem, the baker's trade, the crown worn again after respawning; the obby's checkpoint, lava, respawning at the checkpoint, jump pad, trophy (a win, the time, the party hat, back to the start), mover and spinner; the lab's lever switching the lighting and its sign, the colour button; with two players: no errors, the joiner's own dialogue and screen effect, the joiner's gem counted for them, the lever's lighting reaching them |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -158,7 +160,8 @@ Sources/CJolt/                     Jolt Physics 5.6.0 under Jolt/ (MIT, verbatim
                                    backends excluded), our C shim under include/ and shim/
 
 Sources/StudioKit/
-  App/EditorLauncher.swift   editor window, menu bar, document actions, quit guard
+  App/EditorLauncher.swift   editor window, menu bar, document actions, quit guard;
+                             `--make-adventure out.json` writes the sample game
   App/ClientLauncher.swift   client window and menu bar
   App/LaunchClient.swift     editor → standalone client handoff via a temp file
 
@@ -203,7 +206,9 @@ Sources/StudioKit/
   Render/ShaderLibrary.swift debounced background compile and pipeline swap
   Render/ViewportSource.swift  the protocol the renderer draws a frame from; AvatarPose
                                and its `partTransforms()` (where each body part goes)
-  Render/AvatarSnapshot.swift  `--render-avatar out.png`: every pose side by side, no window
+  Render/AvatarSnapshot.swift  `--render-avatar out.png`: every pose side by side, no window;
+                               `--render-adventure out.png [view] [ray]`: the sample game from
+                               one of `adventureViews`, with that area's screen effect
 
   Interaction/Picking.swift            exact per-shape ray tests
   Interaction/Gizmo.swift              handle hit-testing and drag math
@@ -279,6 +284,9 @@ Sources/StudioKit/
   Scripting/ScriptRuntime+Data.swift  `data.*` (Folders, Values, remotes as data objects),
                                    `module.*`, `workspace.raycast`
   Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them
+  Model/AdventureIsland.swift      the sample game's world, built in code (`Builder`), and
+                                   `loadAdventureIsland()`
+  Model/AdventureIslandScripts.swift  its Luau scripts, dialogue, zones and shader bodies
   Play/PlayController+Remotes.swift  `remote.*` across machines, `character.raycast`,
                                    Values' Changed from outside
   UI/DataObjectsUI.swift           the Explorer's ReplicatedStorage, the data-object inspector
@@ -314,7 +322,7 @@ Sources/StudioKit/
   UI/PanelSnapshot.swift      `--render-panel animation|inspector|explorer|ribbon out.png`,
                               `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture|mesh|meshasset|avatar|replicated out.png`
                               (whole window),
-                              `--render-client menu|character|faces|clothes|outfit|join|chat|leaderboard out.png`;
+                              `--render-client menu|character|faces|clothes|outfit|join|chat|leaderboard|talk out.png`;
                               `--render-meshes out.png [ray]` (AvatarSnapshot) draws MeshParts;
                               `--render-looks out.png [ray] [back]` the sample outfits
   UI/Theme.swift          colours, NumericField, VectorEditor
@@ -1140,6 +1148,22 @@ Roughly ordered by how much time they will cost you.
     players never receive ServerStorage's nodes, scripts, modules or data objects; in
     Luau, ServerStorage and ServerScriptService look empty to a client.
 
+98. **A LocalScript's screen effects are its own machine's.** `Screen:AddShader`,
+    `RemoveShader` and `Screen.Shader =` from a LocalScript pass `local = true`
+    (`dataKit.isLocal()`), which lands in `SceneModel.localScreenAdded/Removed` rather
+    than the shaders' `enabled` flags. `activeScreenShaders` applies them on top, so
+    nothing a LocalScript does is replicated or saved, and `PlayController.start/stop`
+    clears them. A Script on the host still changes `enabled` for everyone.
+
+99. **Adventure Island is built in code and played by the suite.** `AdventureIsland.state()`
+    makes a fresh `SceneState` each time (its random numbers are seeded, so it's the same
+    island every time); it is not a file in the repo. Its ground's top is at y 0.2, and
+    everything standing on it a little above, because the editor's grid and the physics
+    ground plane are at y 0 and would z-fight with it. `AdventureSelfTest` plays it
+    through `PlayController`, so a change to the player, remotes, GUI or scripting that
+    breaks the game fails there — fix the engine, not the test, unless the game itself
+    was wrong.
+
 ## 8. Recipes
 
 ### Add a GUI class or property
@@ -1382,7 +1406,8 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
 - **`Part.locked` excludes a part from picking but not from collision.**
 - **Screen effects** all read the world's depth (not an earlier effect's), run in
   Explorer order rather than an order of their own, and a shader that hangs the GPU
-  takes the app with it; sixteen float parameters per shader.
+  takes the app with it; sixteen float parameters per shader. What a LocalScript
+  switches on or off lasts only for that play session (as in Roblox).
 
 ## 10. Conventions
 
@@ -1421,6 +1446,8 @@ swift run StudioApp --render-window script /tmp/window.png     # the whole windo
 swift run StudioApp --render-scene /tmp/s.png raytraced 17.5  # the starter scene, lit
 swift run StudioApp --render-physics /tmp/p.png 0.9           # crates hit by a ball
 swift run StudioApp --render-car /tmp/car.png 1.6             # welds and motorised hinges
+swift run StudioApp --render-adventure /tmp/lab.png lab ray    # the sample game, one area
+swift run StudioApp --render-client talk /tmp/talk.png         # the client talking to an NPC
 ```
 
 **`ps -o %cpu` is not evidence of anything.** It reports CPU time over the process's

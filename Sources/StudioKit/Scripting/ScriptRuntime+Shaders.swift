@@ -80,7 +80,9 @@ extension ScriptRuntime {
                 console.error("Screen effects must be screen shaders.")
                 return .nothing
             }
-            if (name == "screen.add") != model.screenShaderIDs.contains(shader.id) {
+            if arguments.count > 1, arguments[1].asBool == true {
+                model.setLocalScreenShader(shader.id, on: name == "screen.add")
+            } else if (name == "screen.add") != model.screenShaderIDs.contains(shader.id) {
                 model.toggleScreenShader(shader.id)
             }
             return .nothing
@@ -90,9 +92,10 @@ extension ScriptRuntime {
             return .string(id.uuidString)
 
         case "screen.set":
+            let local = arguments.count > 1 && arguments[1].asBool == true
             guard let first = arguments.first, case .string(let raw) = first,
                   let id = UUID(uuidString: raw) else {
-                model.setScreenShader(nil)
+                if local { model.setLocalScreenShader(only: nil) } else { model.setScreenShader(nil) }
                 return .nothing
             }
             guard let shader = model.shader(id: id) else { return .nothing }
@@ -100,7 +103,7 @@ extension ScriptRuntime {
                 console.error("\"\(shader.name)\" is a surface shader — Screen.shader needs a screen shader.")
                 return .nothing
             }
-            model.setScreenShader(id)
+            if local { model.setLocalScreenShader(only: id) } else { model.setScreenShader(id) }
             return .nothing
 
         default:

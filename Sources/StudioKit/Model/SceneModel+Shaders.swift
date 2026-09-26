@@ -29,7 +29,37 @@ extension SceneModel {
     /// The screen effects switched on, in the order they run: the order the shaders
     /// are listed in.
     var activeScreenShaders: [ShaderObject] {
-        shaders.filter { $0.kind == .screen && screenShaderIDs.contains($0.id) }
+        shaders.filter { shader in
+            shader.kind == .screen && !localScreenRemoved.contains(shader.id)
+                && (screenShaderIDs.contains(shader.id) || localScreenAdded.contains(shader.id))
+        }
+    }
+
+    /// A LocalScript switching a screen effect on or off: this machine's alone, over the
+    /// scene's (which scripts on the server share with everyone). `only` switches that
+    /// one on alone (Screen.Shader =), nil every one off.
+    func setLocalScreenShader(_ id: UUID, on: Bool) {
+        if on {
+            localScreenAdded.insert(id)
+            localScreenRemoved.remove(id)
+        } else {
+            localScreenRemoved.insert(id)
+            localScreenAdded.remove(id)
+        }
+    }
+
+    func setLocalScreenShader(only id: UUID?) {
+        for shader in shaders where shader.kind == .screen && shader.id != id {
+            localScreenRemoved.insert(shader.id)
+            localScreenAdded.remove(shader.id)
+        }
+        if let id { setLocalScreenShader(id, on: true) }
+    }
+
+    /// Play is over: only the scene's own effects again.
+    func clearLocalScreenShaders() {
+        if !localScreenAdded.isEmpty { localScreenAdded = [] }
+        if !localScreenRemoved.isEmpty { localScreenRemoved = [] }
     }
 
     var activeScreenShader: ShaderObject? { activeScreenShaders.first }

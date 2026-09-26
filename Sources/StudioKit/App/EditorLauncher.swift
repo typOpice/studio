@@ -111,6 +111,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         add(to: fileMenu, "Insert Model…", #selector(insertModel), "i")
         fileMenu.addItem(.separator())
         add(to: fileMenu, "Load Starter Scene", #selector(loadStarter), "")
+        add(to: fileMenu, "Open \(AdventureIsland.name) (Sample Game)", #selector(loadAdventure), "")
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 
@@ -217,6 +218,13 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         guard confirmDiscardingChanges(verb: "load the starter scene") else { return }
         session.stopPlay()
         model.loadStarterScene()
+        refreshTitle()
+    }
+
+    @objc private func loadAdventure() {
+        guard confirmDiscardingChanges(verb: "open \(AdventureIsland.name)") else { return }
+        session.stopPlay()
+        model.loadAdventureIsland()
         refreshTitle()
     }
 
@@ -462,6 +470,28 @@ public enum StudioEditor {
             let clock = arguments.count > 2 ? Float(arguments[2]) : nil
             exit(AvatarSnapshot.renderScene(to: URL(fileURLWithPath: path), technology: technology,
                                             clockTime: clock) ? 0 : 1)
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--make-adventure") {
+            // Writes Adventure Island as a scene file.
+            let path = flag + 1 < CommandLine.arguments.count ? CommandLine.arguments[flag + 1] : "Adventure Island.json"
+            do {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                try encoder.encode(AdventureIsland.state()).write(to: URL(fileURLWithPath: path))
+                print("Wrote \(path)")
+                exit(0)
+            } catch {
+                print("Could not write \(path): \(error)")
+                exit(1)
+            }
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-adventure") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let path = arguments.first ?? "adventure.png"
+            let view = arguments.dropFirst().first { !$0.lowercased().hasPrefix("ray") } ?? "overview"
+            let technology: LightingTechnology = arguments.contains { $0.lowercased().hasPrefix("ray") }
+                ? .rayTraced : .conventional
+            exit(AvatarSnapshot.renderAdventure(to: URL(fileURLWithPath: path), view: view, technology: technology) ? 0 : 1)
         }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-looks") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])

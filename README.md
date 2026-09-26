@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-1994 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2068 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -59,7 +59,55 @@ scene), the Luau, Wren and Metal lexers and completion engines, script-editor ca
 and input handling, the render loop, surface and full-screen shaders (rendered on
 the GPU and read back), collision, the player camera and the character controller,
 the screen GUI and chat, pictures and sounds (through a recorder, so nothing plays
-aloud), MeshParts and their collision, what characters wear, modules, remotes, raycasts and leaderstats, and two clients playing together over loopback.
+aloud), MeshParts and their collision, what characters wear, modules, remotes, raycasts and leaderstats, the sample game, and two clients playing together over loopback.
+
+`--only <suite>` runs one suite (Adventure, Remotes, Wardrobe, Mesh, Audio, Hud, LAN,
+Gui, Player or Script) while you work on it; the whole suite still has to pass.
+
+## The sample game: Adventure Island
+
+A small open world made entirely of what Studio has: parts, Models, Luau scripts,
+surface and screen shaders, remotes, leaderstats and a GUI. **Studio Client opens
+straight onto it** (File › Load Adventure Island brings it back later). In Studio,
+**File › Open Adventure Island (Sample Game)** loads it for editing: every part, script
+and shader is in the Explorer to read, change or borrow.
+
+Walk out from the fountain in the plaza; paths lead everywhere.
+
+| Area | What's there |
+| --- | --- |
+| **Spawn Plaza** | the fountain, benches, and Guide Pip, who explains the rest |
+| **The Village** (north) | four houses, a market stall and a well; Baker Bo trades 3 gems for a crown, Old Mara tells stories |
+| **Obby Tower** (west) | stepping stones over lava, a moving platform, a spinning bar, a truss to climb, tiles that fall away, a jump pad and a trophy at the top. Three checkpoints; the trophy counts a win, shows your time and gives a party hat |
+| **Mirror Lab** (east) | angled mirrors, a chrome orb and glass pillars. Click the lever to switch the island between ray-traced and ordinary lighting and watch the reflections and shadows change; the button beside it changes the lamps' colours |
+| **Crystal Caves** (south) | glowing crystals (a surface shader) and a blue screen glow while you're inside |
+| **Dream Garden** (north-west) | rainbow mushrooms to climb and floating islands, with a dreamy screen effect |
+| **The Lake** (north-east) | swim (the screen goes underwater), a pier and an islet with a palm |
+| **Lighthouse Hill** (south-east) | climb the ladder to the gallery; the beam turns |
+| **Whispering Woods** | trees and rocks between it all |
+
+Five gems are hidden around the island (they come back after 30 seconds). Gems and
+Wins show on the leaderboard. Eight people live there; walk up to one and press **E**
+to talk, then **1**, **2** or **3** to answer. They turn to face you as you pass.
+
+How it's made, script by script:
+
+- **Dialogue** and **Zones** (ModuleScripts in ReplicatedStorage): the conversations as
+  plain tables, and the areas as boxes. Both the host and each player require them.
+- **GameScript** (Script Service): leaderstats, gems, the baker's trade (a
+  RemoteFunction), rewards worn again after respawning (a BindableEvent from the obby).
+- **ObbyScript**, **LabScript**, **NPCBrain** and **Ambience**: the obstacles, the lever
+  (it sets `Lighting.Technology`), NPCs turning, and everything that bobs or spins.
+- **Adventure** (a LocalScript in StarterPlayer): the talk prompt and dialogue panel,
+  news banners (a RemoteEvent), name tags and signs (BillboardGuis), and the screen
+  effect for the area you're in.
+
+It works in network games too: each player has their own conversations and screen
+effects, and gems, wins and the lab's lighting are shared.
+
+For a picture without opening a window: `swift run StudioApp --render-adventure out.png
+[overview|plaza|village|obby|lab|caves|garden|lake|lighthouse] [ray]`, and
+`--make-adventure Island.json` writes it as a scene file.
 
 ## The player character
 
@@ -1273,6 +1321,11 @@ Screen.Shader:SetParameter("amount", 0.5)
 Screen.Shader = nil
 ```
 
+A **LocalScript** that switches a screen effect on or off changes only its own
+player's screen, as in Roblox: that's how Adventure Island tints the view in the caves
+for the player who is there and nobody else. A Script (on the host) changes it for
+everyone.
+
 **One caveat worth knowing.** A Luau script that goes wrong is contained — reported,
 disconnected, or stopped by the watchdog. A *shader* that goes wrong cannot be contained the same way: compile
 errors are caught cleanly, but a shader that loops forever hangs the GPU, and that is
@@ -1319,6 +1372,9 @@ Sources/StudioKit/
   Play/PlayerCamera.swift   third/first person camera with wall avoidance
   Play/PlayController.swift input, simulation, events for scripts
   Model/DefaultHud.swift    the PlayerHud a new scene starts with, in StarterGui
+  Model/AdventureIsland.swift  the sample game's world, built in code
+  Model/AdventureIslandScripts.swift  its Luau scripts and shaders
+  AdventureSelfTest.swift   plays the sample game, alone and with two players
   Interaction/Picking.swift        exact per-shape ray tests
   Interaction/Gizmo.swift          handle hit-testing and drag math
   Interaction/ViewportController.swift  camera + drag state owned outside SwiftUI

@@ -43,6 +43,15 @@ final class ClientSession: ObservableObject {
         try load(data, named: url.deletingPathExtension().lastPathComponent)
     }
 
+    /// The sample game: what the client opens on when started by itself.
+    func loadAdventureIsland() {
+        let wasPlaying = player != nil
+        leaveGame()
+        model.loadAdventureIsland()
+        sceneName = AdventureIsland.name
+        if wasPlaying { play() }
+    }
+
     func loadStarterScene() {
         let wasPlaying = player != nil
         leaveGame()

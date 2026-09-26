@@ -14,6 +14,22 @@ enum SelfTest {
         failures = 0
         // Nothing the tests play reaches the speakers.
         SoundSystem.makeOutput = { RecordingOutput() }
+        // `--only Name` runs one suite — quicker while working on it; the whole suite
+        // still has to pass before a change is done.
+        if let flag = CommandLine.arguments.firstIndex(of: "--only"), flag + 1 < CommandLine.arguments.count {
+            let suites: [String: (Checker) -> Void] = [
+                "Adventure": AdventureSelfTest.run, "Remotes": RemotesSelfTest.run, "Wardrobe": WardrobeSelfTest.run,
+                "Mesh": MeshSelfTest.run, "Audio": AudioSelfTest.run, "Hud": HudSelfTest.run, "LAN": LANSelfTest.run,
+                "Gui": GuiSelfTest.run, "Player": PlayerSelfTest.run, "Script": ScriptSelfTest.run,
+            ]
+            guard let suite = suites[CommandLine.arguments[flag + 1]] else {
+                print("No suite called \(CommandLine.arguments[flag + 1]): \(suites.keys.sorted().joined(separator: ", "))")
+                return 1
+            }
+            suite(Checker { name, condition, detail in check(name, condition, detail) })
+            print(failures == 0 ? "\nAll of it passed." : "\n\(failures) FAILED.")
+            return failures == 0 ? 0 : 1
+        }
         testRenderLoop()
         testShaderCompilation()
         testUniformLayout()
@@ -58,6 +74,7 @@ enum SelfTest {
         MeshSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         WardrobeSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         RemotesSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        AdventureSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LANSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
 
         if failures == 0 {

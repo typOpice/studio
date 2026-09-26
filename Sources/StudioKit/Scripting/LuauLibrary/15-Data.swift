@@ -13,6 +13,9 @@ do
 	-- RemoteFunction. The host keeps them (`data.*`), as "v:<id>" tokens; they can be in the
 	-- Workspace tree, ReplicatedStorage, a Player (leaderstats), or each other.
 
+	-- For parts that run before the scheduler's: whether the running thread is a LocalScript's.
+	dataKit.isLocal = inLocalScript
+
 	dataKit.idOf = setmetatable({}, { __mode = "k" })
 	dataKit.proxies = setmetatable({}, { __mode = "v" })
 	dataKit.names = {}

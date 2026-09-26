@@ -240,6 +240,18 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player.
    New file: Model/SceneModel+Storage.swift.
 
+21. A sample game: Adventure Island, 2026-09-26.
+   A small open world made only from what Studio has. The client now opens straight onto it (File > Load Adventure Island brings it back). In Studio, File > Open Adventure Island (Sample Game) opens it for editing, so every part, script and shader can be read and changed.
+   Areas: Spawn Plaza with a fountain; a village with houses, a market stall and a well; an obstacle tower (lava, stepping stones, a moving platform, a spinning bar, a truss, falling tiles, a jump pad, three checkpoints and a trophy); the Mirror Lab; the Crystal Caves; the Dream Garden with rainbow mushrooms and floating islands; a lake with a pier; Lighthouse Hill; and woods between them. Signs point the way.
+   Eight people to talk to: walk up and press E, then 1, 2 or 3 to answer. They turn to face you. Baker Bo trades 3 gems for a crown.
+   Ray tracing gimmick: in the Mirror Lab, click the lever to switch the island between ray-traced and ordinary lighting and see the mirrors and chrome orb reflect the room (and you). The button beside it changes the lamps' colours.
+   Shaders in certain areas: glowing crystals, rainbow mushrooms, lava and rippling water are surface shaders. The caves tint the screen blue, the garden goes dreamy, and swimming in the lake looks underwater. These screen effects are for the player who is there only.
+   Five gems to find (they come back after 30 seconds). Gems and obby wins show on the leaderboard. Beating the obby shows your time and gives a party hat, and rewards are worn again after respawning.
+   Also: a screen effect switched on by a LocalScript now changes only that player's screen, as in Roblox.
+   Tested alone and with a host and a joined player.
+   To test one part of the self test while working: swift run StudioApp --selftest --only Adventure (or Remotes, Wardrobe, Mesh, and so on).
+   New files: Model/AdventureIsland.swift, Model/AdventureIslandScripts.swift, AdventureSelfTest.swift.
+
 
 THINGS TO KNOW
 

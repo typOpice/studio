@@ -131,6 +131,65 @@ enum AvatarSnapshot {
         ]
     }()
 
+    /// Adventure Island's views: (camera target, yaw, pitch, distance, the screen effect
+    /// that area turns on, where a player stands).
+    static let adventureViews: [String: (Vec3, Float, Float, Float, String?, Vec3?)] = [
+        "overview": (Vec3(0, 0, 0), .pi / 2 + 0.35, 0.78, 330, nil, nil),
+        "plaza": (Vec3(0, 4, 8), .pi / 2 + 0.2, 0.22, 34, nil, Vec3(-3, 0.4, 16)),
+        "village": (Vec3(0, 4, 82), -.pi / 2 + 0.3, 0.28, 46, nil, Vec3(2, 0.2, 80)),
+        "obby": (Vec3(-92, 12, 6), .pi / 2 + 0.55, 0.28, 72, nil, Vec3(-80, 3.2, 10)),
+        "lab": (Vec3(90, 5, 10), .pi, 0.12, 19, nil, Vec3(78, 0.4, 13)),
+        "caves": (Vec3(0, 4, -102), .pi / 2, 0.14, 24, "Cave Glow", Vec3(-2, 0.4, -88)),
+        "garden": (Vec3(-84, 9, 98), .pi / 2 + 0.7, 0.2, 42, "Dreamy", Vec3(-72, 3.7, 80)),
+        "lake": (Vec3(84, 3, 94), .pi + 0.2, 0.3, 48, nil, Vec3(66, 4.5, 92)),
+        "lighthouse": (Vec3(95, 20, -95), .pi / 2 + 0.45, 0.18, 74, nil, Vec3(92, 9, -82)),
+    ]
+
+    /// `StudioApp --render-adventure out.png [view] [ray]`: Adventure Island from one of
+    /// `adventureViews`, its shaders compiled first, that area's screen effect on.
+    static func renderAdventure(to url: URL, view name: String, technology: LightingTechnology,
+                                width: Int = 1600, height: Int = 900) -> Bool {
+        guard let device = MTLCreateSystemDefaultDevice(), let setting = adventureViews[name] else {
+            print("Views: \(adventureViews.keys.sorted().joined(separator: ", "))")
+            return false
+        }
+        let model = SceneModel()
+        model.loadAdventureIsland()
+        model.lighting.technology = technology
+        if let effect = setting.4, let shader = model.shaders.first(where: { $0.name == effect }) {
+            model.screenShaderIDs = [shader.id]
+        }
+        var camera = Camera()
+        camera.target = setting.0
+        camera.yaw = setting.1
+        camera.pitch = setting.2
+        camera.distance = setting.3
+        var avatars: [AvatarPose] = []
+        if let feet = setting.5 {
+            var pose = AvatarPose(position: feet, yaw: atan2(-(camera.position.x - feet.x), -(camera.position.z - feet.z)) + .pi,
+                                  joints: poses()[0].pose.joints)
+            pose.look = sampleLooks[1]
+            avatars.append(pose)
+        }
+        let source = Source(model: model, avatars: avatars, camera: camera)
+        let view = MTKView(frame: CGRect(x: 0, y: 0, width: width, height: height), device: device)
+        guard let renderer = Renderer(device: device, view: view, source: source) else { return false }
+        let rayTraced = technology == .rayTraced && renderer.rayTracingSupported
+        for shader in model.shaders { renderer.shaderLibrary.compileNow(shader) }
+        let deadline = Date().addingTimeInterval(8)
+        while model.shaders.contains(where: { renderer.shaderLibrary.pipeline(for: $0.id, rayTraced: $0.kind == .surface && rayTraced) == nil }),
+              Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        guard let image = renderer.snapshot(width: width, height: height),
+              let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
+        else { return false }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return false }
+        print("Wrote \(url.path) (\(name), \(renderer.drewRayTraced ? "ray traced" : "conventional"))")
+        return true
+    }
+
     /// `StudioApp --render-looks out.png [ray] [back]`: the sample outfits side by side,
     /// from the front (or the back).
     static func renderLooks(to url: URL, technology: LightingTechnology, fromBehind: Bool = false,

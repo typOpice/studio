@@ -275,7 +275,7 @@ enum PanelSnapshot {
         return (music, logo)
     }
 
-    /// `--render-client menu|character|faces|clothes|outfit|join|chat|leaderboard out.png`: a client screen, drawn off
+    /// `--render-client menu|character|faces|clothes|outfit|join|chat|leaderboard|talk out.png`: a client screen, drawn off
     /// screen like `renderWindow`, for a player called Robin with a red torso. `chat` is
     /// a game in progress with the default chat open: its screen GUI over a plain sky,
     /// since the 3D view doesn't draw off screen.
@@ -295,6 +295,19 @@ enum PanelSnapshot {
             session.screen = .character
             CharacterEditorView.startingTab = screen == "faces" ? .face : screen == "clothes" ? .clothes : .accessories
         case "join": session.screen = .join
+        case "talk":
+            // Adventure Island, talking to Guide Pip with a gem found.
+            session.loadAdventureIsland()
+            session.play()
+            if let player = session.player {
+                for _ in 0..<30 { player.step(dt: 1.0 / 60) }
+                player.character.position = Vec3(-6, 0.4, 18)
+                for _ in 0..<10 { player.step(dt: 1.0 / 60) }
+                player.key("E", pressed: true)
+                player.step(dt: 1.0 / 60)
+                player.key("E", pressed: false)
+                for _ in 0..<150 { player.step(dt: 1.0 / 60) }
+            }
         case "leaderboard":
             // A game whose players have leaderstats: the list top right, the numbers below.
             var stats = ScriptObject.blank(language: .luau)
@@ -333,7 +346,7 @@ enum PanelSnapshot {
         }
         let size = NSRect(x: 0, y: 0, width: 1100, height: 680)
         let root: AnyView
-        if screen == "chat" || screen == "leaderboard", let player = session.player {
+        if screen == "chat" || screen == "leaderboard" || screen == "talk", let player = session.player {
             root = AnyView(ZStack {
                 LinearGradient(colors: [Color(red: 0.45, green: 0.68, blue: 0.95), Color(red: 0.78, green: 0.88, blue: 0.98)],
                                startPoint: .top, endPoint: .bottom)

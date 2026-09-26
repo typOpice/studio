@@ -132,6 +132,7 @@ final class PlayController: ViewportSource, PlayerBridge {
     /// Spawns the first character, then runs the scene's scripts — scene scripts,
     /// StarterPlayerScripts, then StarterCharacterScripts for that character.
     func start() {
+        model.clearLocalScreenShaders()
         scripts.runsSceneScripts = !worldFromHost
         settings = model.starterPlayer
         respawnTime = settings.respawnTime
@@ -145,6 +146,7 @@ final class PlayController: ViewportSource, PlayerBridge {
     }
 
     func stop() {
+        model.clearLocalScreenShaders()
         scripts.stop()
         sounds.stopAll()
         console.onAppend = nil
