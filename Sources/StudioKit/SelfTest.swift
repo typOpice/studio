@@ -28,6 +28,7 @@ enum SelfTest {
                 "Editor": { check in EditorSelfTest.run(check: check) }, "Syntax": { check in SyntaxSelfTest.run(check: check) },
                 "Utils": UtilsSelfTest.run, "Home": HomeSelfTest.run, "Nightfall": NightfallSelfTest.run,
                 "Obby": MegaObbySelfTest.run, "ShiftLock": ShiftLockSelfTest.run, "DataStore": DataStoreSelfTest.run,
+                "Games": GamePickerSelfTest.run,
             ]
             guard let suite = suites[CommandLine.arguments[flag + 1]] else {
                 print("No suite called \(CommandLine.arguments[flag + 1]): \(suites.keys.sorted().joined(separator: ", "))")
@@ -88,6 +89,7 @@ enum SelfTest {
         MegaObbySelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         ShiftLockSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         DataStoreSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        GamePickerSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LANSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
 
         if failures == 0 {

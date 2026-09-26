@@ -20,7 +20,7 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
 
         // A scene on the command line — Studio's "Open in Client" — is played straight
-        // away; started on its own, the client opens on its menu.
+        // away; started on its own, the client opens on the game picker.
         let arguments = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") }
         if let path = arguments.first {
             do {
@@ -30,8 +30,7 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("Could not open \(path): \(error)")
             }
         } else {
-            // On its own, the client opens on the sample game, ready to play or host.
-            session.loadAdventureIsland()
+            session.showGames()
         }
 
         buildMenu()
@@ -56,6 +55,8 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
 
         let fileItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
+        add(to: fileMenu, "Choose a Game…", #selector(chooseGame), "g", modifiers: [.command, .shift])
+        fileMenu.addItem(.separator())
         add(to: fileMenu, "Open Scene…", #selector(openScene), "o")
         add(to: fileMenu, "Load Starter Scene", #selector(loadStarter), "")
         add(to: fileMenu, "Load \(AdventureIsland.name)", #selector(loadAdventure), "")
@@ -87,6 +88,7 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func backToMenu() { session.leaveGame() }
+    @objc private func chooseGame() { session.showGames() }
     @objc private func rerunScripts() {
         guard let player = session.player else { return }
         player.console.clear()

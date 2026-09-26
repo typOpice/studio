@@ -35,6 +35,13 @@ final class HomeModel: ObservableObject {
     /// Shown over a place that is open, which Back returns to.
     @Published var canGoBack = false
     @Published var currentName = ""
+    /// The templates it draws pictures of: all of them on Studio's home page, the games
+    /// on the client's game picker.
+    let templates: [PlaceTemplate]
+
+    init(templates: [PlaceTemplate] = PlaceTemplate.allCases) {
+        self.templates = templates
+    }
 
     var open: (PlaceTemplate) -> Void = { _ in }
     var openFile: (URL) -> Void = { _ in }
@@ -65,7 +72,7 @@ final class HomeModel: ObservableObject {
     func refresh(recentURLs: [URL], drawNow: Bool = false) {
         recents = Self.places(from: recentURLs)
         for (id, image) in Self.templatePictures { pictures[id] = image }
-        pending = PlaceTemplate.allCases.map(\.id).filter { pictures[$0] == nil }
+        pending = templates.map(\.id).filter { pictures[$0] == nil }
             + recents.map(\.id).filter { pictures[$0] == nil }
         if drawNow {
             while !pending.isEmpty { drawNext() }
@@ -276,7 +283,7 @@ private struct SampleCard: View {
 }
 
 /// A card that lights up under the pointer and does `action` when clicked.
-private struct HoverCard<Content: View>: View {
+struct HoverCard<Content: View>: View {
     let action: () -> Void
     @ViewBuilder let content: (Bool) -> Content
     @State private var hovering = false
@@ -295,7 +302,7 @@ private struct HoverCard<Content: View>: View {
 }
 
 /// A place's picture at 16:9, or its symbol until the picture is ready.
-private struct Picture: View {
+struct Picture: View {
     let image: CGImage?
     let symbol: String
     let hovering: Bool
@@ -320,7 +327,7 @@ private struct Picture: View {
 }
 
 /// A template or a recent place: its picture, name and a line or two about it.
-private struct PlaceCard: View {
+struct PlaceCard: View {
     let title: String
     let subtitle: String
     let picture: CGImage?

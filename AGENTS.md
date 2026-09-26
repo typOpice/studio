@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2456 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2474 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -145,6 +145,7 @@ listed in §9.
 | `MegaObbySelfTest.swift` | Mega Obby: 60 numbered checkpoints in order, a stage between each, six named worlds, the finish, every kind of obstacle, heights, scripts, shaders; every stage possible (each gap and rise within a running jump worked out from the character's speed, jump and gravity; trusses tall enough; the jump pad reaching its landing); played (stage 1, checkpoints and the banner, a world's name, a kill brick and back at the checkpoint with a death counted, Q and E within what you've reached, fading tiles, movers, spinners, jump pads, R, the finish's Win); a host and a joined player each with their own stage, checkpoint and picker |
 | `ShiftLockSelfTest.swift` | Shift lock: on in new places, old files and every template; kept off when a place turns it off; the controls panel's line, the sample games keeping their own; Left Ctrl on (the pointer held, LockCenter and the crosshair, the camera over the right shoulder, the body turned with the camera and strafing), off again (the body turning to where it walks); a place with it off, and `Player.DevEnableMouseLock` read and set false by a script; a joined player's own shift lock, their facing seen by the host |
 | `DataStoreSelfTest.swift` | DataStores: a place id for each new place and New Scene, saved and reopened, one from its path for an old file (the same each time, not marked edited), fixed ones for the sample games (from the home page too); kept on disk by place, store and scope, files named safely, read back, removed, cleared for one place only; from Luau: the same store each time, tables read back as copies, UpdateAsync (and nil leaving it), IncrementAsync, RemoveAsync, number keys, scopes, every refusal (Instance, Vector3, function, NaN, mixed and cyclic tables, nil, long keys, incrementing text, fractions in an ordered store) with nothing written, ordered pages both ways and between two values, GetGlobalDataStore, a LocalScript refused, Run mode; saved across plays, reopened, another place apart, cleared; completion; the README example; Mega Obby, Nightfall and Adventure Island carrying on next time; a joined player saving nothing themselves, the host keeping their stage by name, and on stage 4 when they join again |
+| `GamePickerSelfTest.swift` | The client's game picker: where it starts, the sample games and the Starter Scene with their pictures; places opened remembered (newest first, once each, not Studio's hand-over copy, kept between runs, a deleted one left out), one chosen opening on the menu, one that can't be opened saying so; the character and join screens returning where they came from; choosing, playing and choosing another game; a host choosing Mega Obby there and a joined player (from the picker) playing it |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -299,6 +300,8 @@ Sources/StudioKit/
   Render/PlaceThumbnail.swift      pictures of places, drawn off screen by one shared renderer,
                                    a saved place's cached by path and modification date
   UI/HomeView.swift                the home page (HomeView), what it shows (HomeModel), RecentPlace
+  UI/GamePickerView.swift          the client's first screen: the sample games and places opened
+                                   there (a HomeModel of the games, `ClientSession.games`)
   Model/UtilsModule.swift          the Utils ModuleScript every new place has (Luau source), and
                                    `insertUtilsModule()` for older places
   Model/PlaceBuilding.swift        what the places built in code share: part, group, script,
@@ -1298,6 +1301,14 @@ Roughly ordered by how much time they will cost you.
     - The self-tests point `DataStoreFiles.shared.directory` at a temporary folder (in
       `SelfTest.run`), so they never touch real saves. The sample games' suites clear
       their place between tests, since each test expects to start with nothing saved.
+
+108. **The client starts on its game picker, but `ClientSession` doesn't.** The app
+    delegate calls `showGames()`; a bare `ClientSession()` is still on `.menu`, which the
+    LAN tests rely on. The character and join screens go back with `back()` to where they
+    came from (`backScreen`), never to a fixed screen. Places opened in the client are
+    kept in its defaults (`recentPlaces`); Studio's hand-over copy (`LaunchClient.isHandover`)
+    is not one of them. The picker's pictures come from a `HomeModel` limited to the games
+    (`templates`), so it draws four, not every template.
 
 ## 8. Recipes
 

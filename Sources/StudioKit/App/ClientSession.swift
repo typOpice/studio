@@ -1,11 +1,16 @@
 import Foundation
+import AppKit
 
 /// Everything the client app is doing: which screen shows, the player's profile, the
 /// scene, the play session, and a LAN game being hosted or joined.
 final class ClientSession: ObservableObject {
-    enum Screen: Equatable { case menu, character, join, playing }
+    /// `games` is the game picker the client starts on; `menu` plays, hosts or joins the
+    /// game chosen there.
+    enum Screen: Equatable { case games, menu, character, join, playing }
 
     @Published var screen: Screen = .menu
+    /// Where Back (or Done) on the character and join screens goes: the screen they came from.
+    private(set) var backScreen: Screen = .menu
     /// Saved whenever it changes.
     @Published var profile: PlayerProfile {
         didSet { if profile != oldValue { profile.save(to: defaults) } }
@@ -21,6 +26,9 @@ final class ClientSession: ObservableObject {
 
     let model: SceneModel
     let browser = LANBrowser()
+    /// The game picker's cards: the sample games and the Starter Scene, and the places
+    /// opened here lately, with their pictures.
+    let games = HomeModel(templates: PlaceTemplate.samples + [.starter])
     private let defaults: UserDefaults
     /// The scene as it was before play began; leaving a game puts it back.
     private var snapshot = SceneState()
@@ -34,6 +42,79 @@ final class ClientSession: ObservableObject {
         self.sceneName = sceneName
         self.defaults = defaults
         self.profile = PlayerProfile.load(from: defaults)
+        games.openFile = { [weak self] url in self?.choose(file: url) }
+        games.browse = { [weak self] in
+            ClientSession.askForPlace { url in self?.choose(file: url) }
+        }
+    }
+
+    // MARK: - Choosing a game
+
+    /// Places opened here, newest first.
+    var recentPlaces: [URL] {
+        (defaults.stringArray(forKey: Self.recentsKey) ?? []).map { URL(fileURLWithPath: $0) }
+    }
+
+    static let recentsKey = "recentPlaces"
+
+    private func noteRecent(_ url: URL) {
+        // Not Studio's copy of the place it hands over: it's gone once played.
+        guard !LaunchClient.isHandover(url) else { return }
+        let path = url.standardizedFileURL.path
+        let paths = [path] + recentPlaces.map(\.path).filter { $0 != path }
+        defaults.set(Array(paths.prefix(HomeModel.recentLimit)), forKey: Self.recentsKey)
+    }
+
+    /// The game picker, leaving whatever game was going.
+    func showGames() {
+        leaveGame()
+        problem = nil
+        screen = .games
+        games.refresh(recentURLs: recentPlaces)
+    }
+
+    /// The character or join screen, coming back to this one after.
+    func show(_ next: Screen) {
+        backScreen = screen == .games ? .games : .menu
+        screen = next
+    }
+
+    func back() {
+        screen = backScreen
+        if screen == .games { games.refresh(recentURLs: recentPlaces) }
+    }
+
+    /// A game from the picker, on the menu ready to play or host.
+    func choose(_ template: PlaceTemplate) {
+        leaveGame()
+        model.loadTemplate(template)
+        sceneName = template.title
+        problem = nil
+        screen = .menu
+    }
+
+    /// A place file from the picker.
+    func choose(file url: URL) {
+        leaveGame()
+        do {
+            try open(url)
+            problem = nil
+            screen = .menu
+        } catch {
+            problem = "Couldn't open \(url.lastPathComponent)"
+            screen = .games
+            games.refresh(recentURLs: recentPlaces)
+        }
+    }
+
+    /// The Open panel, for a place file.
+    static func askForPlace(_ chosen: @escaping (URL) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json, SceneDocument.sceneType]
+        panel.begin { response in
+            if response == .OK, let url = panel.url { chosen(url) }
+        }
     }
 
     // MARK: - Scenes
@@ -41,6 +122,7 @@ final class ClientSession: ObservableObject {
     func open(_ url: URL) throws {
         let data = try Data(contentsOf: url)
         try load(data, named: url.deletingPathExtension().lastPathComponent, file: url)
+        noteRecent(url)
     }
 
     /// The sample game: what the client opens on when started by itself.

@@ -4,10 +4,19 @@ import Foundation
 /// Launches the standalone client on the current scene by writing it to a temporary
 /// file and handing that path to the `StudioClient` executable next to this one.
 enum LaunchClient {
+    static let handoverPrefix = "studio-scene-"
+
+    /// Whether a file is the copy of a place Studio hands the client, not one of the user's.
+    static func isHandover(_ url: URL) -> Bool {
+        url.lastPathComponent.hasPrefix(handoverPrefix)
+            && url.deletingLastPathComponent().resolvingSymlinksInPath().path
+            == FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path
+    }
+
     static func launch(with model: SceneModel) {
         do {
             let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent("studio-scene-\(UUID().uuidString.prefix(8)).json")
+                .appendingPathComponent("\(handoverPrefix)\(UUID().uuidString.prefix(8)).json")
             try model.encodeScene().write(to: url)
 
             guard let executable = clientExecutableURL() else {

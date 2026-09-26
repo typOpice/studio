@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2456 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2474 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -85,8 +85,8 @@ The pictures are drawn off screen from the places themselves; a saved place's is
 ## The sample game: Adventure Island
 
 A small open world made entirely of what Studio has: parts, Models, Luau scripts,
-surface and screen shaders, remotes, leaderstats and a GUI. **Studio Client opens
-straight onto it** (File › Load Adventure Island brings it back later). In Studio,
+surface and screen shaders, remotes, leaderstats and a GUI. It's the first game on
+**Studio Client's game picker** (and File › Load Adventure Island). In Studio,
 **File › Open Adventure Island (Sample Game)** loads it for editing: every part, script
 and shader is in the Explorer to read, change or borrow.
 
@@ -586,11 +586,17 @@ ball and renders the result.
 | Play / Stop · Open in client | `⌘P` · `⇧⌘P` |
 | Run / Stop (scripts and physics, no player; the editor keeps the camera) | `F8` or the ⚙ button by Play |
 
-## The client: menu, character and local network
+## The client: games, menu, character and local network
 
-StudioClient opens on a **main menu**: Play, Host on your network, Join a game,
-Character and Quit (a scene sent from Studio with "Open in Client" is played straight
-away). **Character** sets your name, a colour for each body part, and what you wear —
+StudioClient opens on its **game picker**: the three sample games, each with a picture
+and what's in it, then **Your places** — Open a place… for a file saved from Studio, the
+Starter Scene, and the places you've opened here before, newest first. **Join a game**
+and **Character** are there too, since joining needs no game of your own. **File ›
+Choose a Game…** (⇧⌘G) brings the picker back from anywhere.
+
+Choosing a game goes on to the **main menu**: Play, Host on your network, Join a game,
+Choose another game, Character and Quit (a scene sent from Studio with "Open in Client"
+is played straight away). **Character** sets your name, a colour for each body part, and what you wear —
 a face, shirt, pants and accessories (see *What characters wear*), on a 3D preview; it
 is saved and used in every scene you play — scripts see the name as `player.Name`. **Main Menu** (⌘L)
 leaves a game.

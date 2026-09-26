@@ -345,6 +345,13 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player. The joined player's own game saves nothing; the host keeps their stage by name, and they're back on it when they join again.
    New files: Model/DataStores.swift, Scripting/ScriptRuntime+DataStore.swift, DataStoreSelfTest.swift.
 
+31. A game picker in the client, 2026-09-26.
+   Studio Client now opens on a game picker instead of going straight to Adventure Island. It shows the three sample games (Adventure Island, Nightfall, Mega Obby) with a picture of each and what's in it, then "Your places": open a place file, the Starter Scene, and the places you've opened in the client before, newest first.
+   Choosing a game takes you to the main menu to Play or Host it. The menu has a new "Choose another game" button, and File > Choose a Game... (Shift-Cmd-G) brings the picker back from anywhere.
+   Join a game and Character are on the picker too, and their Back/Done buttons return to wherever you came from.
+   Tested alone and with a host who chose Mega Obby on the picker and a player who joined from theirs.
+   New files: UI/GamePickerView.swift, GamePickerSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

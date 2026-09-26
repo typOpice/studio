@@ -18,6 +18,7 @@ struct ClientRootView: View {
                         GameBar(session: session)
                     }
                 }
+            case .games: GamePickerView(session: session, games: session.games)
             case .menu: ClientMenuView(session: session)
             case .character: CharacterEditorView(session: session)
             case .join: JoinGameView(session: session)
@@ -129,8 +130,9 @@ struct ClientMenuView: View {
                     MenuButton(title: "Host on your network", icon: "antenna.radiowaves.left.and.right") {
                         session.hostOnLAN()
                     }
-                    MenuButton(title: "Join a game", icon: "person.2.fill") { session.screen = .join }
-                    MenuButton(title: "Character", icon: "person.crop.square") { session.screen = .character }
+                    MenuButton(title: "Join a game", icon: "person.2.fill") { session.show(.join) }
+                    MenuButton(title: "Choose another game", icon: "square.grid.2x2") { session.showGames() }
+                    MenuButton(title: "Character", icon: "person.crop.square") { session.show(.character) }
                     MenuButton(title: "Quit", icon: "xmark") { NSApp.terminate(nil) }
                 }
                 if let problem = session.problem {
@@ -276,7 +278,7 @@ struct CharacterEditorView: View {
                 HStack(spacing: 10) {
                     MenuButton(title: "Done", icon: "checkmark", prominent: true, width: 140) {
                         commitName()
-                        session.screen = .menu
+                        session.back()
                     }
                     Button("Reset colours") { session.profile.colors = BodyColors() }
                         .buttonStyle(.plain).foregroundStyle(.white.opacity(0.7))
@@ -460,7 +462,7 @@ struct JoinGameView: View {
             if let failure = browser.failure {
                 Text("The network said: \(failure)").font(.system(size: 11)).foregroundStyle(.white.opacity(0.45))
             }
-            MenuButton(title: "Back", icon: "chevron.left") { session.screen = .menu }
+            MenuButton(title: "Back", icon: "chevron.left") { session.back() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(.white)

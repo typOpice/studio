@@ -415,6 +415,10 @@ enum PanelSnapshot {
             session.screen = .character
             CharacterEditorView.startingTab = screen == "faces" ? .face : screen == "clothes" ? .clothes : .accessories
         case "join": session.screen = .join
+        case "games":
+            // The picker, its pictures drawn.
+            session.showGames()
+            session.games.refresh(recentURLs: session.recentPlaces, drawNow: true)
         case "talk":
             // Adventure Island, talking to Guide Pip with a gem found.
             session.loadAdventureIsland()

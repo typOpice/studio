@@ -83,7 +83,7 @@ enum LANSelfTest {
         return done()
     }
 
-    private static func freshDefaults() -> (UserDefaults, String) {
+    static func freshDefaults() -> (UserDefaults, String) {
         let suite = "studio-selftest-\(UUID().uuidString)"
         madeSuites.append(suite)
         return (UserDefaults(suiteName: suite)!, suite)
