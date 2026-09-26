@@ -170,6 +170,23 @@ private final class CompletionListView: NSView {
 
     private var rows: Int { min(items.count, CompletionList.visibleRows) }
 
+    /// What the highlighted suggestion does, when it says (a module's comments).
+    private var documentation: String? {
+        items.indices.contains(selected) ? items[selected].documentation : nil
+    }
+    private static let documentationFont = NSFont.systemFont(ofSize: 11)
+    private static let documentationLines: CGFloat = 4
+
+    /// The description's height at a width, up to four lines, with its padding.
+    private func documentationHeight(width: CGFloat) -> CGFloat {
+        guard let documentation else { return 0 }
+        let bounds = (documentation as NSString).boundingRect(
+            with: NSSize(width: width - 20, height: 400), options: [.usesLineFragmentOrigin],
+            attributes: [.font: Self.documentationFont])
+        let line = Self.documentationFont.boundingRectForFont.height
+        return ceil(min(bounds.height, line * Self.documentationLines)) + 10
+    }
+
     override var fittingSize: NSSize {
         let widest = items.prefix(40).map { item -> CGFloat in
             let label = (item.label as NSString).size(withAttributes: [.font: Self.font]).width
@@ -177,8 +194,11 @@ private final class CompletionListView: NSView {
             return label + (item.detail.isEmpty ? 0 : detail + 24)
         }.max() ?? 0
         let footer = (footerText as NSString).size(withAttributes: [.font: Self.footerFont]).width + 20
-        let width = min(max(widest + Self.labelInset + 14, footer, 240), 560)
-        return NSSize(width: width, height: CGFloat(rows) * Self.rowHeight + Self.footerHeight + 8)
+        // A little wider when there are descriptions, so they wrap less.
+        let least: CGFloat = items.contains { $0.documentation != nil } ? 340 : 240
+        let width = min(max(widest + Self.labelInset + 14, footer, least), 560)
+        return NSSize(width: width, height: CGFloat(rows) * Self.rowHeight + documentationHeight(width: width)
+                      + Self.footerHeight + 8)
     }
 
     private var footerText: String {
@@ -229,7 +249,17 @@ private final class CompletionListView: NSView {
             Self.dim.withAlphaComponent(0.3).setFill()
             NSBezierPath(roundedRect: NSRect(x: bounds.maxX - 5, y: y, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
         }
-        let footerY = 4 + CGFloat(rows) * Self.rowHeight
+        var footerY = 4 + CGFloat(rows) * Self.rowHeight
+        if let documentation {
+            let height = documentationHeight(width: bounds.width)
+            Self.border.setFill()
+            NSRect(x: 8, y: footerY, width: bounds.width - 16, height: 1).fill()
+            (documentation as NSString).draw(
+                with: NSRect(x: 10, y: footerY + 5, width: bounds.width - 20, height: height - 10),
+                options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+                attributes: [.font: Self.documentationFont, .foregroundColor: CodeEditor.foreground.withAlphaComponent(0.8)])
+            footerY += height
+        }
         Self.border.setFill()
         NSRect(x: 8, y: footerY, width: bounds.width - 16, height: 1).fill()
         (footerText as NSString).draw(at: NSPoint(x: 10, y: footerY + 4),

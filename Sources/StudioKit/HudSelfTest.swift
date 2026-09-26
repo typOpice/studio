@@ -83,7 +83,7 @@ enum HudSelfTest {
         starter.clearScene()
         check("a new scene starts with it too, and the leaderboard",
               starter.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName, DefaultHud.listName]
-              && starter.scripts.count == 3 && starter.defaultGui == DefaultHud.version)
+              && starter.scripts.filter { !$0.isModule }.count == 3 && starter.defaultGui == DefaultHud.version)
 
         // Deleted and saved, it stays deleted.
         let deleting = SceneModel()

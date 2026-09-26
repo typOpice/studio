@@ -116,11 +116,13 @@ extension SceneModel {
         defaultGui = DefaultHud.version
         assets = []
         sounds = []
+        dataObjects = []
         starterPlayer = StarterPlayerSettings()
         animations = [AnimationObject.waveExample()]
         lighting = LightingSettings()
         selectedAnimation = nil
-        scripts = [spin] + hud.scripts
+        // Every new place has the Utils ModuleScript in ReplicatedStorage.
+        scripts = [spin] + hud.scripts + [UtilsModule.make()]
         selection = []
         selectedScript = nil
         selectedShader = nil

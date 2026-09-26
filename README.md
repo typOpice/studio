@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2222 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2262 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -977,6 +977,36 @@ gives Roblox's error at the `require`. The server and the clients each run a mod
 once for themselves, as in Roblox — on the host too, where the scene's scripts are the
 server and its LocalScripts a client. `RunService:IsServer()` and `:IsClient()` say
 which a script is.
+
+### The Utils module
+
+Every new place starts with a ModuleScript called **Utils** in ReplicatedStorage: helpers
+most games end up writing for themselves. Use it from any Script or LocalScript:
+
+```lua
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Utils = require(ReplicatedStorage.Utils)
+
+part.Touched:Connect(Utils.debounce(1, function(hit)
+	local player = Utils.playerFromPart(hit)
+	if player then
+		print(player.Name, "touched it at", Utils.formatTime(time()))
+	end
+end))
+```
+
+| | |
+| --- | --- |
+| **Maths** | `lerp(a, b, t)` (numbers, Vector3s, Color3s, CFrames), `clamp`, `round(x, step)`, `remap(x, inLow, inHigh, outLow, outHigh)`, `approach(current, target, step)`, `randomBetween`, `randomInt`, `chance(percent)`, `wrapAngle(degrees)` |
+| **Tables** | `copy`, `deepCopy` (cycles and parts are fine), `keys`, `values`, `count`, `find(t, value)`, `filter(list, keep)`, `map(list, change)`, `shuffle`, `pickRandom`, `merge(...)` |
+| **Text and time** | `formatTime(125)` → `2:05`, `commas(12500)` → `12,500`, `shorten(1500)` → `1.5K`, `padLeft(7, 3, "0")` → `007`, `split`, `trim`, `titleCase` |
+| **Game helpers** | `debounce(seconds, callback)`, `cooldown(seconds)` → `ready(player)`, `playerFromPart(hit)`, `getCharacter`, `getHumanoid`, `getRoot` (each from a player, character or body part), `isAlive`, `positionOf`, `distance(a, b)` (players, characters, parts, Models or Vector3s), `weld(a, b)`, `tween(object, seconds, goals, style)` |
+
+It's an ordinary script that belongs to the place: open it to read how anything works,
+change it, or add your own helpers. For each one, write a comment saying what it does,
+then `function Utils.name(...)`. The script editor suggests them after `Utils.`, with their
+parameters, and shows the comment for the highlighted one. A place made before this
+can have one too: right-click **ReplicatedStorage › Insert Utils Module**.
 
 ### ReplicatedStorage and ServerStorage
 

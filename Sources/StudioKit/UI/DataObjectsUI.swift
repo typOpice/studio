@@ -79,6 +79,13 @@ struct StorageGroup: View {
                 expanded = true
                 session.openScript(model.addModuleScript(host: place.scriptHost))
             }
+            if place == .replicatedStorage {
+                // New places have Utils already; this is for older ones (or another copy).
+                Button("Insert Utils Module") {
+                    expanded = true
+                    session.openScript(model.insertUtilsModule())
+                }
+            }
             Divider()
         }
         if place == .replicatedStorage {

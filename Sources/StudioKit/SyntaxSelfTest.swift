@@ -171,6 +171,17 @@ enum SyntaxSelfTest {
         check("…and a colon function is a method", utils.first { $0.name == "describe" }?.isMethod == true)
         let config = LuauModuleShape.members(of: configModule).map(\.name)
         check("a module returning a table outright", config == ["maxPlayers", "spawn", "greet", "debug", "check"], "\(config)")
+        check("an if-expression isn't a block", LuauModuleShape.members(of: """
+            local M = {}
+            function M.sign(x)
+            \treturn if x < 0 then -1 elseif x > 0 then 1 else 0
+            end
+            M.mode = if true then "fast" else "slow"
+            if M.mode == "fast" then
+            \tM.speed = 2
+            end
+            return M
+            """).map(\.name) == ["sign", "mode"])
         check("a return inside a function isn't the module's", LuauModuleShape.members(of: "local M = {}\nfunction M.f()\n\treturn 1\nend\nreturn M").map(\.name) == ["f"])
         check("a module that returns nothing useful has no members", LuauModuleShape.members(of: "print('hi')").isEmpty
                 && LuauModuleShape.members(of: "return 5").isEmpty)

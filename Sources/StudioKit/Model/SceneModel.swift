@@ -474,7 +474,7 @@ final class SceneModel: ObservableObject {
     // MARK: - Scene files
 
     func clearScene() {
-        // A new scene starts with the default HUD, as Studio's starter scene does.
+        // A new scene starts with the default HUD and Utils, as Studio's starter scene does.
         let hud = DefaultHud.make()
         commit("New scene") {
             parts = []
@@ -485,7 +485,8 @@ final class SceneModel: ObservableObject {
             assets = []
             sounds = []
             defaultGui = DefaultHud.version
-            scripts = hud.scripts
+            scripts = hud.scripts + [UtilsModule.make()]
+            dataObjects = []
             shaders = []
             screenShaderID = nil
             starterPlayer = StarterPlayerSettings()

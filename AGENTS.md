@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2222 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2262 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -139,6 +139,7 @@ listed in §9.
 | `WardrobeSelfTest.swift` | What characters wear: every catalog accessory's mesh (sane size, wound outwards), faces and clothing pictures (sizes, a tee's sleeves, shorts to the knee); Roblox's clothing template on the torso, arms and hands, the face patch; a place's and a player's looks combined (own look kept or not, ten at most, built-in only for players), saving, old files, renaming a picture (and undo); accessories hung from their attachments, turning, nodding and lying down with the body, imported models by their anchor; drawn and read back (shirt over pants, pants, a top hat, a face picture in place of the smile, ray traced); in play (StarterPlayer over the player's look, afresh each character, the Animation Editor's rig); the Luau API (Accessory, AddAccessory, parenting, Shirt, Pants, Head.face, errors, GetAppliedDescription, Destroy, ApplyDescription with body colours, RemoveAccessories); the profile (kept, old profiles, applied); two players seeing each other's looks and a host script dressing a joined player, read back at once |
 | `RemotesSelfTest.swift` | Scripts working together: ModuleScripts and data objects in the scene (made, saved, old files, deleted and undone, copied and deleted with a part); `require` (once, the same value to every script, ReplicatedStorage, Script Service and parts, never by themselves, loops, nothing returned, errors, compile errors, wrong arguments); Values (IntValue rounding, StringValue from a number, BoolValue refusing, Folders, Clone, WaitForChild waiting, Changed with each value, Destroy, a Folder becoming a Player's leaderstats); remotes played alone (FireServer with tables, Vector3s and parts, FireClient, FireAllClients, InvokeServer and its errors, the wrong side refused); Raycast (first hit and all its fields, IgnoreWater, RespectCanCollide, Exclude and Include, too short, bad params, characters and excluding them); the leaderboard (hidden with no leaderstats, columns and rows, the HUD numbers moved, Tab); storage (a Model kept in ServerStorage by Studio, left out of what joiners get, saved, undone; its module and Value reached, a clone coming into the world with its script, a part into ReplicatedStorage and back, a LocalScript seeing ServerStorage empty); ObjectValue, Vector3Value, Color3Value, CFrameValue, BindableEvent, BindableFunction, UnreliableRemoteEvent and RunService:IsServer/IsClient; remotes queuing events until a handler connects and carrying Sounds, GUI objects and the Workspace; the README's examples; a host and a joined player (modules on each, FireServer as that player with a part, FireClient back, InvokeServer, leaderstats and Changed reaching the player, a late remote waited for, both on the joiner's leaderboard, the host's rays meeting the joiner, leaderstats leaving with the player); and with two players: ServerStorage never sent and empty to the joiner, a clone from it reaching them, an event queued for a late handler, an UnreliableRemoteEvent, a GUI object from another machine arriving as nil, and an InvokeClient failing when its player leaves |
 | `AdventureSelfTest.swift` | The sample game, played: every area, NPC, gem, script, data object and shader there (all seven compiled), saved and reopened, opened in Studio, the spawn; the talk prompt, dialogue and its keys, walking away closing it, NPCs turning; each area's screen effect and the underwater one while swimming; a gem, the baker's trade, the crown worn again after respawning; the obby's checkpoint, lava, respawning at the checkpoint, jump pad, trophy (a win, the time, the party hat, back to the start), mover and spinner; the lab's lever switching the lighting and its sign, the colour button; with two players: no errors, the joiner's own dialogue and screen effect, the joiner's gem counted for them, the lever's lighting reaching them |
+| `UtilsSelfTest.swift` | The Utils module: in the starter scene and a new scene (which no longer keep the last place's data objects), not added to an old place, Insert Utils Module (named, one undo step, Utils1, saved); every maths, table and text function run in Luau (random ranges, cycles and parts in deepCopy, a class's metatable, thousands, K/M/B, titles); the game helpers in play on a real character (getCharacter/Humanoid/Root from a player, a character and a body part, playerFromPart, isAlive, distance, positionOf, debounce and cooldown over time, weld, tween); suggested with every function, parameters and its comment; a host's script and a joined player's LocalScript each using it |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -284,6 +285,8 @@ Sources/StudioKit/
   Scripting/ScriptRuntime+Data.swift  `data.*` (Folders, Values, remotes as data objects),
                                    `module.*`, `workspace.raycast`
   Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them
+  Model/UtilsModule.swift          the Utils ModuleScript every new place has (Luau source), and
+                                   `insertUtilsModule()` for older places
   Model/AdventureIsland.swift      the sample game's world, built in code (`Builder`), and
                                    `loadAdventureIsland()`
   Model/AdventureIslandScripts.swift  its Luau scripts, dialogue, zones and shader bodies
@@ -326,7 +329,7 @@ Sources/StudioKit/
   UI/StarterPlayerView.swift  StarterPlayer inspector, read-only core script viewer
   UI/AnimationEditorView.swift the Animation tab: toolbar, KeyframeTimeline, JointInspector
   UI/LightingView.swift       Lighting inspector, a part's PointLight editor, RenderCapabilities
-  UI/PanelSnapshot.swift      `--render-panel animation|inspector|explorer|ribbon|suggestions|picked|require|module|service out.png`,
+  UI/PanelSnapshot.swift      `--render-panel animation|inspector|explorer|ribbon|suggestions|picked|require|module|service|utils out.png`,
                               `--render-window script|shader|world|split|gui|guitab|guigradient|sounds|picture|mesh|meshasset|avatar|replicated out.png`
                               (whole window),
                               `--render-client menu|character|faces|clothes|outfit|join|chat|leaderboard|talk out.png`;
@@ -1195,6 +1198,16 @@ Roughly ordered by how much time they will cost you.
     quote (`CodeLanguage.completionRange`), since a name may contain spaces.
     `LuauAPI.services` must list exactly what the library's `services` table (14-Extras,
     plus 15-Data's three places) holds; `SyntaxSelfTest.testServices` runs each one.
+    `LuauModuleShape` counts blocks by `function`/`do`/`if`/`repeat` against
+    `end`/`until`, except an `if` that is a value (`return if …`, `x = if …`), which
+    has no `end` — getting that wrong hides every member after it.
+
+102. **Every new place has the Utils ModuleScript** (`UtilsModule.make()`, in
+    `loadStarterScene` and `clearScene`); an old place opened is *not* given one (it's
+    the place's own code, and may have been deleted on purpose) — Insert Utils Module
+    is there for that. Its source is Luau in the shape `LuauModuleShape` reads, with a
+    comment above every `function Utils.name`, which is what the editor shows; keep
+    that shape, and add a test in `UtilsSelfTest` for anything added.
 
 ## 8. Recipes
 

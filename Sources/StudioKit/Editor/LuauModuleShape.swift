@@ -15,7 +15,7 @@ import Foundation
 ///
 /// and a class's constructor (a function that calls `setmetatable`) makes objects with
 /// the module's methods and every `self.name = …` field. Anything cleverer is simply
-/// not listed.
+/// not listed. The `--` comment lines right above a definition are its description.
 enum LuauModuleShape {
     struct Member: Equatable {
         var name: String
@@ -29,12 +29,14 @@ enum LuauModuleShape {
         var fields: [Member] = []
         /// What calling it makes, for a constructor: the object's members.
         var makes: [Member] = []
+        /// The comment above it, as one line.
+        var summary: String?
     }
 
     /// The members of what `source` returns.
     static func members(of source: String) -> [Member] {
-        let tokens = Scanner.tokens(of: source)
-        var reader = Reader(tokens: tokens)
+        let (tokens, offsets) = Scanner.scan(source)
+        var reader = Reader(tokens: tokens, offsets: offsets, source: source)
         return reader.exports()
     }
 
@@ -50,7 +52,8 @@ enum LuauModuleShape {
     /// Luau split into the tokens this needs, with comments dropped and every string
     /// (quoted, backtick or long-bracket) a single token.
     enum Scanner {
-        static func tokens(of source: String) -> [Token] {
+        /// The tokens, and where each starts in the source (UTF-16 offsets).
+        static func scan(_ source: String) -> (tokens: [Token], offsets: [Int]) {
             let units = Array(source.utf16)
             var skip: [NSRange] = []
             var strings = Set<Int>()
@@ -61,42 +64,46 @@ enum LuauModuleShape {
             skip.sort { $0.location < $1.location }
 
             var tokens: [Token] = []
+            var offsets: [Int] = []
+            func emit(_ token: Token, at offset: Int) {
+                tokens.append(token)
+                offsets.append(offset)
+            }
             var index = 0
             var next = 0
             while index < units.count {
                 while next < skip.count, skip[next].location + skip[next].length <= index { next += 1 }
                 if next < skip.count, skip[next].location <= index {
                     let range = skip[next]
-                    if strings.contains(range.location), tokens.last != .string { tokens.append(.string) }
+                    if strings.contains(range.location), tokens.last != .string { emit(.string, at: range.location) }
                     index = max(index + 1, range.location + range.length)
                     continue
                 }
+                let start = index
                 let c = units[index]
                 if isSpace(c) {
                     index += 1
                 } else if isLetter(c) {
-                    let start = index
                     while index < units.count, isLetter(units[index]) || isDigit(units[index]) { index += 1 }
-                    tokens.append(.name(String(decoding: units[start..<index], as: UTF16.self)))
+                    emit(.name(String(decoding: units[start..<index], as: UTF16.self)), at: start)
                 } else if isDigit(c) {
                     while index < units.count, isLetter(units[index]) || isDigit(units[index]) || units[index] == 46 { index += 1 }
-                    tokens.append(.number)
+                    emit(.number, at: start)
                 } else if c == 46, index + 1 < units.count, units[index + 1] == 46 {
                     // `..` and `...`
-                    var end = index + 2
-                    if end < units.count, units[end] == 46 { end += 1 }
-                    tokens.append(.symbol(String(decoding: units[index..<end], as: UTF16.self)))
-                    index = end
+                    index += 2
+                    if index < units.count, units[index] == 46 { index += 1 }
+                    emit(.symbol(String(decoding: units[start..<index], as: UTF16.self)), at: start)
                 } else if index + 1 < units.count, units[index + 1] == 61, [61, 126, 60, 62].contains(c) {
                     // `==`, `~=`, `<=`, `>=`: one symbol, so `a == b` never reads as `a = …`.
-                    tokens.append(.symbol(String(decoding: units[index...(index + 1)], as: UTF16.self)))
                     index += 2
+                    emit(.symbol(String(decoding: units[start..<index], as: UTF16.self)), at: start)
                 } else {
-                    tokens.append(.symbol(String(UnicodeScalar(c).map(Character.init) ?? " ")))
                     index += 1
+                    emit(.symbol(String(UnicodeScalar(c).map(Character.init) ?? " ")), at: start)
                 }
             }
-            return tokens
+            return (tokens, offsets)
         }
 
         private static func isSpace(_ c: UInt16) -> Bool { c == 32 || c == 9 || c == 10 || c == 13 }
@@ -108,6 +115,53 @@ enum LuauModuleShape {
 
     private struct Reader {
         let tokens: [Token]
+        let offsets: [Int]
+        let lines: [Substring]
+        /// Where each line starts, as a UTF-16 offset.
+        let lineStarts: [Int]
+
+        init(tokens: [Token], offsets: [Int], source: String) {
+            self.tokens = tokens
+            self.offsets = offsets
+            lines = source.split(separator: "\n", omittingEmptySubsequences: false)
+            var starts: [Int] = []
+            var offset = 0
+            for line in lines {
+                starts.append(offset)
+                offset += line.utf16.count + 1
+            }
+            lineStarts = starts
+        }
+
+        /// Whether the keyword at `index` opens a block that `end` (or `until`) closes. An `if`
+        /// that is a value — `return if a then b else c`, `x = if …` — has no `end`: it
+        /// follows an operator, `=`, `(`, `,`, `return`, `and`, `or` or `not`.
+        func opens(at index: Int) -> Bool {
+            guard case .name(let word) = tokens[index], Self.openers.contains(word) else { return false }
+            guard word == "if", index > 0 else { return true }
+            switch tokens[index - 1] {
+            case .symbol(let previous): return [")", "]", "}", ";"].contains(previous)
+            case .name(let previous): return !["return", "and", "or", "not"].contains(previous)
+            default: return true
+            }
+        }
+
+        /// The `--` lines right above the line the token at `index` is on, as one line.
+        func summary(at index: Int) -> String? {
+            guard index < offsets.count else { return nil }
+            let offset = offsets[index]
+            var line = (lineStarts.lastIndex { $0 <= offset } ?? 0) - 1
+            var found: [String] = []
+            while line >= 0 {
+                let text = lines[line].trimmingCharacters(in: .whitespaces)
+                guard text.hasPrefix("--"), !text.hasPrefix("--[") else { break }
+                let words = text.drop { $0 == "-" }.trimmingCharacters(in: .whitespaces)
+                if words.isEmpty { break }          // a bare `--`, or a line of dashes
+                found.insert(words, at: 0)
+                line -= 1
+            }
+            return found.isEmpty ? nil : found.joined(separator: " ")
+        }
 
         /// Opens a block that `end` closes (`while`, `for` and `elseif` don't: their `do`
         /// or `then` belongs to a block already counted).
@@ -120,7 +174,7 @@ enum LuauModuleShape {
             var returnAt: Int?
             for (index, token) in tokens.enumerated() {
                 guard case .name(let word) = token else { continue }
-                if Self.openers.contains(word) { depth += 1 }
+                if opens(at: index) { depth += 1 }
                 if Self.closers.contains(word) { depth = max(depth - 1, 0) }
                 if word == "return", depth == 0 { returnAt = index }
             }
@@ -163,6 +217,7 @@ enum LuauModuleShape {
                        let member = self.name(at: index + 3), symbol(at: index + 4) == "(" {
                         // function M.name(…) or function M:name(…)
                         var function = Member(name: member, parameters: parameters(at: index + 4), isMethod: separator == ":")
+                        function.summary = summary(at: index)
                         let end = blockEnd(from: index)
                         if isConstructor(from: index, to: end) { function.makes = objectMembers(of: table) }
                         add(function)
@@ -172,11 +227,13 @@ enum LuauModuleShape {
                     if depth == 0, word == table, symbol(at: index + 1) == ".", let member = self.name(at: index + 2),
                        symbol(at: index + 3) == "=", !isStatementContinuation(index) {
                         // M.name = value
-                        add(value(named: member, at: index + 4, functions: functions))
+                        var assigned = value(named: member, at: index + 4, functions: functions)
+                        assigned.summary = summary(at: index)
+                        add(assigned)
                         index += 4
                         continue
                     }
-                    if Self.openers.contains(word) { depth += 1 }
+                    if opens(at: index) { depth += 1 }
                     if Self.closers.contains(word) { depth = max(depth - 1, 0) }
                 }
                 index += 1
@@ -192,7 +249,9 @@ enum LuauModuleShape {
                 guard case .name(let word) = token else { continue }
                 if word == "function", self.name(at: index + 1) == table, symbol(at: index + 2) == ":",
                    let method = self.name(at: index + 3), seen.insert(method).inserted {
-                    members.append(Member(name: method, parameters: parameters(at: index + 4), isMethod: true))
+                    var member = Member(name: method, parameters: parameters(at: index + 4), isMethod: true)
+                    member.summary = summary(at: index)
+                    members.append(member)
                 }
                 if word == "self", symbol(at: index + 1) == ".", let field = self.name(at: index + 2),
                    symbol(at: index + 3) == "=", seen.insert(field).inserted {
@@ -210,7 +269,8 @@ enum LuauModuleShape {
             let functions = localFunctions()
             while index < close {
                 if let field = name(at: index), symbol(at: index + 1) == "=", symbol(at: index - 1) != "." {
-                    let member = value(named: field, at: index + 2, functions: functions)
+                    var member = value(named: field, at: index + 2, functions: functions)
+                    member.summary = summary(at: index)
                     if !members.contains(where: { $0.name == field }) { members.append(member) }
                 }
                 // On to the next entry, stepping over anything nested.
@@ -309,7 +369,7 @@ enum LuauModuleShape {
             var depth = 0
             for index in start..<tokens.count {
                 guard case .name(let word) = tokens[index] else { continue }
-                if Self.openers.contains(word) { depth += 1 }
+                if opens(at: index) { depth += 1 }
                 if Self.closers.contains(word) {
                     depth -= 1
                     if depth == 0 { return index }

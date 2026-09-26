@@ -275,6 +275,18 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Right after game:GetService( (before the quote) the list opens too, and puts the quotes in for you.
    LogService was missing from the suggestions and is now there. A test runs every suggested service through the real game:GetService, so the list can't offer one that doesn't exist.
 
+25. The Utils module, 2026-09-26.
+   Every new place now starts with a ModuleScript called Utils in ReplicatedStorage, full of helpers most games need. Use it with: local Utils = require(game:GetService("ReplicatedStorage").Utils)
+   Maths: lerp, clamp, round, remap, approach, randomBetween, randomInt, chance, wrapAngle.
+   Tables: copy, deepCopy, keys, values, count, find, filter, map, shuffle, pickRandom, merge.
+   Text and time: formatTime (125 is 2:05), commas (12,500), shorten (1.5K), padLeft, split, trim, titleCase.
+   Game helpers: debounce and cooldown (for Touched and abilities), playerFromPart (who touched it), getCharacter, getHumanoid, getRoot, isAlive, positionOf, distance, weld, tween.
+   It is an ordinary script that belongs to the place: open it to see how anything works, change it, or add your own. Older places can get one with right-click ReplicatedStorage > Insert Utils Module.
+   Typing Utils. suggests all 38 functions with their parameters, and now shows what the highlighted one does, taken from the comment above it in the module. That works for your own modules too.
+   Fixed: a module using Luau's if-then-else as a value (return if a then b else c) hid everything after it from the suggestions. And File > New and the starter scene no longer keep the last place's Folders, Values and remotes.
+   Tested alone, in play with a real character, and with a host and a joined player.
+   New files: Model/UtilsModule.swift, UtilsSelfTest.swift.
+
 
 THINGS TO KNOW
 

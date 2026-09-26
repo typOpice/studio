@@ -230,10 +230,11 @@ enum LuauCompletion {
         private func item(for member: LuauModuleShape.Member) -> CompletionItem {
             if let parameters = member.parameters {
                 return CompletionItem(label: "\(member.name)(\(parameters))", insert: "\(member.name)(",
-                                      detail: member.isMethod ? "method" : "function", kind: .method, returns: nil)
+                                      detail: member.isMethod ? "method" : "function", kind: .method, returns: nil,
+                                      documentation: member.summary)
             }
             return CompletionItem(label: member.name, insert: member.name, detail: member.detail,
-                                  kind: .property, returns: nil)
+                                  kind: .property, returns: nil, documentation: member.summary)
         }
 
         private func childItem(_ index: Int, in scene: LuauScene) -> CompletionItem {

@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 enum PanelSnapshot {
     @MainActor
     static func render(panel: String, to url: URL) -> Bool {
-        if ["suggestions", "picked", "require", "module", "service"].contains(panel) { return renderSuggestions(panel, to: url) }
+        if ["suggestions", "picked", "require", "module", "service", "utils"].contains(panel) { return renderSuggestions(panel, to: url) }
         let model = SceneModel()
         let session = EditorSession(model: model)
         let view: AnyView
@@ -54,7 +54,7 @@ enum PanelSnapshot {
             }
             .frame(width: 1400))
         default:
-            print("Unknown panel \"\(panel)\" — try animation, inspector, lighting, explorer, ribbon, suggestions, picked, require, module or service.")
+            print("Unknown panel \"\(panel)\" — try animation, inspector, lighting, explorer, ribbon, suggestions, picked, require, module, service or utils.")
             return false
         }
         let renderer = ImageRenderer(content: view.background(Theme.panel).environment(\.colorScheme, .dark))
@@ -73,8 +73,8 @@ enum PanelSnapshot {
 
     /// A script with the suggestion list open: `suggestions` under `part.C`, `picked`
     /// after Down twice, `require` just after `require(`, `module` after a required
-    /// module's name, `service` inside `GetService("`. The list is its own little
-    /// window, so it is drawn over the editor's picture here.
+    /// module's name, `service` inside `GetService("`, `utils` after `Utils.d` in a new
+    /// place. The list is its own little window, so it is drawn over the editor's picture.
     @MainActor
     static func renderSuggestions(_ state: String, to url: URL) -> Bool {
         _ = NSApplication.shared
@@ -86,7 +86,7 @@ enum PanelSnapshot {
         let entry = CodeEditor.makeEntry()
         entry.scrollView.frame = size
         container.addSubview(entry.scrollView)
-        let scene = SyntaxSelfTest.sampleScene()
+        let scene = state == "utils" ? SceneModel().luauScene() : SyntaxSelfTest.sampleScene()
         let coordinator = CodeEditor.Coordinator(onChange: { _ in }, indentWidth: 2, language: .luau,
                                                  completions: { LuauCompletion.items(in: $0, caret: $1, scene: scene) })
         coordinator.entry = entry
@@ -102,6 +102,8 @@ enum PanelSnapshot {
         switch state {
         case "require": source = modules
         case "module": source = modules.replacingOccurrences(of: "local Enemy = require(", with: "\nlocal speed = Utils.")
+        case "utils":
+            source = modules.replacingOccurrences(of: "local Enemy = require(", with: "\nlocal onTouch = Utils.d")
         case "service":
             source = """
             local ReplicatedStorage = game:GetService("ReplicatedStorage")

@@ -26,6 +26,8 @@ struct CompletionItem: Equatable {
     /// Type of the resulting value, used to resolve the next link in a chain.
     /// `List<Part>` means a list whose elements are `Part`.
     var returns: String?
+    /// What it does, shown under the list while it's highlighted (a module's comments).
+    var documentation: String? = nil
 }
 
 /// Static description of everything a script can reach: the `studio` module plus the
