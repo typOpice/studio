@@ -130,6 +130,7 @@ extension ScriptRuntime {
         case .none: return .nothing
         case .workspace: return .string("w")
         case .replicatedStorage: return .string("rs")
+        case .serverStorage: return .string("ss")
         case .player(let number): return .string("pl:\(number)")
         case .node(let id):
             if model.dataObject(id: id) != nil { return .string("v:" + id.uuidString) }
@@ -144,10 +145,20 @@ extension ScriptRuntime {
         let modules: [ScriptObject]
         switch place {
         case "rs": modules = model.scripts.filter { $0.isModule && $0.host == .replicatedStorage }
+        case "ss": modules = model.scripts.filter { $0.isModule && $0.host == .serverStorage }
         case "sss": modules = model.scripts.filter { $0.isModule && $0.host == .scene && $0.parentID == nil }
         default: modules = []
         }
         list += modules.map { ("m:" + $0.id.uuidString, $0.name) }
+        // Parts and Models kept there.
+        if let storage = StoragePlace(token: place) {
+            for node in model.stored(in: storage) {
+                switch node {
+                case .group(let id): list.append(("g:" + id.uuidString, model.group(id: id)?.name ?? ""))
+                case .part(let id): list.append(("p:" + id.uuidString, model.part(id: id)?.name ?? ""))
+                }
+            }
+        }
         if place != "sss" {
             let parent: DataParent = place.hasPrefix("v:") ? .node(UUID(uuidString: String(place.dropFirst(2))) ?? UUID())
                                                            : DataParent(token: place)

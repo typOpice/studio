@@ -257,6 +257,9 @@ final class PlayController: ViewportSource, PlayerBridge {
     var hostTracks: [Int: Int] = [:]
     /// RemoteFunction calls this machine made, counted: a reply comes back with its number.
     var remoteCalls = 0
+    /// On the host: which player each of its InvokeClient calls is waiting on, so a
+    /// player who leaves fails their calls instead of leaving them hanging.
+    var invokesWaiting: [Int: Int] = [:]
     /// Each Value object's value as last seen, so a change from outside raises Changed.
     var knownDataValues: [UUID: ScriptValue] = [:]
     /// Seconds of play so far, by the frames stepped.

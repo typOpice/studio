@@ -198,6 +198,13 @@ enum PanelSnapshot {
             model.updateDataObject(id: folder) { $0.name = "Settings" }
             let round = model.addDataObject(.intValue, in: .node(folder))
             model.updateDataObject(id: round) { $0.name = "RoundLength"; $0.number = 120 }
+            // ServerStorage: a Model to clone, a module, a Value.
+            if let tower = model.parts.first(where: { $0.name == "Tower" }) {
+                model.moveToStorage([tower.id], .serverStorage)
+            }
+            model.addModuleScript(host: .serverStorage, name: "Economy")
+            let spawn = model.addDataObject(.vector3Value, in: .serverStorage)
+            model.updateDataObject(id: spawn) { $0.name = "SpawnPoint"; _ = $0.setValue(.list([.number(0), .number(5), .number(20)])) }
             model.selectDataObject(round)
         case "avatar":
             // StarterPlayer dressed: a top hat and suit for everyone, the hat opened up.
@@ -214,7 +221,7 @@ enum PanelSnapshot {
             session.openScript(script, line: 3)
         }
         // The Mesh section is far down Properties: a taller window shows it.
-        let size = NSRect(x: 0, y: 0, width: 1400, height: state == "avatar" ? 2500 : state == "mesh" ? 1500 : 880)
+        let size = NSRect(x: 0, y: 0, width: 1400, height: state == "avatar" ? 2500 : state == "mesh" || state == "replicated" ? 1500 : 880)
         let hosting = NSHostingView(rootView: ContentView(model: model, session: session))
         hosting.frame = size
         let window = NSWindow(contentRect: size, styleMask: [.borderless], backing: .buffered, defer: false)

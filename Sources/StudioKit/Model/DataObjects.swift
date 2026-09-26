@@ -8,12 +8,31 @@ enum DataClass: String, Codable, CaseIterable, Identifiable {
     case numberValue = "NumberValue"
     case stringValue = "StringValue"
     case boolValue = "BoolValue"
+    case objectValue = "ObjectValue"
+    case vector3Value = "Vector3Value"
+    case color3Value = "Color3Value"
+    case cframeValue = "CFrameValue"
     case remoteEvent = "RemoteEvent"
+    case unreliableRemoteEvent = "UnreliableRemoteEvent"
     case remoteFunction = "RemoteFunction"
+    case bindableEvent = "BindableEvent"
+    case bindableFunction = "BindableFunction"
 
     var id: String { rawValue }
-    var isValue: Bool { [.intValue, .numberValue, .stringValue, .boolValue].contains(self) }
-    var isRemote: Bool { self == .remoteEvent || self == .remoteFunction }
+    var isValue: Bool {
+        [.intValue, .numberValue, .stringValue, .boolValue, .objectValue, .vector3Value, .color3Value, .cframeValue]
+            .contains(self)
+    }
+    var isRemote: Bool { self == .remoteEvent || self == .unreliableRemoteEvent || self == .remoteFunction }
+    var isBindable: Bool { self == .bindableEvent || self == .bindableFunction }
+    /// How many numbers a vector-like Value holds.
+    var numberCount: Int {
+        switch self {
+        case .vector3Value, .color3Value: return 3
+        case .cframeValue: return 12
+        default: return 0
+        }
+    }
 
     var symbolName: String {
         switch self {
@@ -21,8 +40,14 @@ enum DataClass: String, Codable, CaseIterable, Identifiable {
         case .intValue, .numberValue: return "number"
         case .stringValue: return "textformat"
         case .boolValue: return "checkmark.square"
-        case .remoteEvent: return "bolt.horizontal"
+        case .objectValue: return "link"
+        case .vector3Value: return "move.3d"
+        case .color3Value: return "paintpalette"
+        case .cframeValue: return "rotate.3d"
+        case .remoteEvent, .unreliableRemoteEvent: return "bolt.horizontal"
         case .remoteFunction: return "arrow.left.arrow.right"
+        case .bindableEvent: return "bolt"
+        case .bindableFunction: return "function"
         }
     }
 }
@@ -34,6 +59,7 @@ enum DataParent: Hashable, Codable {
     case none
     case workspace
     case replicatedStorage
+    case serverStorage
     case player(Int)
     case node(UUID)
 
@@ -43,6 +69,7 @@ enum DataParent: Hashable, Codable {
         case .none: return ""
         case .workspace: return "w"
         case .replicatedStorage: return "rs"
+        case .serverStorage: return "ss"
         case .player(let number): return "pl:\(number)"
         case .node(let id): return "n:" + id.uuidString
         }
@@ -53,6 +80,8 @@ enum DataParent: Hashable, Codable {
             self = .workspace
         } else if token == "rs" {
             self = .replicatedStorage
+        } else if token == "ss" {
+            self = .serverStorage
         } else if token.hasPrefix("pl:"), let number = Int(token.dropFirst(3)) {
             self = .player(number)
         } else if token.count > 2, let id = UUID(uuidString: String(token.dropFirst(2))) {
@@ -85,6 +114,8 @@ struct DataObject: Codable, Equatable, Identifiable {
     var number: Double = 0
     var text = ""
     var flag = false
+    /// A Vector3Value's, Color3Value's or CFrameValue's numbers (3, 3 or 12).
+    var numbers: [Double] = []
     /// Made by a LocalScript on a joined player: that machine's alone, never sent.
     var local = false
 
@@ -100,6 +131,13 @@ struct DataObject: Codable, Equatable, Identifiable {
         case .intValue, .numberValue: return .number(number)
         case .stringValue: return .string(text)
         case .boolValue: return .bool(flag)
+        // What an ObjectValue holds, as a token ("p:<id>", "pl:<n>"…); nothing when empty.
+        case .objectValue: return text.isEmpty ? .nothing : .string(text)
+        case .vector3Value, .color3Value, .cframeValue:
+            let count = className.numberCount
+            let values = numbers.count == count ? numbers
+                : className == .cframeValue ? [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1] : Array(repeating: 0, count: count)
+            return .list(values.map { .number($0) })
         default: return .nothing
         }
     }
@@ -116,12 +154,18 @@ struct DataObject: Codable, Equatable, Identifiable {
         case (.stringValue, .number(let n)):
             text = n == n.rounded() && abs(n) < 1e15 ? String(Int64(n)) : String(n)
         case (.boolValue, .bool(let b)): flag = b
+        case (.objectValue, .string(let token)): text = token
+        case (.objectValue, .nothing): text = ""
+        case (.vector3Value, .list(let list)), (.color3Value, .list(let list)), (.cframeValue, .list(let list)):
+            let values = list.compactMap(\.asDouble)
+            guard values.count == className.numberCount, values.allSatisfy(\.isFinite) else { return false }
+            numbers = values
         default: return false
         }
         return true
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, className, parent, number, text, flag, local }
+    private enum CodingKeys: String, CodingKey { case id, name, className, parent, number, text, flag, numbers, local }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -132,6 +176,7 @@ struct DataObject: Codable, Equatable, Identifiable {
         number = try c.decodeIfPresent(Double.self, forKey: .number) ?? 0
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         flag = try c.decodeIfPresent(Bool.self, forKey: .flag) ?? false
+        numbers = try c.decodeIfPresent([Double].self, forKey: .numbers) ?? []
         local = try c.decodeIfPresent(Bool.self, forKey: .local) ?? false
     }
 
@@ -142,7 +187,8 @@ struct DataObject: Codable, Equatable, Identifiable {
         try c.encode(className, forKey: .className)
         try c.encode(parent, forKey: .parent)
         if className == .intValue || className == .numberValue { try c.encode(number, forKey: .number) }
-        if className == .stringValue { try c.encode(text, forKey: .text) }
+        if className == .stringValue || className == .objectValue { try c.encode(text, forKey: .text) }
+        if !numbers.isEmpty { try c.encode(numbers, forKey: .numbers) }
         if className == .boolValue { try c.encode(flag, forKey: .flag) }
         if local { try c.encode(local, forKey: .local) }
     }

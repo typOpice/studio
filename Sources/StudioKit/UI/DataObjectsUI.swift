@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// The Explorer's ReplicatedStorage: ModuleScripts every machine can require, and the
-/// RemoteEvents, RemoteFunctions, Folders and Values scripts share.
-struct ReplicatedStorageGroup: View {
+/// The Explorer's ReplicatedStorage or ServerStorage: ModuleScripts; the remotes,
+/// bindables, Folders and Values scripts share; and parts and Models kept out of the world
+/// for scripts to clone. ServerStorage is the host's alone: joined players never get it.
+struct StorageGroup: View {
     @ObservedObject var model: SceneModel
     @ObservedObject var session: EditorSession
+    let place: StoragePlace
     @State private var expanded = true
     @State private var open: Set<UUID> = []
     @State private var renaming: UUID?
@@ -13,7 +15,8 @@ struct ReplicatedStorageGroup: View {
     static let tint = Color(red: 0.95, green: 0.7, blue: 0.4)
     static let moduleTint = Color(red: 0.75, green: 0.6, blue: 0.95)
 
-    private var modules: [ScriptObject] { model.scripts.filter { $0.isModule && $0.host == .replicatedStorage } }
+    private var modules: [ScriptObject] { model.scripts.filter { $0.isModule && $0.host == place.scriptHost } }
+    private var kept: [TreeNode] { model.stored(in: place) }
 
     private var rows: [(object: DataObject, depth: Int)] {
         var rows: [(DataObject, Int)] = []
@@ -23,7 +26,7 @@ struct ReplicatedStorageGroup: View {
                 if open.contains(object.id) { walk(.node(object.id), depth + 1) }
             }
         }
-        walk(.replicatedStorage, 0)
+        walk(place.dataParent, 0)
         return rows
     }
 
@@ -37,25 +40,30 @@ struct ReplicatedStorageGroup: View {
                         .frame(width: 12)
                 }
                 .buttonStyle(.plain)
-                Image(systemName: "shippingbox.fill").font(.system(size: 11)).foregroundStyle(Self.tint)
-                Text("ReplicatedStorage").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.text)
+                Image(systemName: place == .replicatedStorage ? "shippingbox.fill" : "lock.shield.fill")
+                    .font(.system(size: 11)).foregroundStyle(Self.tint)
+                Text(place.displayName).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.text)
                 Spacer()
-                Text("\(modules.count + model.dataObjects(in: .replicatedStorage).count)")
+                Text("\(modules.count + model.dataObjects(in: place.dataParent).count + kept.count)")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Theme.textDim)
             }
             .padding(.vertical, 3)
             .padding(.horizontal, 4)
             .contentShape(Rectangle())
-            .contextMenu { newMenu(in: .replicatedStorage) }
-            .help("Shared by the host and every player: ModuleScripts, RemoteEvents and RemoteFunctions")
+            .contextMenu { newMenu(in: place.dataParent) }
+            .help(place == .replicatedStorage
+                  ? "Shared by the host and every player: ModuleScripts, remotes, and parts and Models to clone"
+                  : "The host's alone — joined players are never sent it: ModuleScripts, Values, and parts and Models to clone")
             .padding(.top, 4)
 
             if expanded {
                 ForEach(modules) { module in moduleRow(module) }
+                ForEach(kept, id: \.id) { node in keptRow(node) }
                 ForEach(rows, id: \.object.id) { row in dataRow(row.object, depth: row.depth) }
-                if modules.isEmpty && model.dataObjects(in: .replicatedStorage).isEmpty {
-                    Text("Right-click: New ModuleScript or RemoteEvent")
+                if modules.isEmpty && model.dataObjects(in: place.dataParent).isEmpty && kept.isEmpty {
+                    Text(place == .replicatedStorage ? "Right-click: New ModuleScript or RemoteEvent"
+                                                     : "Right-click a Model: Move to ServerStorage")
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.textDim)
                         .padding(.leading, 30)
@@ -66,18 +74,23 @@ struct ReplicatedStorageGroup: View {
     }
 
     @ViewBuilder private func newMenu(in parent: DataParent) -> some View {
-        if parent == .replicatedStorage {
+        if parent == place.dataParent {
             Button("New ModuleScript") {
                 expanded = true
-                session.openScript(model.addModuleScript())
+                session.openScript(model.addModuleScript(host: place.scriptHost))
             }
             Divider()
         }
-        Button("New RemoteEvent") { add(.remoteEvent, in: parent) }
-        Button("New RemoteFunction") { add(.remoteFunction, in: parent) }
+        if place == .replicatedStorage {
+            Button("New RemoteEvent") { add(.remoteEvent, in: parent) }
+            Button("New RemoteFunction") { add(.remoteFunction, in: parent) }
+            Button("New UnreliableRemoteEvent") { add(.unreliableRemoteEvent, in: parent) }
+        }
+        Button("New BindableEvent") { add(.bindableEvent, in: parent) }
+        Button("New BindableFunction") { add(.bindableFunction, in: parent) }
         Button("New Folder") { add(.folder, in: parent) }
         Menu("New Value") {
-            ForEach([DataClass.intValue, .numberValue, .stringValue, .boolValue]) { kind in
+            ForEach(DataClass.allCases.filter(\.isValue)) { kind in
                 Button(kind.rawValue) { add(kind, in: parent) }
             }
         }
@@ -126,6 +139,42 @@ struct ReplicatedStorageGroup: View {
             }
             Divider()
             Button("Delete", role: .destructive) { model.deleteScript(id: module.id) }
+        }
+    }
+
+    /// A part or Model kept here.
+    private func keptRow(_ node: TreeNode) -> some View {
+        let id = node.id
+        let name: String, icon: String
+        switch node {
+        case .group(let groupID):
+            let group = model.group(id: groupID)
+            name = group?.name ?? ""
+            icon = group?.kind == .folder ? "folder.fill" : group?.kind == .tool ? "hammer.fill" : "cube.box.fill"
+        case .part(let partID):
+            name = model.part(id: partID)?.name ?? ""
+            icon = model.part(id: partID).map { $0.mesh != nil ? "cube.transparent" : $0.shape.symbolName } ?? "cube"
+        }
+        return HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 10)).foregroundStyle(Theme.textDim).frame(width: 14)
+            Text(name).font(.system(size: 12)).foregroundStyle(Theme.text).lineLimit(1)
+            Spacer(minLength: 4)
+            let count = model.partIDs(inSubtree: id).count
+            Text(count == 1 ? "1 part" : "\(count) parts")
+                .font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.textDim)
+        }
+        .padding(.vertical, 3)
+        .padding(.horizontal, 6)
+        .padding(.leading, 20)
+        .contentShape(Rectangle())
+        .help("Kept out of the world. Scripts clone it: \(place.displayName).\(name):Clone()")
+        .contextMenu {
+            Button("Move to Workspace") { model.moveToStorage([id], nil) }
+            Button(place == .replicatedStorage ? "Move to ServerStorage" : "Move to ReplicatedStorage") {
+                model.moveToStorage([id], place == .replicatedStorage ? .serverStorage : .replicatedStorage)
+            }
+            Divider()
+            Button("Delete", role: .destructive) { model.commit("Deleted \(name)") { model.removeSubtrees([id]) } }
         }
     }
 
@@ -246,6 +295,38 @@ struct DataObjectInspector: View {
                 model.commit("Set value") { model.updateDataObject(id: object.id) { $0.flag = flag } }
             }))
             .toggleStyle(.checkbox)
+        case .vector3Value, .cframeValue:
+            let numbers = object.value.asList?.compactMap(\.asFloat) ?? [0, 0, 0]
+            VectorEditor(title: object.className == .cframeValue ? "Position" : "Value",
+                         value: Vec3(numbers[0], numbers[1], numbers[2])) { axis, value in
+                model.commit("Set value") {
+                    model.updateDataObject(id: object.id) { data in
+                        var list = data.value.asList?.compactMap(\.asDouble) ?? []
+                        guard axis < list.count else { return }
+                        list[axis] = Double(value)
+                        _ = data.setValue(.list(list.map { .number($0) }))
+                    }
+                }
+            }
+        case .color3Value:
+            let numbers = object.value.asList?.compactMap(\.asFloat) ?? [0, 0, 0]
+            HStack {
+                Text("Value").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                Spacer()
+                ColorPicker("", selection: Binding(get: { Color(vec: Vec3(numbers[0], numbers[1], numbers[2])) }, set: { colour in
+                    let v = colour.vec
+                    model.commit("Set value") {
+                        model.updateDataObject(id: object.id) { _ = $0.setValue(.list([.number(Double(v.x)), .number(Double(v.y)), .number(Double(v.z))])) }
+                    }
+                }), supportsOpacity: false)
+                .labelsHidden()
+            }
+        case .objectValue:
+            LabeledRow("Value") {
+                Text(object.text.isEmpty ? "nil (scripts set it)" : object.text)
+                    .font(.system(size: 11)).foregroundStyle(Theme.textDim).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         default:
             EmptyView()
         }
@@ -253,6 +334,12 @@ struct DataObjectInspector: View {
 
     private var note: String {
         switch object.className {
+        case .unreliableRemoteEvent:
+            return "A RemoteEvent for things that can be missed now and then (Roblox may drop them; here every one arrives): :FireServer, :FireClient, :FireAllClients."
+        case .bindableEvent:
+            return "Scripts on the same machine: one calls :Fire(…), the others hear it on .Event. Tables arrive as the same table."
+        case .bindableFunction:
+            return "Scripts on the same machine: one sets .OnInvoke = function(…) … end, the others call :Invoke(…) and get what it returns."
         case .remoteEvent:
             return "A LocalScript calls :FireServer(…) and scripts hear it on .OnServerEvent (with the player first); a script calls :FireClient(player, …) or :FireAllClients(…) and LocalScripts hear it on .OnClientEvent."
         case .remoteFunction:

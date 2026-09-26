@@ -33,6 +33,7 @@ extension ScriptRuntime {
             guard let original = part(arguments.first ?? .nothing),
                   let copy = model.cloneSubtree(original.id, parent: nil) else { return .nothing }
             model.update(id: copy) { $0.name = model.uniqueName(base: original.name) }
+            landInWorld(copy, from: original.id)
             return .string(copy.uuidString)
 
         case "workspace.count":

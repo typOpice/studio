@@ -55,7 +55,7 @@ extension SceneModel {
         case .starterPlayer: return .starterPlayer
         case .starterCharacter: return .starterCharacter
         case .starterGui: return .gui
-        case .replicatedStorage: return .service
+        case .replicatedStorage, .serverStorage: return .service
         case .scene:
             guard let parentID else { return .service }
             if part(id: parentID) != nil { return .part }
@@ -87,7 +87,7 @@ extension SceneModel {
                          source: String? = nil) -> UUID {
         var script = ScriptObject.blank(language: .luau)
         script.kind = .module
-        script.host = host == .replicatedStorage ? .replicatedStorage : .scene
+        script.host = host == .replicatedStorage || host == .serverStorage ? host : .scene
         script.parentID = script.host == .scene ? parentID : nil
         script.source = source ?? ScriptObject.moduleTemplate
         script.name = name ?? uniqueScriptName(base: "ModuleScript")

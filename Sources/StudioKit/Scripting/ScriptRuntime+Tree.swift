@@ -15,13 +15,29 @@ extension ScriptRuntime {
         // for the Workspace — so Luau knows which kind of object to make.
         case "tree.parent":
             guard let id = uuid(arguments.first) else { return .nothing }
+            if let place = model.storage(of: id) { return .string(place.token) }
             if let attachment = model.attachment(id: id) { return token(attachment.parentID) }
             if let constraint = model.constraint(id: id) { return token(constraint.parentID) }
             guard model.exists(id) else { return .nothing }
             return token(model.parentID(of: id))
 
+        case "tree.store":
+            // [node, "rs" | "ss"]: into ReplicatedStorage or ServerStorage, out of the world.
+            guard let id = uuid(arguments.first), model.group(id: id) != nil || model.part(id: id) != nil,
+                  let place = (arguments.count > 1 ? arguments[1].asString : nil).flatMap(StoragePlace.init(token:))
+            else { return .bool(false) }
+            model.setStorage(id, place)
+            return .bool(true)
+
         case "tree.setparent":
             guard let id = uuid(arguments.first), arguments.count >= 2 else { return .bool(false) }
+            // Out of storage and into the world: it wakes up, scripts and all.
+            if model.storage(of: id) != nil {
+                model.setStorage(id, nil)
+                let moved = model.setParent(id, arguments[1].asString == "w" ? nil : uuid(arguments[1]))
+                if moved { runScripts(inside: id) }
+                return .bool(moved)
+            }
             let parent = arguments[1].asString == "w" ? nil : uuid(arguments[1])
             if arguments[1].asString != "w" && parent == nil { return .bool(false) }
             if model.attachment(id: id) != nil {
@@ -108,6 +124,7 @@ extension ScriptRuntime {
         case "group.clone":
             guard let id = uuid(arguments.first), model.group(id: id) != nil,
                   let copy = model.cloneSubtree(id, parent: nil) else { return .nothing }
+            landInWorld(copy, from: id)
             return .string(copy.uuidString)
 
         // MARK: Tools: their settings, and where they are
@@ -192,6 +209,23 @@ extension ScriptRuntime {
             list.append(("v:" + v.id.uuidString, v.name))
         }
         return list
+    }
+
+    /// A copy of something kept in storage goes straight into the Workspace, as clones do
+    /// here: out of storage, its parts unparked, and its scripts started.
+    func landInWorld(_ copy: UUID, from original: UUID) {
+        guard model.storage(of: original) != nil else { return }
+        model.setStorage(copy, nil)
+        runScripts(inside: copy)
+    }
+
+    /// Starts the scene scripts inside something that has just come into the world.
+    func runScripts(inside id: UUID) {
+        let inside = Set([id] + model.descendants(of: id).map(\.id))
+        let scripts = model.scripts.filter {
+            $0.host == .scene && !$0.isModule && $0.enabled && ($0.parentID.map(inside.contains) ?? false)
+        }
+        if runsSceneScripts { runScripts(scripts, scope: 0) }
     }
 
     func token(_ id: UUID?) -> ScriptValue {

@@ -862,10 +862,10 @@ Every one runs cleanly as it is, and so does every line it suggests trying.
 | The tree | `Model` (`PrimaryPart`, `:GetPivot`, `:PivotTo`, `:MoveTo`, `:GetBoundingBox`), `Folder`; on everything: `:GetChildren`, `:GetDescendants`, `:FindFirstChild(name, recursive)`, `:WaitForChild`, `:FindFirstChildOfClass`, `:IsDescendantOf`, `:FindFirstAncestor…`, `:GetFullName`, `:ClearAllChildren`, children by name (`workspace.Car.Seat`) |
 | `CFrame` | `new` (every form), `lookAt`, `Angles`, `fromEulerAnglesXYZ/YXZ`, `fromOrientation`, `fromAxisAngle`, `fromMatrix`, `identity`; `*`, `+`, `-`; `Position`, `LookVector`, `RightVector`, `UpVector`, `Rotation`; `:Inverse`, `:Lerp`, `:ToWorldSpace`, `:ToObjectSpace`, `:PointTo…Space`, `:VectorTo…Space`, `:GetComponents`, `:ToEulerAnglesXYZ/YXZ`, `:ToOrientation`, `:ToAxisAngle`, `:FuzzyEq` |
 | `Instance.new` | `"Part"`, `"WedgePart"`, `"MeshPart"`, `"Model"`, `"Folder"`, `"PointLight"`, `"Animation"`, `"Attachment"`, `"WeldConstraint"` and the five joint classes, `"IntValue"`, `"NumberValue"`, `"StringValue"`, `"BoolValue"`, `"RemoteEvent"`, `"RemoteFunction"`, `"Accessory"`, `"Shirt"`, `"Pants"`, `"HumanoidDescription"`, `"Sound"`, the GUI classes — with Roblox's defaults |
-| Working together | `require` and ModuleScripts; `RemoteEvent`, `RemoteFunction`; Value objects; `workspace:Raycast` and `RaycastParams` (see *Scripts working together*) |
+| Working together | `require` and ModuleScripts; `ReplicatedStorage`, `ServerStorage`, `ServerScriptService`; `RemoteEvent`, `UnreliableRemoteEvent`, `RemoteFunction`, `BindableEvent`, `BindableFunction`; Value objects; `RunService:IsServer/IsClient`; `workspace:Raycast` and `RaycastParams` (see *Scripts working together*) |
 | `Vector3`, `Color3` | the Roblox constructors, properties, operators and methods — float32, as in Roblox |
 | `Enum` | `Material`, `PartType`, `EasingStyle`, `EasingDirection`, `PlaybackState`, `KeyCode`, `UserInputType`, `UserInputState`, `HumanoidStateType`, `CameraMode`, `TextXAlignment` |
-| `game:GetService` | `RunService` (`Heartbeat`, `Stepped`, `RenderStepped` with `:Connect`, `:Once`, `:Wait`), `Players`, `UserInputService`, `TweenService` (`:Create`, `:GetValue`), `Workspace` (`Gravity`), `ReplicatedStorage`, `ServerScriptService` |
+| `game:GetService` | `RunService` (`Heartbeat`, `Stepped`, `RenderStepped` with `:Connect`, `:Once`, `:Wait`; `:IsServer`, `:IsClient`), `Players`, `UserInputService`, `TweenService` (`:Create`, `:GetValue`), `Workspace` (`Gravity`), `ReplicatedStorage`, `ServerStorage`, `ServerScriptService` |
 | Tweens | `TweenInfo.new(time, style, direction, repeatCount, reverses, delayTime)`; `TweenService:Create(instance, info, goals)` → `:Play`, `:Pause`, `:Cancel`, `PlaybackState`, `Completed`; numbers, booleans, `Vector3`, `Color3`, `CFrame`, `UDim2`, `UDim`, `Vector2` — parts and GUI alike |
 | The player | `Players.LocalPlayer` — `Character`, `CharacterAdded`, `CharacterRemoving`, `:LoadCharacter()`, `CameraMode`, `CameraMin/MaxZoomDistance`; `Players.RespawnTime`, `Players:GetPlayerFromCharacter` |
 | `Humanoid` | `WalkSpeed`, `JumpPower`, `JumpHeight`, `UseJumpPower`, `Health`, `MaxHealth`, `MaxSlopeAngle`, `AutoRotate`, `Jump`, `MoveDirection`; `:Move`, `:MoveTo`, `:TakeDamage`, `:GetState`, `:ChangeState`; `Died`, `HealthChanged`, `StateChanged`, `Jumping`, `FreeFalling`, `Running`, `MoveToFinished`, `Touched(part, bodyPart)` |
@@ -925,7 +925,31 @@ print(Weapons.describe("Sword"))
 ```
 
 A module that requires itself round a loop, returns nothing, errors or doesn't compile
-gives Roblox's error at the `require`. Each machine runs its modules once for itself.
+gives Roblox's error at the `require`. The server and the clients each run a module
+once for themselves, as in Roblox — on the host too, where the scene's scripts are the
+server and its LocalScripts a client. `RunService:IsServer()` and `:IsClient()` say
+which a script is.
+
+### ReplicatedStorage and ServerStorage
+
+Both keep things out of the world until a script wants them — ModuleScripts, Values,
+and **parts and Models** (right-click one in the Workspace › **Move to
+ReplicatedStorage** or **Move to ServerStorage**). A stored Model's parts aren't drawn,
+touched or simulated, and its scripts don't run. `:Clone()` brings a copy into the
+Workspace, scripts and all; setting `Parent = workspace` brings the thing itself.
+ReplicatedStorage is seen by every machine; **ServerStorage only by the host** — joined
+players are never sent what's in it, and their LocalScripts find it (and
+ServerScriptService) empty.
+
+```lua
+-- A Script: a new sword for whoever touches the rack, from ServerStorage.
+local ServerStorage = game:GetService("ServerStorage")
+workspace.Rack.Touched:Connect(function(hit)
+	local sword = ServerStorage.Sword:Clone()
+	sword.Name = "Sword"
+	sword:PivotTo(workspace.Rack:GetPivot() + Vector3.new(0, 4, 0))
+end)
+```
 
 ### RemoteEvents and RemoteFunctions
 
@@ -959,14 +983,28 @@ A RemoteEvent has `:FireServer(…)` (a LocalScript's; the server hears it on
 RemoteFunction has `:InvokeServer(…)`, which waits for what `OnServerInvoke` returns
 (an error there comes back to the caller), and `:InvokeClient(player, …)` with
 `OnClientInvoke`. Numbers, strings, booleans, `nil`, tables, `Vector3`, `Vector2`,
-`Color3`, `CFrame`, `EnumItem`s, parts, Models, Players, characters and their body parts
-all go across. The same code works in Studio's play test and in a game played alone:
-that machine is server and client at once.
+`Color3`, `CFrame`, `EnumItem`s, parts, Models, Folders and Values, ModuleScripts,
+Sounds, attachments and joints, Players, characters and their body parts all go across;
+a GUI object only reaches scripts on its own machine (anywhere else it's `nil`, as in
+Roblox). An event that arrives before anything listens is kept, and handed over when
+the first handler connects — so a player's script that connects late still gets the
+welcome the server fired on join. A call waiting on a player who leaves fails with
+"The player left the game" instead of waiting for ever. `UnreliableRemoteEvent` works
+as a RemoteEvent (here, nothing is dropped). The same code works in Studio's play test
+and in a game played alone: that machine is server and client at once.
+
+### BindableEvents and BindableFunctions
+
+For scripts on the same machine: `BindableEvent:Fire(…)` reaches everything connected
+to its `Event` (tables arrive as the same table), and `BindableFunction:Invoke(…)`
+returns what its `OnInvoke` function does.
 
 ### Folders and Values
 
-`Instance.new` makes `IntValue`, `NumberValue`, `StringValue` and `BoolValue` — each
-with `Value` and `Changed` (which fires with the new value) — to keep in parts,
+`Instance.new` makes `IntValue`, `NumberValue`, `StringValue`, `BoolValue`,
+`ObjectValue` (a part, Model, Value, Sound, player… or `nil`), `Vector3Value`,
+`Color3Value` and `CFrameValue` — each with `Value` and `Changed` (which fires with the
+new value) — to keep in parts,
 Models, Folders, ReplicatedStorage or a Player. A Folder that goes into a Player or
 ReplicatedStorage leaves the Workspace. Values the host changes reach every player,
 and fire `Changed` there too. `WaitForChild` on ReplicatedStorage, a Player or a Folder

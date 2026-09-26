@@ -211,7 +211,8 @@ struct ExplorerView: View {
                         }
                     }
 
-                    ReplicatedStorageGroup(model: model, session: session)
+                    StorageGroup(model: model, session: session, place: .replicatedStorage)
+                    StorageGroup(model: model, session: session, place: .serverStorage)
 
                     groupRow(title: "Shaders",
                              icon: "paintbrush.pointed.fill",
@@ -435,6 +436,9 @@ struct ExplorerView: View {
             }
             if part.parentID != nil {
                 Button("Move to Workspace") { model.move(part.id, to: nil) }
+            } else {
+                Button("Move to ReplicatedStorage") { model.moveToStorage([part.id], .replicatedStorage) }
+                Button("Move to ServerStorage") { model.moveToStorage([part.id], .serverStorage) }
             }
             Divider()
             Button("Add Script") {
@@ -482,7 +486,7 @@ struct ExplorerView: View {
         return HStack(spacing: 6) {
             Image(systemName: script.isModule ? "doc.text.fill" : script.enabled ? "doc.plaintext.fill" : "doc.plaintext")
                 .font(.system(size: 10))
-                .foregroundStyle(script.isModule ? ReplicatedStorageGroup.moduleTint
+                .foregroundStyle(script.isModule ? StorageGroup.moduleTint
                                  : script.enabled ? Color(red: 0.62, green: 0.78, blue: 0.45) : Theme.textDim)
                 .frame(width: 14)
 
@@ -500,7 +504,7 @@ struct ExplorerView: View {
             Spacer(minLength: 4)
             Text(script.isModule ? "module" : script.language.badge)
                 .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                .foregroundStyle(script.isModule ? ReplicatedStorageGroup.moduleTint
+                .foregroundStyle(script.isModule ? StorageGroup.moduleTint
                                  : script.language == .luau ? Color(red: 0.45, green: 0.62, blue: 0.95) : Theme.textDim)
             if !script.enabled {
                 Text("off")
@@ -1264,7 +1268,10 @@ extension ExplorerView {
         for group in model.groups where group.parentID != nil || model.isInWorkspace(group) {
             childrenOf[group.parentID, default: []].append(.group(group.id))
         }
-        for part in model.parts { childrenOf[part.parentID, default: []].append(.part(part.id)) }
+        // A part kept in storage is listed there, too.
+        for part in model.parts where part.parentID != nil || part.storage == nil {
+            childrenOf[part.parentID, default: []].append(.part(part.id))
+        }
         var scriptsOf: [UUID: [UUID]] = [:]
         for script in model.scripts where script.host == .scene {
             if let parent = script.parentID { scriptsOf[parent, default: []].append(script.id) }
@@ -1466,6 +1473,9 @@ extension ExplorerView {
                 }
             } else if group.parentID != nil {
                 Button("Move to Workspace") { model.move(group.id, to: nil) }
+            } else {
+                Button("Move to ReplicatedStorage") { model.moveToStorage([group.id], .replicatedStorage) }
+                Button("Move to ServerStorage") { model.moveToStorage([group.id], .serverStorage) }
             }
             Divider()
             Button("New Folder Inside") {

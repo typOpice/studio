@@ -21,7 +21,11 @@ do
 	dataKit.replies = {}
 	dataKit.methods = {}
 	dataKit.Meta = {}
-	dataKit.valueKinds = { IntValue = "number", NumberValue = "number", StringValue = "string", BoolValue = "boolean" }
+	dataKit.valueKinds = { IntValue = "number", NumberValue = "number", StringValue = "string", BoolValue = "boolean",
+		ObjectValue = "Instance", Vector3Value = "Vector3", Color3Value = "Color3", CFrameValue = "CFrame" }
+	-- A tag for this VM: GUI objects sent through a remote mean something only on the
+	-- machine they came from.
+	dataKit.vmTag = tostring(math.random(1, 2 ^ 30)) .. "-" .. tostring(os.clock())
 
 	function dataKit.wrap(id)
 		if id == nil then
@@ -53,7 +57,7 @@ do
 		local signals = dataKit.signals[id]
 		if signals == nil then
 			signals = { Changed = makeSignal(), Value = makeSignal(), OnServerEvent = makeSignal(),
-				OnClientEvent = makeSignal() }
+				OnClientEvent = makeSignal(), Event = makeSignal() }
 			dataKit.signals[id] = signals
 		end
 		return signals
@@ -81,6 +85,8 @@ do
 			return nil
 		elseif object == dataKit.ReplicatedStorage then
 			return "rs"
+		elseif object == dataKit.ServerStorage then
+			return "ss"
 		elseif object == workspace_ then
 			return "w"
 		end
@@ -102,6 +108,8 @@ do
 			return nil
 		elseif token == "rs" then
 			return dataKit.ReplicatedStorage
+		elseif token == "ss" then
+			return dataKit.ServerStorage
 		elseif token == "sss" then
 			return dataKit.ServerScriptService
 		elseif string.sub(token, 1, 3) == "pl:" then
@@ -141,6 +149,49 @@ do
 		return wrapToken(invoke("data.find", "v:" .. id, name))
 	end
 
+	-- A Value's value, as scripts see it.
+	function dataKit.readValue(id, class)
+		local raw = invoke("data.get", id, "value")
+		if class == "ObjectValue" then
+			return if raw ~= nil then dataKit.wrapPlace(raw) else nil
+		elseif class == "Vector3Value" then
+			return toVector(raw)
+		elseif class == "Color3Value" then
+			return toColor(raw)
+		elseif class == "CFrameValue" then
+			return CFrame.new(table.unpack(raw, 1, 12))
+		end
+		return raw
+	end
+
+	-- What an ObjectValue keeps for an Instance: its token, which every machine reads the
+	-- same way. Nil for what can't be kept (a character, a GUI object).
+	function dataKit.tokenOf(object)
+		if object == workspace_ then
+			return "w"
+		elseif object == dataKit.ReplicatedStorage then
+			return "rs"
+		elseif object == dataKit.ServerStorage then
+			return "ss"
+		elseif partIdOf[object] then
+			return "p:" .. partIdOf[object]
+		elseif dataKit.idOf[object] then
+			return "v:" .. dataKit.idOf[object]
+		elseif groupIdOf[object] then
+			return "g:" .. groupIdOf[object]
+		elseif dataKit.moduleIdOf[object] then
+			return "m:" .. dataKit.moduleIdOf[object]
+		elseif soundKit.idOf[object] then
+			return "s:" .. soundKit.idOf[object]
+		elseif attachmentIdOf[object] then
+			return "a:" .. attachmentIdOf[object]
+		elseif constraintIdOf[object] then
+			return "c:" .. constraintIdOf[object]
+		end
+		local number = dataKit.playerNumber(object)
+		return if number ~= nil then "pl:" .. number else nil
+	end
+
 	dataKit.Meta.__index = function(self, key)
 		local id = dataKit.idOf[self]
 		local class = dataClass(id)
@@ -162,12 +213,16 @@ do
 		elseif key == "Parent" then
 			return dataKit.wrapPlace(invoke("data.get", id, "parent"))
 		elseif key == "Value" and dataKit.valueKinds[class] then
-			return invoke("data.get", id, "value")
+			return dataKit.readValue(id, class)
 		elseif key == "Changed" then
 			return dataKit.signalsOf(id).Changed
-		elseif class == "RemoteEvent" and (key == "OnServerEvent" or key == "OnClientEvent") then
+		elseif (class == "RemoteEvent" or class == "UnreliableRemoteEvent")
+			and (key == "OnServerEvent" or key == "OnClientEvent") then
 			return dataKit.signalsOf(id)[key]
-		elseif class == "RemoteFunction" and (key == "OnServerInvoke" or key == "OnClientInvoke") then
+		elseif class == "BindableEvent" and key == "Event" then
+			return dataKit.signalsOf(id).Event
+		elseif (class == "RemoteFunction" and (key == "OnServerInvoke" or key == "OnClientInvoke"))
+			or (class == "BindableFunction" and key == "OnInvoke") then
 			raise(string.format("%s is a callback member of RemoteFunction; you can only set the callback value, get is not available", key), 2)
 		end
 		local method = dataKit.methods[key]
@@ -195,15 +250,27 @@ do
 			invoke("data.set", id, "name", value)
 		elseif key == "Value" and dataKit.valueKinds[class] then
 			local kind = dataKit.valueKinds[class]
-			local ok = type(value) == kind or (class == "StringValue" and type(value) == "number")
+			local ok = typeof(value) == kind or (class == "StringValue" and type(value) == "number")
+				or (class == "ObjectValue" and value == nil)
 			if not ok then
 				raise(string.format("Unable to assign property Value. %s expected, got %s", kind, typeof(value)), 2)
 			end
-			if invoke("data.set", id, "value", value) then
+			local host = value
+			if class == "ObjectValue" then
+				host = if value == nil then nil else dataKit.tokenOf(value)
+				if value ~= nil and host == nil then
+					raise("Unable to assign property Value. An ObjectValue can't hold a " .. typeof(value) .. " here", 2)
+				end
+			elseif kind == "Vector3" or kind == "Color3" then
+				host = { value[1], value[2], value[3] }
+			elseif kind == "CFrame" then
+				host = { value:GetComponents() }
+			end
+			if invoke("data.set", id, "value", host) then
 				-- Changed at once, with the value as it went in (an IntValue's rounded).
 				local signals = dataKit.signals[id]
 				if signals ~= nil then
-					fire(signals.Changed, invoke("data.get", id, "value"))
+					fire(signals.Changed, dataKit.readValue(id, class))
 					fire(signals.Value)
 				end
 			end
@@ -215,12 +282,13 @@ do
 			if not invoke("data.set", id, "parent", place) then
 				raise("Unable to assign property Parent. It can't go inside itself", 2)
 			end
-		elseif class == "RemoteFunction" and (key == "OnServerInvoke" or key == "OnClientInvoke") then
+		elseif (class == "RemoteFunction" and (key == "OnServerInvoke" or key == "OnClientInvoke"))
+			or (class == "BindableFunction" and key == "OnInvoke") then
 			if value ~= nil and type(value) ~= "function" then
 				raise(string.format("Unable to assign property %s. function expected, got %s", key, typeof(value)), 2)
 			end
 			dataKit.callbacks[id] = dataKit.callbacks[id] or {}
-			dataKit.callbacks[id][if key == "OnServerInvoke" then "server" else "client"] = value
+			dataKit.callbacks[id][if key == "OnClientInvoke" then "client" else "server"] = value
 		else
 			raise(string.format("Unable to assign property %s of %s", tostring(key), class), 2)
 		end
@@ -236,7 +304,9 @@ do
 	-- Instance.new for the Values and remotes (a Folder is made in the Workspace tree,
 	-- and becomes a data Folder if it goes where only one can).
 	dataKit.classes = { IntValue = true, NumberValue = true, StringValue = true, BoolValue = true,
-		RemoteEvent = true, RemoteFunction = true }
+		ObjectValue = true, Vector3Value = true, Color3Value = true, CFrameValue = true,
+		RemoteEvent = true, UnreliableRemoteEvent = true, RemoteFunction = true,
+		BindableEvent = true, BindableFunction = true }
 
 	function dataKit.new(className, parent)
 		local object = dataKit.wrap(invoke("data.create", className))
@@ -297,6 +367,7 @@ do
 	function dataMethods.IsA(self, className)
 		local class = dataClass(dataKit.idOf[self])
 		return className == class or className == "Instance" or (className == "ValueBase" and dataKit.valueKinds[class] ~= nil)
+			or (className == "BaseRemoteEvent" and (class == "RemoteEvent" or class == "UnreliableRemoteEvent"))
 	end
 
 	function dataMethods.GetFullName(self)
@@ -364,6 +435,19 @@ do
 				return { "$d", dataKit.idOf[value] }
 			elseif dataKit.moduleIdOf[value] then
 				return { "$m", dataKit.moduleIdOf[value] }
+			elseif soundKit.idOf[value] then
+				return { "$s", soundKit.idOf[value] }
+			elseif attachmentIdOf[value] then
+				return { "$a", attachmentIdOf[value] }
+			elseif constraintIdOf[value] then
+				return { "$cn", constraintIdOf[value] }
+			elseif gui.idOf[value] then
+				-- A GUI object is this machine's own: it means something only here.
+				return { "$ui", gui.idOf[value], dataKit.vmTag }
+			elseif value == workspace_ then
+				return { "$w" }
+			elseif value == dataKit.ReplicatedStorage or value == dataKit.ServerStorage then
+				return { "$st", if value == dataKit.ReplicatedStorage then "rs" else "ss" }
 			elseif isCharacterModel[value] then
 				local owner = invoke("character.owner", isCharacterModel[value])
 				return { "$ch", if owner < 0 then invoke("backpack.me") else owner }
@@ -419,6 +503,18 @@ do
 			return if invoke("data.exists", value[2]) then dataKit.wrap(value[2]) else nil
 		elseif tag == "$m" then
 			return dataKit.wrapModule(value[2])
+		elseif tag == "$s" then
+			return if invoke("sound.get", value[2], "name") ~= nil then soundKit.wrap(value[2]) else nil
+		elseif tag == "$a" then
+			return if invoke("tree.parent", value[2]) ~= nil then wrapAttachment(value[2]) else nil
+		elseif tag == "$cn" then
+			return if invoke("tree.parent", value[2]) ~= nil then wrapConstraint(value[2]) else nil
+		elseif tag == "$ui" then
+			return if value[3] == dataKit.vmTag then gui.wrap(value[2]) else nil
+		elseif tag == "$w" then
+			return workspace_
+		elseif tag == "$st" then
+			return dataKit.wrapPlace(value[2])
 		elseif tag == "$pl" then
 			return toolKit.playerOf(value[2])
 		elseif tag == "$ch" then
@@ -462,7 +558,11 @@ do
 
 	local function remoteOf(self, className, method)
 		local id = dataKit.idOf[self]
-		if id == nil or dataClass(id) ~= className then
+		local class = id and dataClass(id)
+		if class == "UnreliableRemoteEvent" and className == "RemoteEvent" then
+			class = className
+		end
+		if id == nil or class ~= className then
 			raise(string.format("Expected ':' not '.' calling member function %s", method), 3)
 		end
 		return id
@@ -535,6 +635,60 @@ do
 			dataKit.encodeAll(...)))
 	end
 
+	-- A remote event with nobody listening yet keeps what arrives, as Roblox does, and
+	-- hands it over when the first handler connects.
+	function dataKit.deliver(signal, ...)
+		local listening = false
+		for _, connection in signal.connections do
+			if connection.Connected then
+				listening = true
+				break
+			end
+		end
+		if listening or #signal.waiting > 0 then
+			fire(signal, ...)
+			return
+		end
+		local queue = rawget(signal, "queued")
+		if queue == nil then
+			queue = {}
+			rawset(signal, "queued", queue)
+			rawset(signal, "onConnect", function()
+				local waiting = rawget(signal, "queued")
+				rawset(signal, "queued", nil)
+				for _, arguments in waiting do
+					fire(signal, table.unpack(arguments, 1, arguments.n))
+				end
+			end)
+		end
+		if #queue < 256 then
+			table.insert(queue, table.pack(...))
+		end
+	end
+
+	-- BindableEvents and BindableFunctions: scripts on the same machine calling each other.
+
+	function dataMethods.Fire(self, ...)
+		local id = remoteOf(self, "BindableEvent", "Fire")
+		fire(dataKit.signalsOf(id).Event, ...)
+	end
+
+	function dataMethods.Invoke(self, ...)
+		local id = remoteOf(self, "BindableFunction", "Invoke")
+		local callbacks = dataKit.callbacks[id]
+		local callback = callbacks and callbacks.server
+		local waited = 0
+		while callback == nil do
+			if waited >= 30 then
+				raise("OnInvoke was never set", 2)
+			end
+			waited += task.wait()
+			callbacks = dataKit.callbacks[id]
+			callback = callbacks and callbacks.server
+		end
+		return callback(...)
+	end
+
 	-- The host's events for remotes and Values, from part 13's dispatch.
 	function dataKit.dispatch(event)
 		local kind = event[1]
@@ -542,15 +696,15 @@ do
 			local id = event[2]
 			local signals = dataKit.signals[id]
 			if signals ~= nil and invoke("data.exists", id) then
-				fire(signals.Changed, invoke("data.get", id, "value"))
+				fire(signals.Changed, dataKit.readValue(id, dataClass(id)))
 				fire(signals.Value)
 			end
 		elseif kind == "RemoteServer" then
 			-- ["RemoteServer", remote, fromPlayer, arguments]
-			local signals = dataKit.signalsOf(event[2])
-			fire(signals.OnServerEvent, toolKit.playerOf(event[3]), dataKit.decodeAll(event[4]))
+			dataKit.deliver(dataKit.signalsOf(event[2]).OnServerEvent, toolKit.playerOf(event[3]),
+				dataKit.decodeAll(event[4]))
 		elseif kind == "RemoteClient" then
-			fire(dataKit.signalsOf(event[2]).OnClientEvent, dataKit.decodeAll(event[3]))
+			dataKit.deliver(dataKit.signalsOf(event[2]).OnClientEvent, dataKit.decodeAll(event[3]))
 		elseif kind == "RemoteReply" then
 			-- ["RemoteReply", call, ok, results | message]
 			dataKit.replies[event[2]] = { event[3], event[4] }
@@ -561,7 +715,7 @@ do
 				local callbacks = dataKit.callbacks[id]
 				local callback = callbacks and callbacks[side]
 				local waited = 0
-				while callback == nil and waited < 5 do
+				while callback == nil and waited < 30 do
 					waited += task.wait()
 					callbacks = dataKit.callbacks[id]
 					callback = callbacks and callbacks[side]
@@ -665,20 +819,23 @@ do
 			end
 			raise("Attempted to call require with invalid argument(s).", 2)
 		end
-		local done = dataKit.moduleResults[id]
+		-- The server and the clients each run a module for themselves, as in Roblox — on
+		-- the host too, where both share this VM.
+		local key = (if onServer() then "server:" else "client:") .. id
+		local done = dataKit.moduleResults[key]
 		if done ~= nil then
 			return done.value
 		end
-		if dataKit.moduleLoading[id] then
+		if dataKit.moduleLoading[key] then
 			raise("Requested module was required recursively", 2)
 		end
 		local chunk = dataKit.modules[id]
 		if chunk == nil then
 			raise("Requested module experienced an error while loading", 2)
 		end
-		dataKit.moduleLoading[id] = true
+		dataKit.moduleLoading[key] = true
 		local results = table.pack(pcall(chunk))
-		dataKit.moduleLoading[id] = nil
+		dataKit.moduleLoading[key] = nil
 		if not results[1] then
 			-- It won't load again; this time, the module's own error.
 			dataKit.modules[id] = nil
@@ -688,23 +845,27 @@ do
 			dataKit.modules[id] = nil
 			raise("Module code did not return exactly one value", 2)
 		end
-		dataKit.moduleResults[id] = { value = results[2] }
+		dataKit.moduleResults[key] = { value = results[2] }
 		return results[2]
 	end
 
 	--------------------------------------------------------------------------------
 	-- ReplicatedStorage and ServerScriptService
 
-	local function container(name, token)
+	-- `serverOnly`: ServerStorage, which clients see empty.
+	local function container(name, token, serverOnly)
+		local function hidden()
+			return serverOnly and not onServer()
+		end
 		local function find(key)
-			if type(key) ~= "string" then
+			if type(key) ~= "string" or hidden() then
 				return nil
 			end
 			return wrapToken(invoke("data.find", token, key))
 		end
 		return service(name, nil, {
 			GetChildren = function()
-				return wrapTokens(invoke("data.children", token))
+				return if hidden() then {} else wrapTokens(invoke("data.children", token))
 			end,
 			GetDescendants = function(self)
 				local list = {}
@@ -745,8 +906,10 @@ do
 	end
 
 	dataKit.ReplicatedStorage = container("ReplicatedStorage", "rs")
-	dataKit.ServerScriptService = container("ServerScriptService", "sss")
+	dataKit.ServerStorage = container("ServerStorage", "ss", true)
+	dataKit.ServerScriptService = container("ServerScriptService", "sss", true)
 	services.ReplicatedStorage = dataKit.ReplicatedStorage
+	services.ServerStorage = dataKit.ServerStorage
 	services.ServerScriptService = dataKit.ServerScriptService
 
 	-- What a Player holds: their Backpack and PlayerGui, and data objects (leaderstats).

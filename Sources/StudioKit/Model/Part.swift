@@ -62,6 +62,9 @@ struct Part: Identifiable, Equatable, Codable {
     var visible: Bool = true
     /// In a Tool that is in StarterPack or a Backpack: kept, but out of the world.
     var parked: Bool = false
+    /// Kept in ReplicatedStorage or ServerStorage rather than the Workspace (a part at the
+    /// top of the tree only); its parts are parked meanwhile.
+    var storage: StoragePlace?
     /// Drawn, collided with and touched: visible, and not parked in a Tool.
     var inWorld: Bool { visible && !parked }
     var locked: Bool = false
@@ -116,13 +119,14 @@ struct Part: Identifiable, Equatable, Codable {
             && lhs.canCollide == rhs.canCollide && lhs.canTouch == rhs.canTouch
             && lhs.shaderID == rhs.shaderID && lhs.light == rhs.light && lhs.parentID == rhs.parentID
             && lhs.clickDetector == rhs.clickDetector && lhs.seat == rhs.seat && lhs.mesh == rhs.mesh
+            && lhs.storage == rhs.storage
     }
 
     // MARK: - Codable (simd_quatf needs manual handling)
 
     private enum CodingKeys: String, CodingKey {
         case id, name, shape, position, orientation, size, color, transparency, material, anchored, visible, locked, shaderID
-        case canCollide, canTouch, light, parentID, parked, clickDetector, seat, mesh
+        case canCollide, canTouch, light, parentID, parked, clickDetector, seat, mesh, storage
     }
 
     init() {}
@@ -151,6 +155,7 @@ struct Part: Identifiable, Equatable, Codable {
         clickDetector = try c.decodeIfPresent(ClickDetector.self, forKey: .clickDetector)
         seat = try c.decodeIfPresent(SeatSettings.self, forKey: .seat)
         mesh = try c.decodeIfPresent(MeshSettings.self, forKey: .mesh)
+        storage = try c.decodeIfPresent(StoragePlace.self, forKey: .storage)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -176,6 +181,7 @@ struct Part: Identifiable, Equatable, Codable {
         try c.encodeIfPresent(clickDetector, forKey: .clickDetector)
         try c.encodeIfPresent(seat, forKey: .seat)
         try c.encodeIfPresent(mesh, forKey: .mesh)
+        try c.encodeIfPresent(storage, forKey: .storage)
     }
 }
 

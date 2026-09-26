@@ -68,6 +68,7 @@ extension PlayController {
                     pendingEvents.append(.list([.string("RemoteInvoke"), .string(id), .string("client"),
                                                 .number(Double(playerID)), .number(call), payload]))
                 } else if isServer, remotePlayers.contains(where: { $0.id == player }) {
+                    invokesWaiting[Int(call)] = player
                     forwardToPlayer?(player, "remote.invoke.client", [.string(id), .number(call), payload])
                 } else {
                     // Not in the game: the call fails at once.
@@ -122,9 +123,19 @@ extension PlayController {
             pendingEvents.append(.list([.string("RemoteInvoke"), value(0), .string("server"), .number(Double(player)),
                                         value(1), value(2)]))
         case "remote.replied":
+            if let call = arguments.first?.asDouble.map(Int.init) { invokesWaiting[call] = nil }
             pendingEvents.append(.list([.string("RemoteReply"), value(0), value(1), value(2)]))
         default:
             break
+        }
+    }
+
+    /// A player left: the host's calls still waiting on them fail.
+    func failInvokes(waitingOn player: Int) {
+        for (call, target) in invokesWaiting where target == player {
+            pendingEvents.append(.list([.string("RemoteReply"), .number(Double(call)), .bool(false),
+                                        .string("The player left the game")]))
+            invokesWaiting[call] = nil
         }
     }
 

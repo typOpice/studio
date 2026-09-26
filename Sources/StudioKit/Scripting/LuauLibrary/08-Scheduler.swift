@@ -250,6 +250,12 @@ function signalMethods.Connect(self, callback)
 		ConnectionMeta
 	)
 	table.insert(self.connections, connection)
+	-- A remote's queue of what arrived before anyone listened.
+	local hook = rawget(self, "onConnect")
+	if hook ~= nil then
+		rawset(self, "onConnect", nil)
+		hook()
+	end
 	return connection
 end
 
@@ -325,6 +331,25 @@ RunService = service("RunService", {
 	end,
 	RenderStepped = function()
 		return renderStepped
+	end,
+}, {
+	-- The machine that runs the world is the server for its scene scripts; LocalScripts,
+	-- on it and every player's machine, are clients. As in Roblox's play test, a game
+	-- played alone has both.
+	IsServer = function()
+		return invoke("remote.isServer") and not inLocalScript()
+	end,
+	IsClient = function()
+		return inLocalScript() or not invoke("remote.isServer")
+	end,
+	IsStudio = function()
+		return true
+	end,
+	IsRunning = function()
+		return true
+	end,
+	IsRunMode = function()
+		return not invoke("player.present")
 	end,
 })
 

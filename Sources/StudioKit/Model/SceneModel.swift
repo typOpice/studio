@@ -502,7 +502,7 @@ final class SceneModel: ObservableObject {
 
     /// The world as joined players get it: all but this machine's own Sounds.
     var sharedState: SceneState {
-        var shared = state
+        var shared = withoutServerStorage(state)
         shared.sounds.removeAll(where: \.local)
         shared.dataObjects.removeAll(where: \.local)
         return shared

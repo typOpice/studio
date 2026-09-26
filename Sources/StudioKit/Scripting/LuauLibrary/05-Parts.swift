@@ -266,6 +266,10 @@ local function wrapToken(token)
 		return nil
 	elseif token == "w" then
 		return workspace_
+	elseif token == "rs" then
+		return dataKit.ReplicatedStorage
+	elseif token == "ss" then
+		return dataKit.ServerStorage
 	end
 	local id = string.sub(token, 3)
 	local kind = string.sub(token, 1, 1)
@@ -313,6 +317,13 @@ local function assignParent(object, value, destroy)
 	local id = nodeId(object)
 	if value == nil then
 		destroy(id)
+		return
+	end
+	-- Kept out of the world, in ReplicatedStorage or ServerStorage.
+	if value == dataKit.ReplicatedStorage or value == dataKit.ServerStorage then
+		if not invoke("tree.store", id, if value == dataKit.ReplicatedStorage then "rs" else "ss") then
+			raise("Unable to assign property Parent. Only parts, Models and Folders can be kept there", 3)
+		end
 		return
 	end
 	local target = nodeId(value)

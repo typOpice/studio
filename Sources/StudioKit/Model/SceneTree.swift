@@ -27,6 +27,8 @@ struct SceneGroup: Codable, Equatable, Identifiable {
     var primaryPartID: UUID?
     /// A Tool's settings and where it is; nil for Models and Folders.
     var tool: ToolSettings?
+    /// Kept in ReplicatedStorage or ServerStorage (at the top of the tree only).
+    var storage: StoragePlace?
 
     init(name: String = "Model", kind: Kind = .model, parentID: UUID? = nil) {
         self.name = name
@@ -35,7 +37,7 @@ struct SceneGroup: Codable, Equatable, Identifiable {
         if kind == .tool { tool = ToolSettings() }
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, kind, parentID, primaryPartID, tool }
+    private enum CodingKeys: String, CodingKey { case id, name, kind, parentID, primaryPartID, tool, storage }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -46,6 +48,7 @@ struct SceneGroup: Codable, Equatable, Identifiable {
         primaryPartID = try c.decodeIfPresent(UUID.self, forKey: .primaryPartID)
         tool = try c.decodeIfPresent(ToolSettings.self, forKey: .tool)
         if kind == .tool && tool == nil { tool = ToolSettings() }
+        storage = try c.decodeIfPresent(StoragePlace.self, forKey: .storage)
     }
 }
 
@@ -189,7 +192,7 @@ extension SceneModel {
     /// StarterPack, a Backpack or a hand isn't among the Workspace's.
     func children(of parent: UUID?) -> [TreeNode] {
         groups.filter { $0.parentID == parent && (parent != nil || isInWorkspace($0)) }.map { .group($0.id) }
-            + parts.filter { $0.parentID == parent }.map { .part($0.id) }
+            + parts.filter { $0.parentID == parent && (parent != nil || $0.storage == nil) }.map { .part($0.id) }
     }
 
     /// Everything below, depth first.

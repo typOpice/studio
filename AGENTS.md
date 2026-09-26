@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 1997 checks — THE test suite, ~50–70s
+swift run StudioApp --selftest       # 2023 checks — THE test suite, ~50–70s
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
 ./make_app.sh release                # produce Studio.app and StudioClient.app
@@ -136,7 +136,7 @@ listed in §9.
 | `AudioSelfTest.swift` | Pictures and sounds (WAV and PNG made in memory): importing (kinds, refusals, unique names, references, rename, undo, saving); a sound file imported from disk, the place saved through `SceneDocument`, the file deleted, the place reopened, played and hosted for a joiner; Models saving their Sounds and files, and inserting them (brought, shared, renamed with Sounds and scripts following, undone); decoding and mono mixdown, fading with distance; a part's Sounds deleted and copied with it; the Luau Sound/SoundService API against a `RecordingOutput` (3D position, volume, TimePosition, Pause/Resume, Ended once, Looped, PlaybackSpeed, reach, Stop, Destroy, a Sound made in Studio playing at start, read-only and typed properties, LocalScript Sounds kept local through task.spawn and events); an ImageLabel drawing its picture (rendered and read back); the StarterGui preview's pictures; a host's Sounds heard by a joiner (same part, stopping, ending) while each machine's LocalScript Sounds stay its own |
 | `MeshSelfTest.swift` | MeshParts (OBJ, STL and PLY made in memory): decoding (triangles, size, texture coordinates, hard edges kept when a file has no normals, squeezed into the unit cube, the hull and its volume, a broken file refused); inserting (size, on the ground, too-big models rescaled, fidelity and picture undoable, Reset Size, saving, old files); an arch clicked through its opening whatever it collides as, and walked into by each CollisionFidelity (Precise lets a capsule stand in the opening, Hull and Box push it out, pillars push sideways, turned); Jolt with a cup (a block lands inside a Precise one, on top of a Hull or Box one) and an unanchored MeshPart resting and weighing its hull; drawn plain, textured and ray traced and read back; the Luau MeshPart API (Instance.new, ClassName, IsA, MeshId → MeshSize, TextureID, CollisionFidelity, the errors, Clone); saved Models carrying models and pictures and renaming a clash; a joiner getting the models, walking through a Precise arch, and seeing a host script's MeshPart |
 | `WardrobeSelfTest.swift` | What characters wear: every catalog accessory's mesh (sane size, wound outwards), faces and clothing pictures (sizes, a tee's sleeves, shorts to the knee); Roblox's clothing template on the torso, arms and hands, the face patch; a place's and a player's looks combined (own look kept or not, ten at most, built-in only for players), saving, old files, renaming a picture (and undo); accessories hung from their attachments, turning, nodding and lying down with the body, imported models by their anchor; drawn and read back (shirt over pants, pants, a top hat, a face picture in place of the smile, ray traced); in play (StarterPlayer over the player's look, afresh each character, the Animation Editor's rig); the Luau API (Accessory, AddAccessory, parenting, Shirt, Pants, Head.face, errors, GetAppliedDescription, Destroy, ApplyDescription with body colours, RemoveAccessories); the profile (kept, old profiles, applied); two players seeing each other's looks and a host script dressing a joined player, read back at once |
-| `RemotesSelfTest.swift` | Scripts working together: ModuleScripts and data objects in the scene (made, saved, old files, deleted and undone, copied and deleted with a part); `require` (once, the same value to every script, ReplicatedStorage, Script Service and parts, never by themselves, loops, nothing returned, errors, compile errors, wrong arguments); Values (IntValue rounding, StringValue from a number, BoolValue refusing, Folders, Clone, WaitForChild waiting, Changed with each value, Destroy, a Folder becoming a Player's leaderstats); remotes played alone (FireServer with tables, Vector3s and parts, FireClient, FireAllClients, InvokeServer and its errors, the wrong side refused); Raycast (first hit and all its fields, IgnoreWater, RespectCanCollide, Exclude and Include, too short, bad params, characters and excluding them); the leaderboard (hidden with no leaderstats, columns and rows, the HUD numbers moved, Tab); the README's examples; a host and a joined player (modules on each, FireServer as that player with a part, FireClient back, InvokeServer, leaderstats and Changed reaching the player, a late remote waited for, both on the joiner's leaderboard, the host's rays meeting the joiner, leaderstats leaving with the player) |
+| `RemotesSelfTest.swift` | Scripts working together: ModuleScripts and data objects in the scene (made, saved, old files, deleted and undone, copied and deleted with a part); `require` (once, the same value to every script, ReplicatedStorage, Script Service and parts, never by themselves, loops, nothing returned, errors, compile errors, wrong arguments); Values (IntValue rounding, StringValue from a number, BoolValue refusing, Folders, Clone, WaitForChild waiting, Changed with each value, Destroy, a Folder becoming a Player's leaderstats); remotes played alone (FireServer with tables, Vector3s and parts, FireClient, FireAllClients, InvokeServer and its errors, the wrong side refused); Raycast (first hit and all its fields, IgnoreWater, RespectCanCollide, Exclude and Include, too short, bad params, characters and excluding them); the leaderboard (hidden with no leaderstats, columns and rows, the HUD numbers moved, Tab); storage (a Model kept in ServerStorage by Studio, left out of what joiners get, saved, undone; its module and Value reached, a clone coming into the world with its script, a part into ReplicatedStorage and back, a LocalScript seeing ServerStorage empty); ObjectValue, Vector3Value, Color3Value, CFrameValue, BindableEvent, BindableFunction, UnreliableRemoteEvent and RunService:IsServer/IsClient; remotes queuing events until a handler connects and carrying Sounds, GUI objects and the Workspace; the README's examples; a host and a joined player (modules on each, FireServer as that player with a part, FireClient back, InvokeServer, leaderstats and Changed reaching the player, a late remote waited for, both on the joiner's leaderboard, the host's rays meeting the joiner, leaderstats leaving with the player); and with two players: ServerStorage never sent and empty to the joiner, a clone from it reaching them, an event queued for a late handler, an UnreliableRemoteEvent, a GUI object from another machine arriving as nil, and an InvokeClient failing when its player leaves |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -274,6 +274,8 @@ Sources/StudioKit/
   Scripting/ScriptRuntime+Lighting/Animations/Tree/Joints/Parts/Shaders.swift
                                    the host calls, one file per namespace group
   Scripting/ScriptConsole.swift    buffered output: info, output, warning, error
+  Model/SceneModel+Storage.swift   StoragePlace; parts and Models kept in Replicated/ServerStorage,
+                                   and ServerStorage left out of what joined players get
   Scripting/ScriptRuntime+Data.swift  `data.*` (Folders, Values, remotes as data objects),
                                    `module.*`, `workspace.raycast`
   Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them
@@ -1089,8 +1091,10 @@ Roughly ordered by how much time they will cost you.
     environment, whose `script` answers ClassName "ModuleScript". Luau's `require`
     (part 15) runs it once per VM under `pcall` (yields allowed), caches the single value,
     and gives Roblox's errors for a loop, a count other than one, and a module that
-    failed (which then stays failed). The host VM holds the host's scene scripts and its
-    LocalScripts, so they share one cache; each joined player has their own.
+    failed (which then stays failed). The cache is kept per side — "server:" or
+    "client:" by `inLocalScript` — so the host's scene scripts and its LocalScripts each
+    run a module once, as Roblox's server and client do; a joined player has only a
+    client side.
 
 96. **Folders, Values and remotes are data objects; remotes ride the existing channels.**
     `DataObject` (DataObjects.swift) covers Folder, Int/Number/String/BoolValue,
@@ -1115,7 +1119,26 @@ Roughly ordered by how much time they will cost you.
     client and scene scripts the server (`inLocalScript`), which decides FireServer vs
     FireClient. A player who leaves takes their `.player(n)` objects with them. The
     leaderboard is StarterGui's PlayerList (`DefaultHud.makeLeaderboard`, HUD version 2),
-    which reads `leaderstats` like any LocalScript would.
+    which reads `leaderstats` like any LocalScript would. More classes are data objects
+    too: ObjectValue (a token — "p:", "g:", "v:", "s:", "pl:<n>"… — in `text`),
+    Vector3Value, Color3Value and CFrameValue (`numbers`), UnreliableRemoteEvent (a
+    RemoteEvent) and BindableEvent/BindableFunction (same machine: `Fire` fires `Event`
+    directly, `Invoke` calls `OnInvoke` in the caller's thread). A remote event that
+    arrives with no handler is queued on its signal (`dataKit.deliver`; the signal's
+    `onConnect` hook flushes it when the first handler connects), and the host fails
+    an InvokeClient whose player leaves (`invokesWaiting`). GUI objects cross only to
+    their own VM (`dataKit.vmTag`).
+
+97. **ReplicatedStorage and ServerStorage keep tree nodes by parking them.** A part or
+    group at the top of the tree may have `storage` (SceneModel+Storage.swift): it isn't
+    among the Workspace's children, its parts are `parked` (like a Tool's in a
+    Backpack), and `isParked` keeps its scripts from starting. `setStorage` moves things
+    in and out; Luau's `Parent = ReplicatedStorage/ServerStorage` is `tree.store`, and
+    `tree.parent` answers "rs"/"ss". A clone of a stored thing lands in the Workspace
+    with its scripts started (`landInWorld`), as does a stored thing parented back
+    (`tree.setparent`). `sharedState` goes through `withoutServerStorage`, so joined
+    players never receive ServerStorage's nodes, scripts, modules or data objects; in
+    Luau, ServerStorage and ServerScriptService look empty to a client.
 
 ## 8. Recipes
 
@@ -1302,14 +1325,14 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   there; a player's own look is built-in things only (they can't bring their own
   files); HumanoidDescription covers the look and body colours, not scale or
   animations. Luau only.
-- **Scripts working together:** no ServerStorage, BindableEvent/Function, ObjectValue,
-  Vector3Value and the other Value classes, or `RunService:IsServer()`; `require` takes a
-  ModuleScript in the place, not an asset id; the host's scene scripts and LocalScripts
-  share one module cache; remotes send parts, Models, data objects, players, characters
-  and body parts, but not GUI objects, Sounds or joints (they arrive as nil); only
-  ReplicatedStorage, Players and data Folders have a `WaitForChild` that waits;
-  `workspace:Raycast` ignores CollisionGroup and meets characters as boxes; data objects
-  made at run time in parts aren't shown in Studio's Explorer. Luau only.
+- **Scripts working together:** `require` takes a ModuleScript in the place, not an
+  asset id; no BrickColorValue, RayValue or the constrained Values; an ObjectValue can't
+  hold a character or a GUI object; UnreliableRemoteEvent never drops anything; only
+  ReplicatedStorage, ServerStorage, Players and data Folders have a `WaitForChild` that
+  waits; a clone of something in the Workspace doesn't start its scripts (one from
+  storage does); `workspace:Raycast` ignores CollisionGroup and meets characters as
+  boxes; data objects made at run time in parts aren't shown in Studio's Explorer.
+  Luau only.
 - **Run mode is Studio-only:** it has no player and no network side, so it has no
   multiplayer test; a scene script that needs `Players.LocalPlayer` gets nil there, as
   on a Roblox server.

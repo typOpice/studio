@@ -14,7 +14,7 @@ Everything is one Swift package. Xcode 27 is installed now (Swift 6.4), but the 
 HOW TO CHECK THAT EVERYTHING STILL WORKS
 
 Run all the automatic checks:  swift run StudioApp --selftest
-They must all pass before any change counts as done (1997 checks at the end of this session, all passing).
+They must all pass before any change counts as done (2023 checks at the end of this session, all passing).
 Build the two apps:  ./make_app.sh release
 AGENTS.md explains how the code is organised and the rules that are easy to break. Read it first.
 README.md is the guide for people using the apps.
@@ -231,6 +231,14 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player, including the README's examples.
    Also corrected the notes that said there is no Xcode: Xcode 27 is installed, but the project still builds without it.
    New files: Model/DataObjects.swift, Scripting/ScriptRuntime+Data.swift, Scripting/LuauLibrary/15-Data.swift (the entry points are now part 16), Play/PlayController+Remotes.swift, UI/DataObjectsUI.swift, RemotesSelfTest.swift.
+
+20. More classes, and remotes fixed, 2026-09-26.
+   ServerStorage: like ReplicatedStorage, but only the host sees it. Joined players are never sent what's in it, and their scripts find it empty.
+   ReplicatedStorage and ServerStorage can now keep parts and Models (right-click one in the Workspace: Move to ReplicatedStorage / ServerStorage). Stored things aren't in the world. Clone() brings a copy into the Workspace with its scripts running.
+   New classes: BindableEvent and BindableFunction (scripts on the same machine calling each other), ObjectValue, Vector3Value, Color3Value, CFrameValue, UnreliableRemoteEvent, and RunService:IsServer() / IsClient().
+   Remotes fixed: Sounds, attachments, joints and the Workspace can be sent, and GUI objects on their own machine. An event fired before anyone listens is kept until a handler connects (as in Roblox). A call to a player who leaves now fails instead of waiting for ever. The server and the clients each get their own copy of a module, even on the host.
+   Tested alone and with a host and a joined player.
+   New file: Model/SceneModel+Storage.swift.
 
 
 THINGS TO KNOW

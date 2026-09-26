@@ -15,8 +15,12 @@ enum RemotesSelfTest {
         testRemotes(check)
         testRaycast(check)
         testLeaderboard(check)
+        testStorage(check)
+        testMoreClasses(check)
+        testRemoteFixes(check)
         testReadmeExamples(check)
         testTwoPlayers(check)
+        testTwoPlayersMore(check)
     }
 
     private static let frame: Float = 1.0 / 60
@@ -176,8 +180,9 @@ enum RemotesSelfTest {
         let session = play(model)
         let output = said(session)
         check("require runs a ModuleScript once and hands back what it returned, to every script that asks",
-              output.filter { $0.hasPrefix("greeter loaded") } == ["greeter loaded ModuleScript true"]
-              && line(session, "greet") == "greet Hello, Robin! true 1" && line(session, "local").hasPrefix("local Hello, Sam!"),
+              line(session, "greet") == "greet Hello, Robin! true 1", "\(output)")
+        check("…once for the server's scripts and once for the clients', as in Roblox",
+              output.filter { $0.hasPrefix("greeter loaded") }.count == 2 && line(session, "local") == "local Hello, Sam! 1",
               "\(output)")
         check("ModuleScripts are found in Script Service and in parts too",
               line(session, "service") == "service 42 crate ModuleScript", line(session, "service"))
@@ -230,7 +235,7 @@ enum RemotesSelfTest {
         print("folder", ReplicatedStorage.Settings.Speed.Value, #settings:GetChildren(), settings.ClassName,
         \tspeed:GetFullName())
         local copy = settings:Clone()
-        print("clone", copy.Parent == nil, copy.Speed.Value, copy.Speed ~= speed)
+        print("clone", copy.Parent == workspace, copy.Speed.Value, copy.Speed ~= speed)
         task.delay(0.2, function()
         \tlocal late = Instance.new("RemoteEvent")
         \tlate.Name = "Late"
@@ -462,6 +467,195 @@ enum RemotesSelfTest {
         session.stop()
     }
 
+    // MARK: - Storage
+
+    private static func testStorage(_ check: Checker) {
+        print("\nTogether: ReplicatedStorage and ServerStorage keeping parts and Models")
+        let model = world()
+        let sword = SceneGroup(name: "Sword", kind: .model)
+        var blade = Part()
+        blade.name = "Blade"
+        blade.parentID = sword.id
+        blade.position = Vec3(0, 3, 10)
+        model.groups.append(sword)
+        model.parts.append(blade)
+        add(model, "print(\"sword script running\", script.Parent.Name)", name: "SwordScript", parent: sword.id)
+        var crate = Part()
+        crate.name = "Crate"
+        crate.position = Vec3(10, 1, 0)
+        model.parts.append(crate)
+        add(model, "return { secret = 7 }", name: "Secrets", host: .serverStorage, module: true)
+        model.dataObjects.append(DataObject(name: "Hidden", className: .intValue, parent: .serverStorage))
+
+        let steps = model.undoCount
+        model.moveToStorage([sword.id], .serverStorage)
+        check("Studio can keep a Model in ServerStorage: out of the Workspace, its parts parked",
+              model.storage(of: sword.id) == .serverStorage && model.part(id: blade.id)?.parked == true
+              && !model.children(of: nil).contains { $0.id == sword.id } && model.stored(in: .serverStorage).count == 1
+              && model.undoCount == steps + 1)
+        let shared = model.sharedState
+        check("…and joined players are never sent what's in ServerStorage",
+              !shared.groups.contains { $0.id == sword.id } && !shared.parts.contains { $0.id == blade.id }
+              && !shared.scripts.contains { $0.name == "SwordScript" || $0.name == "Secrets" }
+              && !shared.dataObjects.contains { $0.name == "Hidden" } && shared.parts.contains { $0.id == crate.id })
+        let saved = try? JSONEncoder().encode(model.state)
+        let reopened = saved.flatMap { try? JSONDecoder().decode(SceneState.self, from: $0) }
+        check("…which is saved with the scene", reopened?.groups.first { $0.id == sword.id }?.storage == .serverStorage)
+        model.undo()
+        check("undo brings it back", model.storage(of: sword.id) == nil && model.part(id: blade.id)?.parked == false)
+        model.moveToStorage([sword.id], .serverStorage)
+
+        add(model, """
+        local ServerStorage = game:GetService("ServerStorage")
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        print("stored", ServerStorage.Sword.Parent == ServerStorage, workspace:FindFirstChild("Sword") == nil,
+        \trequire(ServerStorage.Secrets).secret, ServerStorage.Hidden.ClassName)
+        local copy = ServerStorage.Sword:Clone()
+        print("copied", copy.Parent == workspace, workspace:FindFirstChild("Sword") == copy,
+        \tServerStorage:FindFirstChild("Sword") ~= nil)
+        workspace.Crate.Parent = ReplicatedStorage
+        print("kept", workspace:FindFirstChild("Crate") == nil, ReplicatedStorage.Crate.Parent == ReplicatedStorage)
+        task.wait(0.1)
+        ReplicatedStorage.Crate.Parent = workspace
+        print("back", workspace.Crate.Parent == workspace)
+        """, name: "Server")
+        add(model, """
+        print("client sees", #game:GetService("ServerStorage"):GetChildren(),
+        \tgame:GetService("ServerStorage"):FindFirstChild("Sword") == nil,
+        \t#game:GetService("ServerScriptService"):GetChildren())
+        """, name: "Client", host: .starterPlayer)
+        let session = play(model, seconds: 0.3)
+        let copy = session.model.groups.first { $0.name == "Sword" && $0.id != sword.id }
+        check("scripts reach ServerStorage's Models, modules and Values",
+              line(session, "stored") == "stored true true 7 IntValue", line(session, "stored"))
+        check("a clone of a stored Model comes into the world, its script running, the original kept",
+              line(session, "copied") == "copied true true true"
+              && said(session).filter { $0 == "sword script running Sword" }.count == 1
+              && copy.map { session.model.partIDs(inSubtree: $0.id).allSatisfy { session.model.part(id: $0)?.parked == false } } == true,
+              "\(said(session))")
+        check("a part goes into ReplicatedStorage and back", line(session, "kept") == "kept true true"
+              && line(session, "back") == "back true"
+              && session.model.parts.first { $0.name == "Crate" }?.parked == false, line(session, "kept"))
+        check("…and a LocalScript sees ServerStorage and ServerScriptService empty",
+              line(session, "client sees") == "client sees 0 true 0", line(session, "client sees"))
+        check("…with no errors", said(session, .error).isEmpty, "\(said(session, .error))")
+        session.stop()
+    }
+
+    // MARK: - More classes
+
+    private static func testMoreClasses(_ check: Checker) {
+        print("\nTogether: ObjectValue, Vector3Value, Color3Value, CFrameValue, Bindables, RunService")
+        let model = world()
+        var crate = Part()
+        crate.name = "Crate"
+        model.parts.append(crate)
+        add(model, """
+        local holder = Instance.new("ObjectValue")
+        holder.Value = workspace.Crate
+        print("object", holder.Value == workspace.Crate, (pcall(function() holder.Value = 5 end)))
+        holder.Value = game:GetService("Players").LocalPlayer
+        print("player", holder.Value == game:GetService("Players").LocalPlayer)
+        holder.Value = nil
+        print("empty", holder.Value == nil)
+        local spot = Instance.new("Vector3Value", workspace.Crate)
+        print("vector", spot.Value == Vector3.zero, (pcall(function() spot.Value = 1 end)))
+        local heard
+        spot.Changed:Connect(function(value) heard = value end)
+        spot.Value = Vector3.new(1, 2, 3)
+        local tint = Instance.new("Color3Value")
+        tint.Value = Color3.new(1, 0.5, 0)
+        local pose = Instance.new("CFrameValue")
+        print("cframe", pose.Value == CFrame.new())
+        pose.Value = CFrame.new(1, 2, 3) * CFrame.Angles(0, math.pi / 2, 0)
+        task.wait()
+        print("values", tostring(heard), tint.Value.G, math.round(pose.Value.Position.Y), math.round(pose.Value.LookVector.X),
+        \tspot:IsA("ValueBase"))
+        local ping = Instance.new("BindableEvent")
+        ping.Name = "Ping"
+        ping.Parent = game:GetService("ReplicatedStorage")
+        local shape = Instance.new("BindableFunction", game:GetService("ReplicatedStorage"))
+        shape.Name = "Area"
+        shape.OnInvoke = function(width, height)
+        \treturn width * height, "square studs"
+        end
+        print("server", game:GetService("RunService"):IsServer(), game:GetService("RunService"):IsClient())
+        """, name: "Server")
+        add(model, """
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local ping = ReplicatedStorage:WaitForChild("Ping")
+        local sent = { size = 3 }
+        ping.Event:Connect(function(value, extra)
+        \tprint("bindable", value == sent, value.size, extra)
+        end)
+        ping:Fire(sent, "and more")
+        local area, unit = ReplicatedStorage:WaitForChild("Area"):Invoke(4, 5)
+        print("invoked", area, unit)
+        print("client", game:GetService("RunService"):IsServer(), game:GetService("RunService"):IsClient())
+        local loud = Instance.new("UnreliableRemoteEvent")
+        print("unreliable", loud:IsA("BaseRemoteEvent"), loud.ClassName)
+        """, name: "Client", host: .starterPlayer)
+        let session = play(model, seconds: 0.4)
+        check("an ObjectValue holds a part or a player, or nothing, and nothing else",
+              line(session, "object") == "object true false" && line(session, "player") == "player true"
+              && line(session, "empty") == "empty true", "\(said(session))")
+        check("Vector3Value, Color3Value and CFrameValue start at zero, take only their type, and fire Changed",
+              line(session, "vector") == "vector true false" && line(session, "cframe") == "cframe true"
+              && line(session, "values") == "values 1, 2, 3 0.5 2 -1 true", line(session, "values"))
+        check("a BindableEvent hands the same table to its handlers; a BindableFunction returns what OnInvoke does",
+              line(session, "bindable") == "bindable true 3 and more" && line(session, "invoked") == "invoked 20 square studs",
+              line(session, "bindable") + " | " + line(session, "invoked"))
+        check("RunService says which side a script is on",
+              line(session, "server") == "server true false" && line(session, "client") == "client false true",
+              line(session, "server") + " | " + line(session, "client"))
+        check("UnreliableRemoteEvent is a RemoteEvent", line(session, "unreliable") == "unreliable true UnreliableRemoteEvent",
+              line(session, "unreliable"))
+        check("…with no errors", said(session, .error).isEmpty, "\(said(session, .error))")
+        session.stop()
+    }
+
+    // MARK: - Remote fixes
+
+    private static func testRemoteFixes(_ check: Checker) {
+        print("\nTogether: remotes, what they carry and when")
+        let model = world()
+        var crate = Part()
+        crate.name = "Crate"
+        model.parts.append(crate)
+        let bell = SceneSound(name: "Bell", parentID: nil)
+        model.sounds = [bell]
+        model.dataObjects = [DataObject(name: "Early", className: .remoteEvent, parent: .replicatedStorage),
+                             DataObject(name: "Things", className: .remoteEvent, parent: .replicatedStorage)]
+        add(model, """
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local Players = game:GetService("Players")
+        -- Fired before the client has connected: it waits for the first handler.
+        ReplicatedStorage.Early:FireAllClients("first")
+        ReplicatedStorage.Early:FireAllClients("second")
+        ReplicatedStorage.Things.OnServerEvent:Connect(function(player, sound, gui, place)
+        \tprint("things", sound ~= nil and sound.Name, gui ~= nil and gui.Name, place == workspace)
+        end)
+        """, name: "Server")
+        add(model, """
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        task.wait(0.3)
+        ReplicatedStorage.Early.OnClientEvent:Connect(function(word)
+        \tprint("early", word)
+        end)
+        local screen = Instance.new("ScreenGui")
+        screen.Name = "Menu"
+        screen.Parent = game:GetService("Players").LocalPlayer.PlayerGui
+        ReplicatedStorage.Things:FireServer(game:GetService("SoundService").Bell, screen, workspace)
+        """, name: "Client", host: .starterPlayer)
+        let session = play(model, seconds: 0.7)
+        check("events fired before anyone listens are kept and handed over, in order, when a handler connects",
+              said(session).filter { $0.hasPrefix("early") } == ["early first", "early second"], "\(said(session))")
+        check("Sounds, GUI objects (on the machine they belong to) and the Workspace go through a remote",
+              line(session, "things") == "things Bell Menu true", line(session, "things"))
+        check("…with no errors", said(session, .error).isEmpty, "\(said(session, .error))")
+        session.stop()
+    }
+
     // MARK: - The README's examples
 
     /// The README's module, remote, leaderstats and raycast examples, as they are written.
@@ -475,8 +669,8 @@ enum RemotesSelfTest {
         }
         let section = String(readme[start.upperBound..<end.lowerBound])
         var blocks = section.components(separatedBy: "```lua\n").dropFirst().map { $0.components(separatedBy: "```")[0] }
-        guard blocks.count == 4 else {
-            check("the README has its four examples", false, "\(blocks.count)")
+        guard blocks.count == 5 else {
+            check("the README has its five examples", false, "\(blocks.count)")
             return
         }
         let model = world()
@@ -487,19 +681,35 @@ enum RemotesSelfTest {
         coin.size = Vec3(4, 6, 4)
         coin.position = Vec3(0, 3, 0)
         model.parts.append(coin)
+        var rack = Part()
+        rack.name = "Rack"
+        rack.anchored = true
+        rack.canCollide = false
+        rack.size = Vec3(4, 6, 4)
+        rack.position = Vec3(0, 3, 0)
+        model.parts.append(rack)
+        let sword = SceneGroup(name: "Sword", kind: .model)
+        var blade = Part()
+        blade.name = "Blade"
+        blade.parentID = sword.id
+        blade.anchored = true
+        model.groups.append(sword)
+        model.parts.append(blade)
+        model.setStorage(sword.id, .serverStorage)
         model.dataObjects = [DataObject(name: "Buy", className: .remoteFunction, parent: .replicatedStorage),
                              DataObject(name: "Announce", className: .remoteEvent, parent: .replicatedStorage)]
         // The module example is two scripts in one block: the module, then its use.
         let parts = blocks[0].components(separatedBy: "-- any Script or LocalScript\n")
         add(model, parts[0], name: "Weapons", host: .replicatedStorage, module: true)
         add(model, parts[1], name: "UsesWeapons")
+        add(model, blocks[1], name: "Swords")
         // The remote example: the LocalScript, then the Script.
-        let remote = blocks[1].components(separatedBy: "-- A Script: the server decides.\n")
+        let remote = blocks[2].components(separatedBy: "-- A Script: the server decides.\n")
         add(model, remote[0], name: "Shopper", host: .starterPlayer)
         add(model, "local ReplicatedStorage = game:GetService(\"ReplicatedStorage\")\n" + remote[1], name: "Shop")
-        add(model, blocks[2], name: "Leaderstats")
-        blocks[3] = blocks[3].replacingOccurrences(of: "print(\"hit\"", with: "print(\"ray hit\"")
-        add(model, "task.wait(0.3)\n" + blocks[3], name: "Ray", host: .starterPlayer)
+        add(model, blocks[3], name: "Leaderstats")
+        blocks[4] = blocks[4].replacingOccurrences(of: "print(\"hit\"", with: "print(\"ray hit\"")
+        add(model, "task.wait(0.3)\n" + blocks[4], name: "Ray", host: .starterPlayer)
         let session = play(model, seconds: 0.3)
         session.character.position = coin.position - Vec3(0, 3, 0)
         step(session, seconds: 0.5)
@@ -508,8 +718,102 @@ enum RemotesSelfTest {
         check("the leaderstats example gives coins for touching the coin, and the shop turns them away",
               session.model.dataObjects.contains { $0.name == "Coins" && $0.number >= 1 }
               && output.contains("Not enough coins"), "\(output) \(session.model.dataObjects.map(\.name))")
+        check("the ServerStorage example hands out swords from the rack",
+              session.model.groups.contains { $0.name == "Sword" && $0.storage == nil }
+              && session.model.storage(of: sword.id) == .serverStorage)
         check("the raycast example runs", said(session, .error).isEmpty, "\(said(session, .error))")
         session.stop()
+    }
+
+    /// ServerStorage kept from joined players, a clone from it reaching them, events
+    /// queued across machines, an UnreliableRemoteEvent, a GUI object arriving as nothing
+    /// on another machine, and a call to a player who leaves failing.
+    private static func testTwoPlayersMore(_ check: Checker) {
+        print("\nTogether: storage and remotes between a host and a joined player")
+        var loot = Part()
+        loot.name = "Loot"
+        loot.storage = .serverStorage
+        loot.parked = true
+        guard let (hosting, joining) = LANSelfTest.twoPlayers({ model in
+            model.parts.append(loot)
+            model.dataObjects = [DataObject(name: "Welcome", className: .remoteEvent, parent: .replicatedStorage),
+                                 DataObject(name: "Shout", className: .unreliableRemoteEvent, parent: .replicatedStorage),
+                                 DataObject(name: "Ask", className: .remoteFunction, parent: .replicatedStorage)]
+            add(model, """
+            local Players = game:GetService("Players")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local ServerStorage = game:GetService("ServerStorage")
+            Players.PlayerAdded:Connect(function(player)
+            \t-- At once: the player's scripts haven't connected yet.
+            \tReplicatedStorage.Welcome:FireClient(player, "welcome, " .. player.Name)
+            \ttask.wait(0.3)
+            \tlocal drop = ServerStorage.Loot:Clone()
+            \tdrop.Name = "Drop"
+            \tdrop.Position = Vector3.new(0, 1, 30)
+            end)
+            ReplicatedStorage.Shout.OnServerEvent:Connect(function(player, word, gui)
+            \tprint("shout", player.Name, word, gui == nil)
+            end)
+            game:GetService("UserInputService").InputBegan:Connect(function(input)
+            \tif input.KeyCode ~= Enum.KeyCode.P then
+            \t\treturn
+            \tend
+            \tfor _, player in Players:GetPlayers() do
+            \t\tif player.Name == "Sam" then
+            \t\t\ttask.spawn(function()
+            \t\t\t\tlocal ok, message = pcall(function() return ReplicatedStorage.Ask:InvokeClient(player) end)
+            \t\t\t\tprint("asked", ok, message)
+            \t\t\tend)
+            \t\tend
+            \tend
+            end)
+            """, name: "Server")
+            add(model, """
+            local Players = game:GetService("Players")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            if Players.LocalPlayer.Name ~= "Sam" then
+            \treturn
+            end
+            print("storage", #game:GetService("ServerStorage"):GetChildren())
+            task.wait(0.5)
+            ReplicatedStorage:WaitForChild("Welcome").OnClientEvent:Connect(function(text)
+            \tprint("welcomed", text)
+            end)
+            ReplicatedStorage.Ask.OnClientInvoke = function()
+            \ttask.wait(100)
+            end
+            local screen = Instance.new("ScreenGui", Players.LocalPlayer.PlayerGui)
+            ReplicatedStorage.Shout:FireServer("hey", screen)
+            """, name: "Client", host: .starterPlayer)
+        }), let host = hosting.player, let sam = joining.player else {
+            check("a host and a player join", false)
+            return
+        }
+        func heard(_ session: PlayController) -> [String] {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+            return session.console.lines.filter { $0.kind == .output }.map(\.text)
+        }
+        LANSelfTest.run([hosting, joining], seconds: 1.2)
+        check("a joined player is never sent what's in ServerStorage, and sees it empty",
+              !sam.model.parts.contains { $0.name == "Loot" } && heard(sam).contains("storage 0"), "\(heard(sam))")
+        check("…but a clone the host takes from it comes into their world",
+              sam.model.parts.contains { $0.name == "Drop" && !$0.parked }, "\(sam.model.parts.map(\.name))")
+        check("an event fired before the player's script connects is kept for it",
+              heard(sam).contains("welcomed welcome, Sam"), "\(heard(sam))")
+        check("an UnreliableRemoteEvent reaches the host; a GUI object from another machine arrives as nothing",
+              heard(host).contains("shout Sam hey true"), "\(heard(host))")
+        host.key("P", pressed: true)
+        host.step(dt: 1.0 / 60)
+        host.key("P", pressed: false)
+        LANSelfTest.run([hosting, joining], seconds: 0.3)
+        joining.leaveGame()
+        LANSelfTest.run([hosting], seconds: 0.5)
+        check("a call waiting on a player who leaves fails, rather than waiting for ever",
+              heard(host).contains { $0.hasPrefix("asked false") && $0.hasSuffix("The player left the game") },
+              "\(heard(host))")
+        check("…with no errors", host.console.lines.filter { $0.kind == .error }.isEmpty,
+              "\(host.console.lines.filter { $0.kind == .error }.map(\.text))")
+        hosting.leaveGame()
     }
 
     // MARK: - Two players

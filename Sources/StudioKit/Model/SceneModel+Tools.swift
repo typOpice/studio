@@ -44,6 +44,7 @@ extension SceneModel {
         var steps = 0
         while let at = current, steps < 10_000 {
             if let place = group(id: at)?.tool?.place, !place.inWorld { return true }
+            if group(id: at)?.storage != nil || part(id: at)?.storage != nil { return true }
             current = parentID(of: at)
             steps += 1
         }
@@ -53,7 +54,7 @@ extension SceneModel {
     /// Whether a group shows among the Workspace's children: anything but a Tool that
     /// is somewhere else.
     func isInWorkspace(_ group: SceneGroup) -> Bool {
-        group.tool.map { $0.place == .workspace } ?? true
+        group.storage == nil && (group.tool.map { $0.place == .workspace } ?? true)
     }
 
     // MARK: - Editing (with undo)

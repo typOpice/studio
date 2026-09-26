@@ -27,6 +27,8 @@ enum ScriptHost: String, Codable, CaseIterable, Identifiable {
     /// ReplicatedStorage: ModuleScripts every machine can require. Nothing here runs by
     /// itself.
     case replicatedStorage
+    /// ServerStorage: ModuleScripts only the host's scripts can require.
+    case serverStorage
 
     var id: String { rawValue }
     var displayName: String {
@@ -36,6 +38,7 @@ enum ScriptHost: String, Codable, CaseIterable, Identifiable {
         case .starterCharacter: return "StarterCharacterScripts"
         case .starterGui: return "StarterGui"
         case .replicatedStorage: return "ReplicatedStorage"
+        case .serverStorage: return "ServerStorage"
         }
     }
 }

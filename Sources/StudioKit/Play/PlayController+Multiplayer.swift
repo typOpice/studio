@@ -101,7 +101,10 @@ extension PlayController {
             let number = RemoteCharacter.number(player: id, generation: was.generation)
             endRemoteTouches(of: id, number: number)
             takeTools(from: id, scope: number)
-            if !worldFromHost { removeDataObjects(ofPlayer: id) }
+            if !worldFromHost {
+                removeDataObjects(ofPlayer: id)
+                failInvokes(waitingOn: id)
+            }
             pendingEvents.append(.list([.string("CharacterRemoving"), .number(Double(number))]))
             // With their name: by the time a script asks, they're gone from the game.
             pendingEvents.append(.list([.string("PlayerRemoving"), .number(Double(id)), .string(was.name)]))

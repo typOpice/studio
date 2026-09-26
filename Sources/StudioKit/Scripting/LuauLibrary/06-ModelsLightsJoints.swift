@@ -141,6 +141,10 @@ GroupMeta.__newindex = function(group, key, value)
 	-- Folder leaves the Workspace tree and becomes a data Folder.
 	local place = key == "Parent" and value ~= nil and value ~= workspace_ and partIdOf[value] == nil
 		and groupIdOf[value] == nil and dataKit.placeOf(value)
+	-- ReplicatedStorage and ServerStorage keep Models and Folders as they are.
+	if place == "rs" or place == "ss" then
+		place = nil
+	end
 	if place then
 		if not invoke("data.fromGroup", id, place) then
 			raise("Unable to assign property Parent. Only an empty Folder can go there", 2)

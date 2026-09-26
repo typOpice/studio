@@ -290,6 +290,26 @@ enum LuauAPI {
             method("Destroy", "", "()"), method("IsA", "className", "boolean")
         ],
         "IntValue": valueMembers, "NumberValue": valueMembers, "StringValue": valueMembers, "BoolValue": valueMembers,
+        "ObjectValue": valueMembers, "Vector3Value": valueMembers, "Color3Value": valueMembers,
+        "CFrameValue": valueMembers,
+        "UnreliableRemoteEvent": [
+            property("Name", "string"), property("Parent", "Instance"),
+            property("OnServerEvent", "RBXScriptSignal"), property("OnClientEvent", "RBXScriptSignal"),
+            method("FireServer", "...", "()"), method("FireClient", "player, ...", "()"),
+            method("FireAllClients", "...", "()"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "BindableEvent": [
+            property("Name", "string"), property("Parent", "Instance"), property("Event", "RBXScriptSignal"),
+            method("Fire", "...", "()"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "BindableFunction": [
+            property("Name", "string"), property("Parent", "Instance"), property("OnInvoke", "function"),
+            method("Invoke", "...", "any"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "ServerStorage": [
+            method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name, timeout", "Instance"),
+            method("GetChildren", "", "table"), method("GetDescendants", "", "table")
+        ],
         "Folder": [
             property("Name", "string"), property("Parent", "Instance"),
             method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name, timeout", "Instance"),
@@ -302,7 +322,9 @@ enum LuauAPI {
         ],
         "RunService": [
             property("Heartbeat", "RBXScriptSignal"), property("Stepped", "RBXScriptSignal"),
-            property("RenderStepped", "RBXScriptSignal")
+            property("RenderStepped", "RBXScriptSignal"),
+            method("IsServer", "", "boolean"), method("IsClient", "", "boolean"), method("IsStudio", "", "boolean"),
+            method("IsRunning", "", "boolean"), method("IsRunMode", "", "boolean")
         ],
         "RBXScriptSignal": [
             method("Connect", "callback", "RBXScriptConnection"),
@@ -598,7 +620,8 @@ enum LuauAPI {
         "TweenService": "TweenService", "Shaders": "Shaders", "UserInputService": "UserInputService",
         "Animations": "Animations", "Lighting": "Lighting", "TextChatService": "TextChatService",
         "StarterPack": "StarterPack", "SoundService": "SoundService",
-        "ReplicatedStorage": "ReplicatedStorage", "ServerScriptService": "ServerScriptService"
+        "ReplicatedStorage": "ReplicatedStorage", "ServerScriptService": "ServerScriptService",
+        "ServerStorage": "ServerStorage"
     ]
 
     static let globalFunctions: [CompletionItem] = [
