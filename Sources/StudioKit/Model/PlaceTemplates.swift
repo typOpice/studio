@@ -169,7 +169,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
 
     private static func obbyState() -> SceneState {
         var state = emptyState()
-        var course = SceneGroup(name: "Course", kind: .model)
+        let course = SceneGroup(name: "Course", kind: .model)
         state.groups = [course]
         state.parts = [baseplate()]
 

@@ -134,10 +134,48 @@ enum LineNumbers {
     }
 }
 
-/// The line numbers down the left of a code editor, the caret's line brighter.
+/// The line numbers down the left of a code editor, the caret's line brighter; the
+/// debugger's breakpoints on them (click a number for one), and an arrow where the
+/// game is stopped.
 final class LineNumberRuler: NSRulerView {
     private weak var textView: NSTextView?
     private var digits = 0
+    var breakpoints: Set<Int> = [] {
+        didSet { if breakpoints != oldValue { needsDisplay = true } }
+    }
+    var pausedLine: Int? {
+        didSet { if pausedLine != oldValue { needsDisplay = true } }
+    }
+    /// Clicking a line's number: nil where there are no breakpoints to set.
+    var onToggle: ((Int) -> Void)?
+
+    static let breakpointColor = NSColor(srgbRed: 0.86, green: 0.27, blue: 0.27, alpha: 1)
+    static let pausedColor = NSColor(srgbRed: 0.98, green: 0.80, blue: 0.35, alpha: 1)
+
+    /// The line at a point in the ruler, if there's one there.
+    func line(at point: NSPoint) -> Int? {
+        guard let textView, let layout = textView.layoutManager, let container = textView.textContainer else { return nil }
+        let inText = convert(point, to: textView)
+        let origin = textView.textContainerOrigin
+        let text = textView.string as NSString
+        let y = inText.y - origin.y
+        if text.length == 0 || y > layout.usedRect(for: container).maxY {
+            // Below the last line's fragment: the empty last line, if it's there.
+            let extra = layout.extraLineFragmentRect
+            return extra.height > 0 && y >= extra.minY && y <= extra.maxY ? LineNumbers.count(in: text) : nil
+        }
+        let glyph = layout.glyphIndex(for: NSPoint(x: 0, y: y), in: container)
+        let character = layout.characterIndexForGlyph(at: glyph)
+        return LineNumbers.line(atOffset: character, in: text)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let onToggle, let line = line(at: convert(event.locationInWindow, from: nil)) else {
+            super.mouseDown(with: event)
+            return
+        }
+        onToggle(line)
+    }
 
     init(textView: NSTextView, scrollView: NSScrollView) {
         self.textView = textView
@@ -199,9 +237,34 @@ final class LineNumberRuler: NSRulerView {
         func label(_ number: Int, top: CGFloat) {
             let y = convert(NSPoint(x: 0, y: top + origin.y), from: textView).y
             guard y + 20 >= dirtyRect.minY, y - 20 <= dirtyRect.maxY else { return }
+            let lineHeight = layout.defaultLineHeight(for: CodeEditor.font)
+            let marked = breakpoints.contains(number)
+            if marked {
+                // A tab behind the number, pointing at the line, as Xcode draws one.
+                let tag = NSRect(x: 3, y: y + 1, width: bounds.width - 6, height: lineHeight - 2)
+                let path = NSBezierPath()
+                path.move(to: NSPoint(x: tag.minX + 2, y: tag.minY))
+                path.line(to: NSPoint(x: tag.maxX - 5, y: tag.minY))
+                path.line(to: NSPoint(x: tag.maxX, y: tag.midY))
+                path.line(to: NSPoint(x: tag.maxX - 5, y: tag.maxY))
+                path.line(to: NSPoint(x: tag.minX + 2, y: tag.maxY))
+                path.close()
+                Self.breakpointColor.setFill()
+                path.fill()
+            }
+            if number == pausedLine {
+                let arrow = NSBezierPath()
+                let mid = y + lineHeight / 2
+                arrow.move(to: NSPoint(x: 1, y: mid - 4))
+                arrow.line(to: NSPoint(x: 7, y: mid))
+                arrow.line(to: NSPoint(x: 1, y: mid + 4))
+                arrow.close()
+                Self.pausedColor.setFill()
+                arrow.fill()
+            }
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: Self.font,
-                .foregroundColor: number == caretLine ? Self.currentColor : Self.color
+                .foregroundColor: marked ? NSColor.white : number == caretLine ? Self.currentColor : Self.color
             ]
             let string = "\(number)" as NSString
             let size = string.size(withAttributes: attributes)
@@ -269,6 +332,12 @@ struct CodeEditor: NSViewRepresentable {
     var focusOnAppear: Bool = false
     /// A line to select and scroll to; each new request is acted on once.
     var reveal: CodeReveal? = nil
+    /// The debugger's: breakpoints in the gutter (and what clicking a number does), the
+    /// line the game is stopped at, and breakpoints moving with their lines as they're edited.
+    var breakpoints: [Int] = []
+    var pausedLine: Int? = nil
+    var onToggleBreakpoint: ((Int) -> Void)? = nil
+    var onBreakpointsMoved: (([Int]) -> Void)? = nil
     let onChange: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -301,6 +370,7 @@ struct CodeEditor: NSViewRepresentable {
         coordinator.lastLength = (textView.string as NSString).length
         Self.setLineNumbers(showsLineNumbers, on: entry)
         coordinator.lastReveal = reveal?.token
+        applyDebugger(to: entry, coordinator: coordinator)
 
         let container = NSView()
         entry.scrollView.frame = container.bounds
@@ -418,10 +488,32 @@ struct CodeEditor: NSViewRepresentable {
             textView.isEditable = isEditable
         }
         Self.setLineNumbers(showsLineNumbers, on: entry)
+        applyDebugger(to: entry, coordinator: coordinator)
         if let reveal, reveal.token != coordinator.lastReveal {
             coordinator.lastReveal = reveal.token
             textView.window?.makeFirstResponder(textView)
             textView.reveal(line: reveal.line)
+        }
+    }
+
+    /// Breakpoints and the stopped line into the gutter, the stopped line lit in the text.
+    private func applyDebugger(to entry: CodeEditorCache.Entry, coordinator: Coordinator) {
+        coordinator.breakpoints = breakpoints
+        coordinator.onBreakpointsMoved = onBreakpointsMoved
+        if let ruler = entry.scrollView.verticalRulerView as? LineNumberRuler {
+            ruler.breakpoints = Set(breakpoints)
+            ruler.pausedLine = pausedLine
+            ruler.onToggle = onToggleBreakpoint
+        }
+        let textView = entry.textView
+        guard let layout = textView.layoutManager, coordinator.litLine != pausedLine else { return }
+        let text = textView.string as NSString
+        layout.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: text.length))
+        coordinator.litLine = pausedLine
+        if let pausedLine, let range = LineNumbers.range(ofLine: pausedLine, in: text) {
+            let whole = text.lineRange(for: range)
+            layout.addTemporaryAttribute(.backgroundColor, value: LineNumberRuler.pausedColor.withAlphaComponent(0.22),
+                                         forCharacterRange: whole)
         }
     }
 
@@ -468,6 +560,11 @@ struct CodeEditor: NSViewRepresentable {
         /// The text view this coordinator is driving, and the undo history that goes with it.
         var entry: CodeEditorCache.Entry?
         var lastReveal: UUID?
+        /// The debugger's: breakpoints to move as lines come and go, and the line lit.
+        var breakpoints: [Int] = []
+        var onBreakpointsMoved: (([Int]) -> Void)?
+        var litLine: Int?
+        private var movedBreakpoints: [Int]?
         /// For a text view built without an entry, as the tests do.
         private lazy var ownUndo = UndoManager()
 
@@ -487,12 +584,26 @@ struct CodeEditor: NSViewRepresentable {
             entry?.undo ?? ownUndo
         }
 
+        /// Where lines are added or taken away, the breakpoints below move with them.
+        func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
+            guard !isApplyingExternalChange, !breakpoints.isEmpty, let replacementString else { return true }
+            let moved = ScriptObject.movingBreakpoints(breakpoints, editing: range, replacement: replacementString,
+                                                       in: textView.string as NSString)
+            if moved != breakpoints { movedBreakpoints = moved }
+            return true
+        }
+
         func textDidChange(_ notification: Notification) {
             guard !isApplyingExternalChange,
                   let textView = notification.object as? NSTextView else { return }
 
             CodeEditor.highlight(textView, language: language)
             onChange(textView.string)
+            if let moved = movedBreakpoints {
+                movedBreakpoints = nil
+                breakpoints = moved
+                onBreakpointsMoved?(moved)
+            }
 
             let length = (textView.string as NSString).length
             let grew = length > lastLength

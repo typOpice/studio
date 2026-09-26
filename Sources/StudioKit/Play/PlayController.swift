@@ -340,12 +340,23 @@ final class PlayController: ViewportSource, PlayerBridge {
         let now = CACurrentMediaTime()
         let dt = Float(min(max(now - lastTime, 0), 0.25))
         lastTime = now
+        // Stopped at a breakpoint: the world waits, and the time paused doesn't count.
+        if scripts.debugger?.paused != nil { return }
+        if scripts.debugger?.stopRequested == true {
+            onDebuggerStop?()
+            return
+        }
         step(dt: dt)
         refreshHUD(dt: dt)
     }
 
+    /// What Stop in the debugger does: the editor ends the session.
+    var onDebuggerStop: (() -> Void)?
+
     /// One frame with an explicit step, which is how the tests drive it.
     func step(dt: Float) {
+        // Not while stopped at a breakpoint: the scripts are mid-run.
+        guard scripts.debugger?.paused == nil else { return }
         clock += Double(dt)
         noteDataChanges()
         guard hasPlayer else {

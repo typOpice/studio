@@ -369,6 +369,15 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (a zombie finds its way round a walled pen to bite the joined player).
    New files: Play/Pathfinding.swift, Scripting/ScriptRuntime+Pathfinding.swift, PathfindingSelfTest.swift.
 
+34. A script debugger, 2026-09-26.
+   Studio can now stop a Luau script at a line and show what's going on, like other code editors.
+   Click beside a line number in a script (or press F9) to put a breakpoint there: a red tag. When that line runs while playing, the whole game freezes, the script opens at that line (lit, with an arrow), and a new Debugger tab at the bottom shows the call stack (which function it's in and which lines called it) and the variables with their values.
+   Then Continue (F5), Step Over (F10), Step Into (F11), Step Out (Shift-F11) or Stop, from the Debugger tab or the Test menu.
+   Breakpoints work in Scripts, LocalScripts, ModuleScripts and character scripts, can be added or removed while the game runs, are saved with the place, move down when lines are added above them, and stay when you stop playing.
+   Luau only for now; Wren scripts have no breakpoints.
+   Tested alone and with a host and a joined player (the host stops in a RemoteEvent handler showing the joined player's message, and the reply reaches them when it continues).
+   New files: Scripting/ScriptDebugger.swift, UI/DebuggerPanel.swift, DebuggerSelfTest.swift. The Luau shim (not Luau itself) gained the debugger hooks.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

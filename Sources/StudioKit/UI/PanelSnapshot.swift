@@ -288,6 +288,23 @@ enum PanelSnapshot {
         case "split":
             session.openScript(script, line: 3)
             session.splitView = true
+        case "debugger":
+            // Stopped at a breakpoint in a function the script called, as a real stop is caught.
+            var counter = ScriptObject.blank(language: .luau)
+            counter.name = "Counter"
+            counter.source = DebuggerSelfTest.counting
+            counter.breakpoints = [4, 9]
+            model.scripts.append(counter)
+            let play = PlayController(model: model, console: ScriptConsole())
+            var caught: ScriptDebugger.Pause?
+            play.scripts.debugger = ScriptDebugger { pause in
+                if caught == nil && pause.frames.first?.line == 4 { caught = pause }
+                return .resume
+            }
+            play.start()
+            for _ in 0..<5 { play.step(dt: 1.0 / 60) }
+            play.stop()
+            if let caught { session.show(caught) }
         case "sounds", "picture":
             // A sound and a picture imported, a Sound in SoundService and one in a part,
             // and the Sound's (or the picture's) properties.

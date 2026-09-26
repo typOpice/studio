@@ -86,6 +86,81 @@ final class LuauInterpreter {
         if let vm { studio_lua_free(vm) }
     }
 
+    // MARK: - The debugger (ScriptDebugger drives it)
+
+    /// Reached a breakpoint at a line: every script is frozen until this returns.
+    var onPause: ((Int) -> Void)?
+    /// A chunk loaded into an environment ("" for the shared globals); keep it with `keepChunk`.
+    var onLoaded: ((String) -> Void)?
+
+    func attachDebugger() {
+        guard let vm else { return }
+        studio_lua_set_debugger(vm, { context, _, line in
+            guard let context else { return }
+            Unmanaged<LuauInterpreter>.fromOpaque(context).takeUnretainedValue().onPause?(Int(line))
+        }, { context, _, environment in
+            guard let context else { return }
+            let name = environment.map { String(cString: $0) } ?? ""
+            Unmanaged<LuauInterpreter>.fromOpaque(context).takeUnretainedValue().onLoaded?(name)
+        })
+    }
+
+    /// Keeps the chunk just loaded (only from `onLoaded`) under a key: a script's id.
+    func keepChunk(key: String) {
+        guard let vm else { return }
+        studio_lua_keep_chunk(vm, key)
+    }
+
+    /// Sets or clears a breakpoint in every chunk kept under the key; the line it landed on.
+    @discardableResult
+    func setBreakpoint(key: String, line: Int, enabled: Bool) -> Int {
+        guard let vm else { return -1 }
+        return Int(studio_lua_set_breakpoint(vm, key, Int32(line), enabled ? 1 : 0))
+    }
+
+    func breakEverywhere(_ enabled: Bool) {
+        guard let vm else { return }
+        studio_lua_break_everywhere(vm, enabled ? 1 : 0)
+    }
+
+    /// While paused: the thread that stopped, and how deep it is.
+    var pausedThread: UnsafeRawPointer? { vm.flatMap { studio_lua_debug_thread($0) } }
+    var pausedDepth: Int { vm.map { Int(studio_lua_debug_depth($0)) } ?? 0 }
+
+    struct DebugFrame {
+        var environment: String
+        var function: String
+        var line: Int
+    }
+
+    func frame(_ level: Int) -> DebugFrame? {
+        guard let vm else { return nil }
+        var environment: UnsafePointer<CChar>?, function: UnsafePointer<CChar>?
+        var line: Int32 = 0
+        guard studio_lua_debug_frame(vm, Int32(level), &environment, &function, &line) != 0 else { return nil }
+        return DebugFrame(environment: environment.map { String(cString: $0) } ?? "",
+                          function: function.map { String(cString: $0) } ?? "", line: Int(line))
+    }
+
+    struct DebugVariable: Equatable {
+        var name: String
+        var kind: String
+        var type: String
+        var value: String
+    }
+
+    func variables(at level: Int) -> [DebugVariable] {
+        guard let vm else { return [] }
+        let count = studio_lua_debug_variables(vm, Int32(level))
+        return (0..<count).map { index in
+            var name: UnsafePointer<CChar>?, kind: UnsafePointer<CChar>?, type: UnsafePointer<CChar>?,
+                value: UnsafePointer<CChar>?
+            studio_lua_debug_variable(vm, index, &name, &kind, &type, &value)
+            func text(_ pointer: UnsafePointer<CChar>?) -> String { pointer.map { String(cString: $0) } ?? "" }
+            return DebugVariable(name: text(name), kind: text(kind), type: text(type), value: text(value))
+        }
+    }
+
     // MARK: - Running code
 
     /// Freezes the standard library so scripts cannot redefine it for each other.

@@ -70,6 +70,8 @@ final class ScriptRuntime {
     /// (ScriptRuntime+Pathfinding).
     let navigation = NavigationGrid()
     var navigationSyncedAt = -1.0
+    /// Luau's debugger, when the session is being debugged (Studio's Play); joins each new VM.
+    var debugger: ScriptDebugger?
 
     func start() {
         stop()
@@ -153,6 +155,7 @@ final class ScriptRuntime {
         }
         vm.sandbox()
         interpreter = vm
+        debugger?.attach(to: vm, runtime: self)
         for module in model.scripts where module.isModule && module.language == .luau {
             defineModule(module, in: vm)
         }

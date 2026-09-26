@@ -29,6 +29,39 @@ enum {
 /// push results and return how many were pushed.
 typedef int (*StudioInvokeFn)(void *context, StudioLua *vm, int argc);
 
+// MARK: - The debugger
+//
+// Breakpoints are Luau's own (lua_breakpoint patches a line's first instruction), set
+// on the chunks the host keeps. When one is reached `pause` is called from inside the
+// VM, which is frozen — every script — until it returns; meanwhile the
+// studio_lua_debug_* calls read where it stopped. The watchdog's clock stops too.
+
+/// Reached a breakpoint at `line`.
+typedef void (*StudioPauseFn)(void *context, StudioLua *vm, int line);
+/// A chunk loaded into `environment` (a name from studio_lua_make_environment, or "");
+/// its function is on top of the stack, for studio_lua_keep_chunk.
+typedef void (*StudioLoadedFn)(void *context, StudioLua *vm, const char *environment);
+
+void studio_lua_set_debugger(StudioLua *vm, StudioPauseFn pause, StudioLoadedFn loaded);
+/// Keeps the chunk on top of the stack under `key` (a script's id), for breakpoints.
+void studio_lua_keep_chunk(StudioLua *vm, const char *key);
+/// Sets or clears a breakpoint on a line of every chunk kept under `key`: the next
+/// line with code on it, which is returned (-1 for none).
+int studio_lua_set_breakpoint(StudioLua *vm, const char *key, int line, int enabled);
+/// A breakpoint on every line of every kept chunk, or none: how stepping stops.
+void studio_lua_break_everywhere(StudioLua *vm, int enabled);
+
+/// While paused: the thread that stopped (to tell threads apart), and how many frames deep.
+const void *studio_lua_debug_thread(StudioLua *vm);
+int studio_lua_debug_depth(StudioLua *vm);
+/// A frame of the paused thread, 0 where it stopped: the environment of its function
+/// ("" for the library's own), the function's name ("" for none) and its line. 0 past the last.
+int studio_lua_debug_frame(StudioLua *vm, int level, const char **environment, const char **function, int *line);
+/// A frame's locals, then its upvalues, each described; returns how many.
+int studio_lua_debug_variables(StudioLua *vm, int level);
+void studio_lua_debug_variable(StudioLua *vm, int index, const char **name, const char **kind,
+                               const char **type, const char **value);
+
 StudioLua *studio_lua_new(void *context, StudioInvokeFn invoke);
 void studio_lua_free(StudioLua *vm);
 

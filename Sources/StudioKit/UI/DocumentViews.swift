@@ -237,10 +237,23 @@ struct ScriptDocumentView: View {
                        cacheKey: document.id,
                        showsLineNumbers: true,
                        focusOnAppear: true,
-                       reveal: session.revealRequest(for: document)) { updated in
+                       reveal: session.revealRequest(for: document),
+                       breakpoints: script.breakpoints,
+                       pausedLine: pausedLine,
+                       onToggleBreakpoint: script.language == .luau
+                           ? { [session, id = script.id] line in session.toggleBreakpoint(script: id, line: line) } : nil,
+                       onBreakpointsMoved: { [model, id = script.id] lines in model.setBreakpoints(lines, forScript: id) }
+            ) { updated in
                 model.setScriptSource(id: script.id, source: updated)
             }
         }
+    }
+
+    /// Where the game is stopped in this script: the line of the call the Debugger shows.
+    private var pausedLine: Int? {
+        guard let frames = session.debugPause?.frames, frames.indices.contains(session.debugFrame),
+              frames[session.debugFrame].scriptID == script.id else { return nil }
+        return frames[session.debugFrame].line
     }
 
     private func header(_ script: ScriptObject) -> some View {

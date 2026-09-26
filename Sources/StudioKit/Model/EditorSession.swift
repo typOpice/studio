@@ -5,7 +5,7 @@ import AppKit
 /// What the bottom panel shows: the console, or the Animation Editor's timeline.
 /// Scripts and shaders are not here — they open in tabs beside the world.
 enum DockTab: String, CaseIterable, Identifiable {
-    case output, animation
+    case output, animation, debugger
 
     var id: String { rawValue }
 
@@ -13,6 +13,7 @@ enum DockTab: String, CaseIterable, Identifiable {
         switch self {
         case .output: return "Output"
         case .animation: return "Animation"
+        case .debugger: return "Debugger"
         }
     }
 
@@ -20,6 +21,7 @@ enum DockTab: String, CaseIterable, Identifiable {
         switch self {
         case .output: return "text.alignleft"
         case .animation: return "figure.walk"
+        case .debugger: return "ladybug"
         }
     }
 }
@@ -219,6 +221,11 @@ final class EditorSession: ObservableObject {
         console.info(withPlayer ? "▶ Play started" : "▶ Run started — scripts and physics, no player")
         let controller = PlayController(model: model, console: console, shaderStatus: shaderStatus,
                                         withPlayer: withPlayer)
+        // Luau's debugger: stops at breakpoints, and asks here what next.
+        controller.scripts.debugger = ScriptDebugger { [weak self] pause in self?.paused(pause) ?? .resume }
+        controller.onDebuggerStop = { [weak self] in
+            DispatchQueue.main.async { self?.stopPlay() }
+        }
         isRunMode = !withPlayer
         play = controller
         if !withPlayer { viewport.running = controller }
@@ -231,19 +238,89 @@ final class EditorSession: ObservableObject {
 
     func stopPlay() {
         guard let controller = play else { return }
+        // Stopped at a breakpoint the scripts are mid-run: let them go, then stop.
+        if debugPause != nil {
+            debugCommand = .stop
+            return
+        }
         let wasRunning = isRunMode
         controller.stop()
         viewport.running = nil
         play = nil
         isRunMode = false
-        // Scripts edit the live scene, so restore what was there before play began.
+        // Scripts edit the live scene, so restore what was there before play began —
+        // but not the breakpoints, which aren't the game's.
+        let breakpoints = model.scripts.map { ($0.id, $0.breakpoints) }
         model.state = snapshot
+        for (id, lines) in breakpoints { model.setBreakpoints(lines, forScript: id) }
         console.info(wasRunning ? "■ Run stopped — scene restored" : "■ Play stopped — scene restored")
         model.statusText = "Stopped — scene restored"
     }
 
     func toggleRun() {
         isPlaying ? stopPlay() : startRun()
+    }
+
+    // MARK: - The debugger
+
+    /// Where the scripts are stopped at a breakpoint, while they are.
+    @Published private(set) var debugPause: ScriptDebugger.Pause?
+    /// The call whose variables the Debugger panel shows.
+    @Published var debugFrame = 0
+    private var debugCommand: ScriptDebugger.Command?
+
+    /// A Luau script's breakpoint on or off — in the running game too.
+    func toggleBreakpoint(script id: UUID, line: Int) {
+        guard let script = model.script(id: id), script.language == .luau, line >= 1 else { return }
+        let on = !script.breakpoints.contains(line)
+        model.setBreakpoints(on ? script.breakpoints + [line] : script.breakpoints.filter { $0 != line }, forScript: id)
+        play?.scripts.debugger?.setBreakpoint(script: id, line: line, on: on)
+    }
+
+    /// Continue, a step, or Stop, while stopped.
+    func debug(_ command: ScriptDebugger.Command) {
+        guard debugPause != nil else { return }
+        debugCommand = command
+    }
+
+    /// Shows a call in the stack: its variables, and its line in its script.
+    func showFrame(_ index: Int) {
+        guard let pause = debugPause, pause.frames.indices.contains(index) else { return }
+        debugFrame = index
+        let frame = pause.frames[index]
+        if let id = frame.scriptID { reveal(.script(id), line: frame.line) }
+    }
+
+    /// Shows a stop: the Debugger tab, and the line in its script.
+    func show(_ pause: ScriptDebugger.Pause) {
+        debugPause = pause
+        debugCommand = nil
+        showDock(.debugger)
+        showFrame(0)
+        if let top = pause.frames.first {
+            model.statusText = "Paused at \(top.script):\(top.line)" + (pause.reason == .step ? "" : " (breakpoint)")
+        }
+    }
+
+    /// A stop: shows where, then waits — the app still answering, the game frozen — for
+    /// Continue, a step or Stop. With no app running (the self-tests), it goes straight on.
+    private func paused(_ pause: ScriptDebugger.Pause) -> ScriptDebugger.Command {
+        guard let app = NSApp, app.isRunning else { return .resume }
+        show(pause)
+        app.activate(ignoringOtherApps: true)
+        while debugCommand == nil {
+            autoreleasepool {
+                if let event = app.nextEvent(matching: .any, until: Date(timeIntervalSinceNow: 0.05),
+                                             inMode: .default, dequeue: true) {
+                    app.sendEvent(event)
+                }
+            }
+        }
+        let command = debugCommand ?? .resume
+        debugCommand = nil
+        debugPause = nil
+        model.statusText = command == .stop ? "Stopping" : "Playing"
+        return command
     }
 
     /// Opens the bottom panel on a given tab. The Animation Editor poses a rig in the

@@ -7,6 +7,8 @@
 #include <chrono>
 #include <cstring>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace {
 
@@ -23,6 +25,17 @@ struct StudioLuaImpl {
     double timeout = 0;
     std::chrono::steady_clock::time_point deadline;
     bool timing = false;
+
+    // The debugger.
+    StudioPauseFn pause = nullptr;
+    StudioLoadedFn loaded = nullptr;
+    /// The thread stopped at a breakpoint, while it is.
+    lua_State *paused = nullptr;
+    /// Environments by their table, to tell whose code a frame is.
+    std::unordered_map<const void *, std::string> environments;
+    std::string frameEnvironment, frameFunction;
+    struct Variable { std::string name, kind, type, value; };
+    std::vector<Variable> variables;
 };
 
 StudioLuaImpl *impl(StudioLua *vm) { return reinterpret_cast<StudioLuaImpl *>(vm); }
@@ -80,6 +93,26 @@ void beginTiming(StudioLuaImpl *self) {
     self->timing = true;
     self->deadline = std::chrono::steady_clock::now()
         + std::chrono::milliseconds(static_cast<long long>(self->timeout * 1000));
+}
+
+/// A breakpoint: the host decides what happens, with the VM frozen and the watchdog's
+/// clock stopped. Breakpoints reached while it's deciding (a value's __tostring, say)
+/// are passed over.
+void debugBreakHook(lua_State *L, lua_Debug *ar) {
+    StudioLuaImpl *self = selfFor(L);
+    if (self == nullptr || self->pause == nullptr || self->paused != nullptr) {
+        return;
+    }
+    bool wasTiming = self->timing;
+    auto left = self->deadline - std::chrono::steady_clock::now();
+    self->timing = false;
+    self->paused = L;
+    self->pause(self->context, opaque(self), ar->currentline);
+    self->paused = nullptr;
+    if (wasTiming) {
+        self->deadline = std::chrono::steady_clock::now() + left;
+        self->timing = true;
+    }
 }
 
 /// Called from the Luau scheduler before each callback or resumed thread, so every
@@ -143,6 +176,7 @@ static std::string environmentKey(const char *name) { return std::string("__stud
 void studio_lua_make_environment(StudioLua *vm, const char *name) {
     lua_State *L = impl(vm)->state;
     lua_newtable(L);
+    impl(vm)->environments[lua_topointer(L, -1)] = name;
 
     // Fall through to the real globals for anything the script did not define.
     lua_newtable(L);
@@ -155,6 +189,9 @@ void studio_lua_make_environment(StudioLua *vm, const char *name) {
 
 void studio_lua_drop_environment(StudioLua *vm, const char *name) {
     lua_State *L = impl(vm)->state;
+    lua_getfield(L, LUA_REGISTRYINDEX, environmentKey(name).c_str());
+    impl(vm)->environments.erase(lua_topointer(L, -1));
+    lua_pop(L, 1);
     lua_pushnil(L);
     lua_setfield(L, LUA_REGISTRYINDEX, environmentKey(name).c_str());
 }
@@ -168,7 +205,8 @@ static int loadChunk(StudioLuaImpl *self, const char *chunkName, const char *sou
     size_t bytecodeSize = 0;
     lua_CompileOptions options = {};
     options.optimizationLevel = 1;
-    options.debugLevel = 1;
+    // 2: local and upvalue names too, for the debugger.
+    options.debugLevel = 2;
     char *bytecode = luau_compile(source, std::strlen(source), &options, &bytecodeSize);
     if (bytecode == nullptr) {
         self->lastError = "could not compile the script";
@@ -200,6 +238,11 @@ static int loadChunk(StudioLuaImpl *self, const char *chunkName, const char *sou
 
     if (environmentIndex != 0) {
         lua_remove(L, environmentIndex);
+    }
+    if (self->loaded != nullptr) {
+        int top = lua_gettop(L);
+        self->loaded(self->context, opaque(self), environment != nullptr ? environment : "");
+        lua_settop(L, top);
     }
     return 0;
 }
@@ -349,6 +392,244 @@ void studio_lua_push_table(StudioLua *vm, int arrayCount) {
 void studio_lua_set_index(StudioLua *vm, int n) {
     lua_State *L = stackOf(vm);
     lua_rawseti(L, -2, n);
+}
+
+}  // extern "C"
+
+// MARK: - The debugger
+
+namespace {
+
+const char *const chunksKey = "__studio_chunks";
+
+/// The registry's table of kept chunks, by key, pushed.
+void pushChunks(lua_State *L) {
+    lua_getfield(L, LUA_REGISTRYINDEX, chunksKey);
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        lua_newtable(L);
+        lua_pushvalue(L, -1);
+        lua_setfield(L, LUA_REGISTRYINDEX, chunksKey);
+    }
+}
+
+/// Every line of a function (on top of the stack) and those inside it.
+void breakEveryLine(lua_State *L, int enabled) {
+    int line = 0;
+    while (line < 1000000) {
+        int target = lua_breakpoint(L, -1, line, enabled);
+        if (target < 0) {
+            break;
+        }
+        line = target + 1;
+    }
+}
+
+/// A value, as the library describes it (its type and a short text), or plainly.
+void describe(StudioLuaImpl *self, lua_State *P, int index, std::string &type, std::string &text) {
+    index = lua_absindex(P, index);
+    lua_rawcheckstack(P, 4);
+    lua_getglobal(P, "__studio_describe");
+    if (lua_isfunction(P, -1)) {
+        lua_pushvalue(P, index);
+        // A moment for anything it runs (a __tostring), then the clock stops again.
+        self->timing = true;
+        self->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+        int status = lua_pcall(P, 1, 2, 0);
+        self->timing = false;
+        if (status == 0) {
+            const char *kind = lua_tostring(P, -2), *shown = lua_tostring(P, -1);
+            type = kind != nullptr ? kind : luaL_typename(P, index);
+            text = shown != nullptr ? shown : "";
+            lua_pop(P, 2);
+            return;
+        }
+        lua_pop(P, 1);
+    } else {
+        lua_pop(P, 1);
+    }
+    type = luaL_typename(P, index);
+    size_t length = 0;
+    const char *plain = luaL_tolstring(P, index, &length);
+    text = plain != nullptr ? std::string(plain, length) : "";
+    lua_pop(P, 1);
+}
+
+}  // namespace
+
+extern "C" {
+
+void studio_lua_set_debugger(StudioLua *vm, StudioPauseFn pause, StudioLoadedFn loaded) {
+    StudioLuaImpl *self = impl(vm);
+    self->pause = pause;
+    self->loaded = loaded;
+    lua_callbacks(self->state)->debugbreak = pause != nullptr ? debugBreakHook : nullptr;
+}
+
+void studio_lua_keep_chunk(StudioLua *vm, const char *key) {
+    lua_State *L = impl(vm)->state;
+    int chunk = lua_gettop(L);
+    pushChunks(L);
+    lua_getfield(L, -1, key);
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        lua_newtable(L);
+        lua_pushvalue(L, -1);
+        lua_setfield(L, -3, key);
+    }
+    lua_pushvalue(L, chunk);
+    lua_rawseti(L, -2, lua_objlen(L, -2) + 1);
+    lua_pop(L, 2);
+}
+
+int studio_lua_set_breakpoint(StudioLua *vm, const char *key, int line, int enabled) {
+    lua_State *L = impl(vm)->state;
+    int landed = -1;
+    pushChunks(L);
+    lua_getfield(L, -1, key);
+    if (lua_istable(L, -1)) {
+        int count = lua_objlen(L, -1);
+        for (int i = 1; i <= count; ++i) {
+            lua_rawgeti(L, -1, i);
+            int target = lua_breakpoint(L, -1, line, enabled);
+            if (landed < 0) {
+                landed = target;
+            }
+            lua_pop(L, 1);
+        }
+    }
+    lua_pop(L, 2);
+    return landed;
+}
+
+void studio_lua_break_everywhere(StudioLua *vm, int enabled) {
+    lua_State *L = impl(vm)->state;
+    pushChunks(L);
+    lua_pushnil(L);
+    while (lua_next(L, -2) != 0) {
+        if (lua_istable(L, -1)) {
+            int count = lua_objlen(L, -1);
+            for (int i = 1; i <= count; ++i) {
+                lua_rawgeti(L, -1, i);
+                breakEveryLine(L, enabled);
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+}
+
+const void *studio_lua_debug_thread(StudioLua *vm) { return impl(vm)->paused; }
+
+int studio_lua_debug_depth(StudioLua *vm) {
+    lua_State *P = impl(vm)->paused;
+    if (P == nullptr) {
+        return 0;
+    }
+    lua_Debug ar;
+    int depth = 0;
+    while (lua_getinfo(P, depth, "l", &ar)) {
+        ++depth;
+    }
+    return depth;
+}
+
+int studio_lua_debug_frame(StudioLua *vm, int level, const char **environment, const char **function, int *line) {
+    StudioLuaImpl *self = impl(vm);
+    lua_State *P = self->paused;
+    lua_Debug ar;
+    if (P == nullptr || !lua_getinfo(P, level, "slnf", &ar)) {
+        return 0;
+    }
+    // "f" pushed the function: its environment says whose it is.
+    self->frameEnvironment.clear();
+    lua_rawcheckstack(P, 2);
+    if (lua_isfunction(P, -1) && !lua_iscfunction(P, -1)) {
+        lua_getfenv(P, -1);
+        auto found = self->environments.find(lua_topointer(P, -1));
+        if (found != self->environments.end()) {
+            self->frameEnvironment = found->second;
+        }
+        lua_pop(P, 1);
+    }
+    lua_pop(P, 1);
+    self->frameFunction = ar.name != nullptr ? ar.name : "";
+    *environment = self->frameEnvironment.c_str();
+    *function = self->frameFunction.c_str();
+    *line = ar.currentline;
+    return 1;
+}
+
+int studio_lua_debug_variables(StudioLua *vm, int level) {
+    StudioLuaImpl *self = impl(vm);
+    self->variables.clear();
+    lua_State *P = self->paused;
+    if (P == nullptr) {
+        return 0;
+    }
+    lua_rawcheckstack(P, 4);
+    for (int n = 1;; ++n) {
+        const char *name = lua_getlocal(P, level, n);
+        if (name == nullptr) {
+            break;
+        }
+        // "(for index)" and the like are the compiler's own.
+        if (name[0] != '(') {
+            StudioLuaImpl::Variable variable;
+            variable.name = name;
+            variable.kind = "local";
+            describe(self, P, -1, variable.type, variable.value);
+            // A later local of the same name hides an earlier one.
+            for (auto &earlier : self->variables) {
+                if (earlier.name == variable.name) {
+                    earlier.name.clear();
+                }
+            }
+            self->variables.push_back(variable);
+        }
+        lua_pop(P, 1);
+    }
+    lua_Debug ar;
+    if (lua_getinfo(P, level, "f", &ar)) {
+        for (int n = 1;; ++n) {
+            const char *name = lua_getupvalue(P, -1, n);
+            if (name == nullptr) {
+                break;
+            }
+            if (name[0] != '\0' && name[0] != '(') {
+                StudioLuaImpl::Variable variable;
+                variable.name = name;
+                variable.kind = "upvalue";
+                describe(self, P, -1, variable.type, variable.value);
+                self->variables.push_back(variable);
+            }
+            lua_pop(P, 1);
+        }
+        lua_pop(P, 1);
+    }
+    std::vector<StudioLuaImpl::Variable> shown;
+    for (auto &variable : self->variables) {
+        if (!variable.name.empty()) {
+            shown.push_back(variable);
+        }
+    }
+    self->variables = shown;
+    return static_cast<int>(self->variables.size());
+}
+
+void studio_lua_debug_variable(StudioLua *vm, int index, const char **name, const char **kind,
+                               const char **type, const char **value) {
+    StudioLuaImpl *self = impl(vm);
+    if (index < 0 || index >= static_cast<int>(self->variables.size())) {
+        *name = *kind = *type = *value = "";
+        return;
+    }
+    auto &variable = self->variables[index];
+    *name = variable.name.c_str();
+    *kind = variable.kind.c_str();
+    *type = variable.type.c_str();
+    *value = variable.value.c_str();
 }
 
 }  // extern "C"

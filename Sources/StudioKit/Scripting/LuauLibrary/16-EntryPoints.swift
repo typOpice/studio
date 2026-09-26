@@ -67,6 +67,56 @@ local sharedTable = {}
 local globalTable = {}
 
 -- Each script gets its own `script`, and sees the same `shared` and `_G`.
+-- For the debugger (ScriptDebugger, through the shim): a value's type and a short
+-- text of it — a table's first few entries, an Instance's class and name.
+function __studio_describe(value)
+	local kind = typeof(value)
+	local function short(item, room)
+		if type(item) == "string" then
+			return string.format("%q", if #item > room then string.sub(item, 1, room) .. "…" else item)
+		elseif type(item) == "table" and typeTags[item] == nil then
+			return "{…}"
+		end
+		local ok, text = pcall(tostring, item)
+		return if ok then text else typeof(item)
+	end
+	if kind == "string" then
+		return kind, short(value, 120)
+	elseif kind == "table" then
+		local shown, count, listed = {}, 0, true
+		for key, item in next, value do
+			count += 1
+			if key ~= count then
+				listed = false
+			end
+			if count <= 6 then
+				table.insert(shown, { key, item })
+			end
+		end
+		local parts = {}
+		for _, entry in shown do
+			local key, item = entry[1], entry[2]
+			if listed then
+				table.insert(parts, short(item, 30))
+			else
+				local name = if type(key) == "string" and string.match(key, "^[%a_][%w_]*$") then key
+					else "[" .. short(key, 20) .. "]"
+				table.insert(parts, name .. " = " .. short(item, 30))
+			end
+		end
+		if count > 6 then
+			table.insert(parts, "…")
+		end
+		return kind, "{" .. table.concat(parts, ", ") .. "}" .. (if count > 6 then " (" .. count .. ")" else "")
+	elseif kind == "Instance" then
+		local ok, text = pcall(function()
+			return value.ClassName .. " \"" .. value.Name .. "\""
+		end)
+		return kind, if ok then text else "Instance"
+	end
+	return kind, short(value, 120)
+end
+
 function __studio_env_setup(id, scope)
 	local object = setmetatable({}, ScriptMeta)
 	scriptIdOf[object] = id

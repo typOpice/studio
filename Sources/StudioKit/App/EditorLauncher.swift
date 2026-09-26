@@ -224,6 +224,15 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         add(to: testMenu, "New Screen Effect", #selector(newScreenShader), "")
         add(to: testMenu, "Show Output", #selector(showOutput), "0")
         add(to: testMenu, "Clear Output", #selector(clearOutput), "k")
+        testMenu.addItem(.separator())
+        // The debugger, on the keys most debuggers use.
+        func key(_ code: Int) -> String { String(Character(UnicodeScalar(code)!)) }
+        add(to: testMenu, "Toggle Breakpoint", #selector(toggleBreakpoint), key(NSF9FunctionKey), modifiers: [])
+        add(to: testMenu, "Continue", #selector(debugContinue), key(NSF5FunctionKey), modifiers: [])
+        add(to: testMenu, "Step Over", #selector(debugStepOver), key(NSF10FunctionKey), modifiers: [])
+        add(to: testMenu, "Step Into", #selector(debugStepInto), key(NSF11FunctionKey), modifiers: [])
+        add(to: testMenu, "Step Out", #selector(debugStepOut), key(NSF11FunctionKey), modifiers: [.shift])
+        add(to: testMenu, "Show Debugger", #selector(showDebugger), "")
         testItem.submenu = testMenu
         mainMenu.addItem(testItem)
 
@@ -376,6 +385,10 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         case #selector(groupModel): item.title = inCode ? "Find Next" : "Group as Model"
         case #selector(deleteSelection): item.title = inCode ? "Delete to Start of Line" : "Delete"
         case #selector(closeTab): return session.activeDocument != nil
+        case #selector(debugContinue), #selector(debugStepOver), #selector(debugStepInto), #selector(debugStepOut):
+            return session.debugPause != nil
+        case #selector(toggleBreakpoint):
+            return breakpointLine() != nil
         // Only when there's something to clear, and not while the game is using it.
         case #selector(clearSavedData):
             return !session.isPlaying && model.placeID.map(DataStoreFiles.shared.hasData(place:)) == true
@@ -500,6 +513,26 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
             present(error, "Could not insert \(url.lastPathComponent)")
         }
     }
+
+    // MARK: - The debugger
+
+    /// The Luau script in front and the caret's line in it.
+    private func breakpointLine() -> (UUID, Int)? {
+        guard case .script(let id)? = session.activeDocument, model.script(id: id)?.language == .luau,
+              let textView = keyResponder as? CodeTextView else { return nil }
+        return (id, LineNumbers.line(atOffset: textView.selectedRange().location, in: textView.string as NSString))
+    }
+
+    @objc private func toggleBreakpoint() {
+        guard let (id, line) = breakpointLine() else { return }
+        session.toggleBreakpoint(script: id, line: line)
+    }
+
+    @objc private func debugContinue() { session.debug(.resume) }
+    @objc private func debugStepOver() { session.debug(.stepOver) }
+    @objc private func debugStepInto() { session.debug(.stepInto) }
+    @objc private func debugStepOut() { session.debug(.stepOut) }
+    @objc private func showDebugger() { session.showDock(.debugger) }
 
     /// Forgets what this place's DataStores kept — every player's progress — once asked.
     @objc private func clearSavedData() {

@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2536 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2562 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1570,6 +1570,30 @@ What a module hands back is read from its code, without running it:
   and their `self.` fields
 
 A module built some other way just isn't listed.
+
+### Debugging: breakpoints, stepping and variables
+
+**Click beside a line number** in a Luau script for a breakpoint (a red tag), or press
+**F9** on the caret's line; click again to take it away. When a line with one runs —
+in a Script, a LocalScript, a ModuleScript's function or a character script, while
+playing or running — **the game stops**: every script, the physics and the character
+freeze, the script opens at that line (lit, with an arrow), and the **Debugger** tab
+along the bottom shows:
+
+- **Call Stack**: the function it's in and each line that called it, down to the
+  script. Click one to see its line and its variables.
+- **Variables**: the call's locals and upvalues, with their values — numbers, strings,
+  a table's first few entries, a part as `Part "Door"`, a player as `Player "Robin"`.
+- **Breakpoints**: every one in the place. Click to go there; × takes it away.
+
+Then **Continue** (F5), **Step Over** (F10: the next line, not into what it calls),
+**Step Into** (F11: into a function the line calls), **Step Out** (⇧F11: back to
+the caller) or **Stop**. The same are in the Test menu. A breakpoint on a line with no
+code stops at the next line that has some. Breakpoints are saved with the place, and
+added lines above one move it down. They're not edits: nothing to undo, and Stop
+keeps them.
+
+Luau only: Wren scripts have no breakpoints yet.
 
 ## Working on this
 

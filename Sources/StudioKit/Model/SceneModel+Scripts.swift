@@ -106,3 +106,40 @@ extension SceneModel {
         }
     }
 }
+
+extension SceneModel {
+    /// A script's breakpoints: not an edit (nothing to undo, and the place isn't marked
+    /// changed), but saved with it the next time it is.
+    func setBreakpoints(_ lines: [Int], forScript id: UUID) {
+        guard let index = scripts.firstIndex(where: { $0.id == id }) else { return }
+        let sorted = Array(Set(lines)).sorted()
+        if scripts[index].breakpoints != sorted { scripts[index].breakpoints = sorted }
+    }
+}
+
+extension ScriptObject {
+    /// Breakpoints after `range` of `text` is replaced by `replacement`: those below the
+    /// edit move with their lines, and those on lines taken away go.
+    static func movingBreakpoints(_ lines: [Int], editing range: NSRange, replacement: String, in text: NSString) -> [Int] {
+        guard !lines.isEmpty, range.location <= text.length else { return lines }
+        let start = LineNumbers.line(atOffset: range.location, in: text)
+        let removedText = range.length > 0 && NSMaxRange(range) <= text.length ? text.substring(with: range) : ""
+        let removed = removedText.filter { $0 == "\n" }.count
+        let added = replacement.filter { $0 == "\n" }.count
+        guard removed != 0 || added != 0 else { return lines }
+        // From the start of a line, that line moves too; from its middle, only those after.
+        let atLineStart = range.location == 0 || text.character(at: range.location - 1) == 10
+        let first = atLineStart ? start : start + 1
+        var moved: [Int] = []
+        for line in lines {
+            if line < first {
+                moved.append(line)
+            } else if line < first + removed {
+                continue
+            } else {
+                moved.append(line + added - removed)
+            }
+        }
+        return Array(Set(moved)).sorted()
+    }
+}
