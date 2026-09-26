@@ -61,6 +61,15 @@ final class ClientSession: ObservableObject {
         if wasPlaying { play() }
     }
 
+    /// The third sample game.
+    func loadMegaObby() {
+        let wasPlaying = player != nil
+        leaveGame()
+        model.loadMegaObby()
+        sceneName = MegaObby.name
+        if wasPlaying { play() }
+    }
+
     func loadStarterScene() {
         let wasPlaying = player != nil
         leaveGame()

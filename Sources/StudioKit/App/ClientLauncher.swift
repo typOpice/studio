@@ -60,6 +60,7 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
         add(to: fileMenu, "Load Starter Scene", #selector(loadStarter), "")
         add(to: fileMenu, "Load \(AdventureIsland.name)", #selector(loadAdventure), "")
         add(to: fileMenu, "Load \(Nightfall.name)", #selector(loadNightfall), "")
+        add(to: fileMenu, "Load \(MegaObby.name)", #selector(loadMegaObby), "")
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 
@@ -96,6 +97,7 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
     @objc private func loadStarter() { session.loadStarterScene() }
     @objc private func loadAdventure() { session.loadAdventureIsland() }
     @objc private func loadNightfall() { session.loadNightfall() }
+    @objc private func loadMegaObby() { session.loadMegaObby() }
 
     @objc private func openScene() {
         let panel = NSOpenPanel()

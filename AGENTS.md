@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2345 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2376 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -142,6 +142,7 @@ listed in §9.
 | `UtilsSelfTest.swift` | The Utils module: in the starter scene and a new scene (which no longer keep the last place's data objects), not added to an old place, Insert Utils Module (named, one undo step, Utils1, saved); every maths, table and text function run in Luau (random ranges, cycles and parts in deepCopy, a class's metatable, thousands, K/M/B, titles); the game helpers in play on a real character (getCharacter/Humanoid/Root from a player, a character and a body part, playerFromPart, isAlive, distance, positionOf, debounce and cooldown over time, weld, tween); suggested with every function, parameters and its comment; a host's script and a joined player's LocalScript each using it |
 | `HomeSelfTest.swift` | The home page: every template built (Baseplate locked and just above the grid, Obby's Course and script, the HUD and Utils in each, Starter Scene as before, Empty, Adventure Island) and opened as a new place; the Obby played (start, checkpoint, kill brick, back at the checkpoint, finish and its Win, back to the start) and by a host and a joined player; recent places (missing and repeated files dropped, twelve at most, "Edited 2 hours ago", ~); pictures (drawn, none for an empty place, framing past a baseplate, a saved place's kept and read back, drawn again when the file changes); opening from the page through the app delegate (File › Home ⇧⌘H, editing menu items waiting, a template untitled with nothing to undo, back, a recent file, the starter scene after a file untitled, Adventure Island) |
 | `NightfallSelfTest.swift` | Nightfall: the place (areas, templates in ServerStorage, the sword in StarterPack, scripts, key spots and spawn points, four shaders compiled); played (a day, night 1's zombies coming for you and biting, the sword taking them down, an orb coming to you, dawn and a choice of three taken with Z, the armory's blaster on 2 shooting where the pointer is, three keys and the gate opening, escaping with a score, the world and the run starting again, falling and a new run); a host and a joined player (the night and zombies reaching them, their sword run by the host's tool script and the kill theirs, their own power-up choice, a key they find counting for everyone) |
+| `MegaObbySelfTest.swift` | Mega Obby: 60 numbered checkpoints in order, a stage between each, six named worlds, the finish, every kind of obstacle, heights, scripts, shaders; every stage possible (each gap and rise within a running jump worked out from the character's speed, jump and gravity; trusses tall enough; the jump pad reaching its landing); played (stage 1, checkpoints and the banner, a world's name, a kill brick and back at the checkpoint with a death counted, Q and E within what you've reached, fading tiles, movers, spinners, jump pads, R, the finish's Win); a host and a joined player each with their own stage, checkpoint and picker |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -297,6 +298,9 @@ Sources/StudioKit/
   Model/PlaceBuilding.swift        what the places built in code share: part, group, script,
                                    shader, light and a seeded random (Adventure Island, Nightfall)
   Model/Nightfall.swift            the second sample game's world (`Builder`), templates and tools
+  Model/MegaObby.swift             the third: 60 stages built from 14 obstacle kinds, sized by
+                                   how far along they are (`Builder.build(_:in:)`)
+  Model/MegaObbyScripts.swift      its Luau (ObbyGame, Mechanics, ObbyScreen) and floor shaders
   Model/NightfallScripts.swift     its Luau (GameScript, Horde, Upgrades, Ambience, SwordScript,
                                    the Nightfall LocalScript) and shaders
   Model/AdventureIsland.swift      the sample game's world, built in code (`Builder`), and
@@ -1250,6 +1254,17 @@ Roughly ordered by how much time they will cost you.
     The test hooks are data, not code: `quick` in NightfallSelfTest shortens the day and
     the nights through ServerStorage.Settings.
 
+105. **Mega Obby's stages must stay possible.** `MegaObby.Builder` sizes every obstacle
+    from `t` (how far along the course the stage is). The limits come from the
+    character (walk speed 16, jump power 50, gravity 196.2): about 7 studs across at
+    the same height, less going up.
+    `MegaObbySelfTest.testEveryStageCanBeDone` walks each stage's footholds in order.
+    A Mover counts as everywhere it goes; a turned part as its widest square. It fails
+    on any gap or rise beyond `reach(rising:)`, with 10% to spare. A change to a
+    stage's sizes (or to the character's jump) must keep it passing.
+    What obstacles do is decided by part name in the Mechanics script, so anything
+    renamed stops working.
+
 ## 8. Recipes
 
 ### Add a GUI class or property
@@ -1538,6 +1553,7 @@ swift run StudioApp --render-adventure /tmp/lab.png lab ray    # the sample game
 swift run StudioApp --render-client talk /tmp/talk.png         # the client talking to an NPC
 swift run StudioApp --render-home /tmp/home.png                # the home page, with two recents
 swift run StudioApp --render-nightfall /tmp/nf.png night      # Nightfall, one view (the camp after dark)
+swift run StudioApp --render-obby /tmp/obby.png world5        # Mega Obby, one world's first stages
 ```
 
 **`ps -o %cpu` is not evidence of anything.** It reports CPU time over the process's

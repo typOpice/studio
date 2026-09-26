@@ -6,7 +6,7 @@ import simd
 /// Each opens as a new, untitled place (`SceneModel.loadTemplate`), and every one but
 /// Adventure Island has what a new place has: the default HUD and the Utils module.
 enum PlaceTemplate: String, CaseIterable, Identifiable {
-    case baseplate, obby, starter, empty, adventure, nightfall
+    case baseplate, obby, starter, empty, adventure, nightfall, megaObby
 
     var id: String { rawValue }
 
@@ -18,6 +18,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         case .empty: return "Empty"
         case .adventure: return AdventureIsland.name
         case .nightfall: return Nightfall.name
+        case .megaObby: return MegaObby.name
         }
     }
 
@@ -33,6 +34,9 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         case .nightfall:
             return "A roguelike: explore a walled valley by day and fight off zombies by night with a sword and a "
                 + "blaster. Pick power-ups, find three hidden keys, and escape through the north gate."
+        case .megaObby:
+            return "Sixty stages in six worlds, from Grassy Meadows to the Sky Kingdom: jumps, beams, spinners, "
+                + "moving platforms, fading tiles and jump pads, a checkpoint on every stage and a stage picker."
         }
     }
 
@@ -41,6 +45,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         switch self {
         case .adventure: return ["Explore", "8 NPCs", "Obby tower", "Ray tracing", "Shaders", "Multiplayer"]
         case .nightfall: return ["Roguelike", "Zombies", "Sword and blaster", "14 power-ups", "Hidden keys", "Multiplayer"]
+        case .megaObby: return ["60 stages", "6 worlds", "Checkpoints", "Stage picker", "Movers and spinners", "Multiplayer"]
         default: return []
         }
     }
@@ -54,12 +59,13 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         case .empty: return "doc"
         case .adventure: return "map.fill"
         case .nightfall: return "moon.stars.fill"
+        case .megaObby: return "flag.checkered"
         }
     }
 
     /// The ones listed under New; the sample games have a section of their own.
     static var starters: [PlaceTemplate] { [.baseplate, .obby, .starter, .empty] }
-    static var samples: [PlaceTemplate] { [.adventure, .nightfall] }
+    static var samples: [PlaceTemplate] { [.adventure, .nightfall, .megaObby] }
 
     /// The place, built fresh.
     func state() -> SceneState {
@@ -70,6 +76,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         case .empty: return Self.emptyState()
         case .adventure: return AdventureIsland.state()
         case .nightfall: return Nightfall.state()
+        case .megaObby: return MegaObby.state()
         }
     }
 
@@ -93,6 +100,12 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
             camera.distance = 250
             camera.yaw = .pi / 2 + 0.35
             camera.pitch = 0.72
+        case .megaObby:
+            // From beside the lobby, down the first world's stages.
+            camera.target = Vec3(0, 18, -30)
+            camera.distance = 70
+            camera.yaw = .pi / 2 + 0.55
+            camera.pitch = 0.32
         case .nightfall:
             // The camp and its fire, the town and graveyard beyond.
             camera.target = Vec3(0, 2, 40)

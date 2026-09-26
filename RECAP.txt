@@ -312,6 +312,18 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone (a whole run, from the first night to escaping, then falling) and with a host and a joined player.
    New files: Model/PlaceBuilding.swift (shared with Adventure Island now), Model/Nightfall.swift, Model/NightfallScripts.swift, NightfallSelfTest.swift.
 
+28. A third sample game: Mega Obby, 2026-09-26.
+   Sixty stages in six worlds of ten, getting harder as you go: Grassy Meadows, Lava Caves, Frozen Peaks, Candy Land, Neon City (with a glowing grid floor) and the Sky Kingdom (with clouds), then a finish with a trophy. Open it from the home page or either app's File menu.
+   Obstacles: jumps, zigzags, pillars, ledges, drop-downs, narrow beams, fading tiles, kill-brick walls with gaps or to jump over, truss climbs, spinners with one or two bars, moving platforms, sweeping kill blocks and jump pads.
+   A checkpoint on every stage, numbered. Fall or touch red and you're back at your last one.
+   The screen shows your stage and world, a progress bar, your time and deaths. The leaderboard shows your furthest Stage and your Wins.
+   Q and E (or the arrows at the bottom) go back and forth between stages you've reached; R takes you back to your checkpoint.
+   The finish is a Win, with your time.
+   Every one of the 60 stages is checked by the self test to be possible: each gap and climb is measured against how far the character really jumps.
+   Obstacles work by their names (KillBrick, Mover, Spinner, FadeTile, JumpPad and so on), so new stages built in Studio work without any scripting.
+   Tested alone and with a host and a joined player (each has their own stage, checkpoint and stage picker).
+   New files: Model/MegaObby.swift, Model/MegaObbyScripts.swift, MegaObbySelfTest.swift.
+
 
 THINGS TO KNOW
 

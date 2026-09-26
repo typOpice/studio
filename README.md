@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2345 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2376 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -74,7 +74,7 @@ with a button to go back to the place you were in.
   them and a Wins leaderboard), **Starter Scene** (parts, a script, shaders and an
   animation to learn from) or **Empty**. Each opens as a new, untitled place with the
   default HUD and the Utils module.
-- **Sample games**: Adventure Island and Nightfall, to play or take apart.
+- **Sample games**: Adventure Island, Nightfall and Mega Obby, to play or take apart.
 - **Recent**: the places you've opened or saved, newest first, with a picture of each.
   Right-click one to show it in Finder, or **Clear Recents**. **Open…** finds any other.
 
@@ -193,6 +193,51 @@ How it's made:
 `swift run StudioApp --render-nightfall out.png
 [overview|camp|town|graveyard|forest|farm|mine|gate|night] [ray]` draws it without a
 window.
+
+## The third sample game: Mega Obby
+
+Sixty stages in six worlds of ten, each world harder than the last: **Grassy
+Meadows**, **Lava Caves**, **Frozen Peaks**, **Candy Land**, **Neon City** and the
+**Sky Kingdom**. Open it from the home page, **File › Open Mega Obby (Sample Game)**
+in Studio, or **File › Load Mega Obby** in the client.
+
+The obstacles:
+
+- jumps, zigzags, pillars, ledges and drop-downs;
+- narrow beams, some with bumps to hop over;
+- fading tiles, which give way just after you step on them;
+- walls of kill bricks with gaps (and, later, low ones to jump);
+- truss climbs;
+- spinners with one or two bars;
+- moving platforms, and kill blocks sweeping across the path;
+- jump pads.
+
+Each stage ends at a **checkpoint** with its number over it. Fall, or touch anything
+red, and you're back at your last one.
+
+- **The screen:** your stage and world, a progress bar, your time and your deaths.
+- **The leaderboard:** your furthest Stage, and your Wins.
+- **Q** and **E** (or the arrows at the bottom) take you back and forth between
+  stages you've reached, and **R** takes you back to your checkpoint.
+- **The finish** after stage 60 is a Win, with your time.
+
+Every stage is checked to be possible: its gaps and climbs are measured against how
+far the character really jumps.
+
+What the obstacles do comes from their **part names**, in the **Mechanics** script:
+
+- **KillBrick** and **KillFloor** knock you out.
+- A **Mover** slides back and forth by its **Offset** (a Vector3Value) over its
+  **Seconds**. A **KillMover** does the same and knocks you out.
+- A **Spinner** turns at its **Speed** (degrees a second) and knocks you out.
+- A **FadeTile** gives way when stepped on.
+- A **JumpPad** throws you up at its **Power**.
+
+So a stage you build in Studio works just by naming its parts. Give a new checkpoint
+an IntValue called **Stage** and **ObbyGame** takes it in. **ObbyScreen** is the
+LocalScript that draws the screen.
+
+`swift run StudioApp --render-obby out.png [start|world2|…|world6|finish] [ray]` draws it.
 
 ## The player character
 

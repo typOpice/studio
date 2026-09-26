@@ -161,6 +161,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         add(to: fileMenu, "Load Starter Scene", #selector(loadStarter), "")
         add(to: fileMenu, "Open \(AdventureIsland.name) (Sample Game)", #selector(loadAdventure), "")
         add(to: fileMenu, "Open \(Nightfall.name) (Sample Game)", #selector(loadNightfall), "")
+        add(to: fileMenu, "Open \(MegaObby.name) (Sample Game)", #selector(loadMegaObby), "")
         fileItem.submenu = fileMenu
         mainMenu.addItem(fileItem)
 
@@ -279,6 +280,10 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         openTemplate(.nightfall)
     }
 
+    @objc private func loadMegaObby() {
+        openTemplate(.megaObby)
+    }
+
     @objc private func goHome() {
         showHome(canGoBack: true)
     }
@@ -356,7 +361,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
     /// edits a place waits until one is open.
     private static let homeActions: Set<Selector> = [
         #selector(goHome), #selector(newScene), #selector(openScene), #selector(loadStarter), #selector(loadAdventure),
-        #selector(loadNightfall),
+        #selector(loadNightfall), #selector(loadMegaObby),
     ]
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
@@ -557,6 +562,13 @@ public enum StudioEditor {
                 print("Could not write \(path): \(error)")
                 exit(1)
             }
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-obby") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let path = arguments.first ?? "obby.png"
+            let view = arguments.dropFirst().first { $0 != "ray" } ?? "start"
+            let technology: LightingTechnology = arguments.contains("ray") ? .rayTraced : .conventional
+            exit(AvatarSnapshot.renderMegaObby(to: URL(fileURLWithPath: path), view: view, technology: technology) ? 0 : 1)
         }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-nightfall") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])

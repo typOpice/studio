@@ -201,6 +201,38 @@ enum AvatarSnapshot {
         return renderPlace(model, setting, label: name, to: url, technology: technology, width: width, height: height)
     }
 
+    /// Mega Obby's views: along the course, a world at a time. The views are found from
+    /// the checkpoints, so they follow the course if it changes.
+    static let megaObbyViews = ["start", "world2", "world3", "world4", "world5", "world6", "finish"]
+
+    /// `StudioApp --render-obby out.png [view] [ray]`.
+    static func renderMegaObby(to url: URL, view name: String, technology: LightingTechnology,
+                               width: Int = 1600, height: Int = 900) -> Bool {
+        guard megaObbyViews.contains(name) else {
+            print("Views: \(megaObbyViews.joined(separator: ", "))")
+            return false
+        }
+        let model = SceneModel()
+        model.loadMegaObby()
+        func checkpoint(_ stage: Int) -> Vec3? {
+            let pads = model.parts.filter { $0.name == "Checkpoint" }
+            return pads.first { pad in
+                model.dataObjects.contains { $0.name == "Stage" && $0.parent == .node(pad.id) && Int($0.number) == stage }
+            }?.position
+        }
+        var setting: (Vec3, Float, Float, Float, String?, Vec3?)
+        switch name {
+        case "finish":
+            let end = model.parts.first { $0.name == "Victory" }?.position ?? .zero
+            setting = (end + Vec3(0, 3, -4), -.pi / 2 + 0.5, 0.3, 40, nil, end + Vec3(-3, 0.5, 2))
+        default:
+            let world = name == "start" ? 1 : Int(name.dropFirst(5)) ?? 1
+            let pad = checkpoint((world - 1) * 10 + 1) ?? Vec3(0, 20, 6)
+            setting = (pad + Vec3(0, 2, -26), .pi / 2 + 0.55, 0.3, 62, nil, pad + Vec3(0, 0.5, 0))
+        }
+        return renderPlace(model, setting, label: name, to: url, technology: technology, width: width, height: height)
+    }
+
     /// Draws a place from one of its views: its shaders compiled first, the view's
     /// screen effect on, a character standing where the view says.
     private static func renderPlace(_ model: SceneModel, _ setting: (Vec3, Float, Float, Float, String?, Vec3?),
