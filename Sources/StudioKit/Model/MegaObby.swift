@@ -83,6 +83,9 @@ enum MegaObby {
             lighting.clockTime = 14
             lighting.fogStart = 250
             lighting.fogEnd = 700
+            var clouds = CloudSettings()
+            clouds.cover = 0.35
+            lighting.clouds = clouds
             state.lighting = lighting
             state.starterPlayer.respawnTime = 1
             shaders["Lava"] = shader("Lava", .surface, AdventureIslandScripts.lavaShader, [("speed", 1.2)])

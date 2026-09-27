@@ -58,6 +58,9 @@ Instance = table.freeze({
 		if className == "ParticleEmitter" then
 			return emitterKit.new(parent)
 		end
+		if className == "Sky" or className == "Atmosphere" or className == "Clouds" then
+			return skyKit.new(className, parent)
+		end
 		if className == "ClickDetector" then
 			local detector = mouseKit.newDetector()
 			if parent ~= nil then
@@ -313,6 +316,28 @@ Lighting = service("Lighting", lightingMembers, {
 	end,
 	IsA = function(_, className)
 		return className == "Lighting" or className == "Instance"
+	end,
+	-- Its children: a Sky, an Atmosphere, Clouds.
+	GetChildren = function()
+		return skyKit.children()
+	end,
+	GetDescendants = function()
+		return skyKit.children()
+	end,
+	FindFirstChild = function(_, name)
+		return skyKit.child(name)
+	end,
+	FindFirstChildOfClass = function(_, className)
+		return skyKit.child(className)
+	end,
+	FindFirstChildWhichIsA = function(_, className)
+		return skyKit.child(className)
+	end,
+	WaitForChild = function(_, name)
+		return skyKit.child(name)
+	end,
+	__child = function(key)
+		return skyKit.child(key)
 	end,
 }, function(key, value)
 	local function fail(expected)

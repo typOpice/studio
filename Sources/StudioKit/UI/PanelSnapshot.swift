@@ -34,6 +34,13 @@ enum PanelSnapshot {
             model.lighting.technology = .rayTraced
             model.lighting.clockTime = 17.5
             view = AnyView(LightingInspector(model: model).content.frame(width: 270, height: 900, alignment: .top))
+        case "sky":
+            // Lighting's Sky, Atmosphere and Clouds, all three added.
+            model.lighting.skyObject = SkySettings()
+            model.lighting.atmosphere = AtmosphereSettings()
+            model.lighting.clouds = CloudSettings()
+            view = AnyView(SkyObjectsEditor(model: model).padding(12).font(.system(size: 11))
+                .foregroundStyle(Theme.text).frame(width: 270, height: 860, alignment: .top))
         case "explorer":
             view = AnyView(ExplorerView(model: model, session: session).frame(width: 280, height: 720))
         case "ribbon":

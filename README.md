@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2707 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2729 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -389,6 +389,42 @@ Enum.Technology.RayTraced`), plus `TimeOfDay`, `GetSunDirection()` and
 
 `swift run StudioApp --render-scene out.png raytraced 17.5` renders the starter scene
 with either technology at any time of day.
+
+### Sky, Atmosphere and Clouds
+
+Lighting can hold three more things. Right-click **Lighting** in the Explorer to add
+them, or tick them in its Properties.
+
+- **Sky:** how big the sun and moon are (`SunAngularSize`, `MoonAngularSize`),
+  whether they show at all (`CelestialBodiesShown`), and how many stars come out at
+  night (`StarCount`, up to 5000). Give it six imported pictures (`SkyboxFt`, looking
+  north, `SkyboxRt` east, and `Bk`, `Lf`, `Up`, `Dn`) and they wrap round the world in
+  place of the sky. A place with no Sky still has a sun, a moon and 3000 stars.
+- **Atmosphere:** air that far things fade into, and that hazes the horizon. `Density`
+  is how thick it is. `Offset` is how much of it lies between you and the sky. It's
+  tinted `Color` towards the sun and `Decay` away from it. `Glare` puts a glow round
+  the sun, and `Haze` sets how high up the sky the haze reaches.
+- **Clouds:** a drifting layer across the sky, with `Cover` (how much sky), `Density`
+  and `Color`.
+
+Scripts make and change them the Roblox way: `Instance.new("Atmosphere", Lighting)`,
+`Lighting.Sky.StarCount = 5000`, `Lighting:FindFirstChildOfClass("Clouds")`. A host's
+reach every joined player. Unlike Roblox, Clouds go in Lighting rather than
+Terrain. Adventure Island and Mega Obby have clouds; Nightfall's nights are starry.
+
+```lua
+-- A Script: a day every four minutes, with fog rolling in at dusk and clearing by morning.
+local Lighting = game:GetService("Lighting")
+local air = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere", Lighting)
+
+game:GetService("RunService").Heartbeat:Connect(function(dt)
+	Lighting.ClockTime = (Lighting.ClockTime + dt / 10) % 24
+	local night = Lighting.ClockTime < 6 or Lighting.ClockTime > 18
+	air.Density = if night then 0.6 else 0.3
+end)
+```
+
+`swift run StudioApp --render-sky out.png clouds|atmosphere|night|skybox` draws each.
 
 ### Custom animations
 

@@ -739,7 +739,39 @@ struct ExplorerView: View {
 
     // MARK: - Lighting
 
+    /// Lighting, and its Sky, Atmosphere and Clouds under it (picking one shows Lighting).
     private var lightingRow: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            lightingHeader
+            let lighting = model.lighting
+            ForEach([("Sky", "moon.stars", lighting.skyObject != nil), ("Atmosphere", "aqi.medium", lighting.atmosphere != nil),
+                     ("Clouds", "cloud", lighting.clouds != nil)].filter(\.2), id: \.0) { name, icon, _ in
+                HStack(spacing: 6) {
+                    Image(systemName: icon).font(.system(size: 10)).foregroundStyle(Color(red: 0.6, green: 0.78, blue: 0.98))
+                        .frame(width: 14)
+                    Text(name).font(.system(size: 12)).foregroundStyle(Theme.text)
+                    Spacer()
+                }
+                .padding(.vertical, 3)
+                .padding(.leading, 28)
+                .contentShape(Rectangle())
+                .onTapGesture { model.selectLighting() }
+                .contextMenu {
+                    Button("Delete", role: .destructive) {
+                        model.commit("Removed \(name)") {
+                            switch name {
+                            case "Sky": model.lighting.skyObject = nil
+                            case "Atmosphere": model.lighting.atmosphere = nil
+                            default: model.lighting.clouds = nil
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var lightingHeader: some View {
         let selected = model.lightingSelected
         let lighting = model.lighting
         return HStack(spacing: 5) {
@@ -766,6 +798,12 @@ struct ExplorerView: View {
                     model.commit("Lighting: \(technology.displayName)") { model.lighting.technology = technology }
                 }
             }
+            Divider()
+            if lighting.skyObject == nil { Button("Add Sky") { model.commit("Added Sky") { model.lighting.skyObject = SkySettings() } } }
+            if lighting.atmosphere == nil {
+                Button("Add Atmosphere") { model.commit("Added Atmosphere") { model.lighting.atmosphere = AtmosphereSettings() } }
+            }
+            if lighting.clouds == nil { Button("Add Clouds") { model.commit("Added Clouds") { model.lighting.clouds = CloudSettings() } } }
         }
         .help("The sun, sky, shadows and fog — and whether they are ray traced")
     }

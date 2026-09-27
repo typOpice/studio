@@ -92,7 +92,8 @@ final class ParticleRenderer {
                 (buffer.contents() + offset).copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
             }
             encoder.setVertexBuffer(buffer, offset: offset, index: 0)
-            encoder.setFragmentTexture(batch.texture, index: 0)
+            // Slot 2: the lit shaders' 0 (the shadow map) is left alone.
+            encoder.setFragmentTexture(batch.texture, index: 2)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: batch.instances.count)
             offset += batch.instances.count * stride
         }
@@ -217,7 +218,7 @@ vertex ParticleOut particle_vertex(uint vid [[vertex_id]], uint iid [[instance_i
     return out;
 }
 
-fragment float4 particle_fragment(ParticleOut in [[stage_in]], texture2d<float> picture [[texture(0)]]) {
+fragment float4 particle_fragment(ParticleOut in [[stage_in]], texture2d<float> picture [[texture(2)]]) {
     constexpr sampler pictureSampler(filter::linear, address::clamp_to_edge);
     float4 t = picture.sample(pictureSampler, in.uv);
     float alpha = t.a * in.color.a;

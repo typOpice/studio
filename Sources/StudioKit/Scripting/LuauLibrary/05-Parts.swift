@@ -242,6 +242,8 @@ local mouseKit = {}
 local soundKit = {}
 -- ParticleEmitters, filled in beside the Sounds in part 14.
 local emitterKit = {}
+-- Lighting's Sky, Atmosphere and Clouds, filled in there too.
+local skyKit = {}
 -- LogService's signal, filled in with the service (part 14).
 local logKit = {}
 

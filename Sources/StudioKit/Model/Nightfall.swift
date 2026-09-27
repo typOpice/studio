@@ -89,6 +89,16 @@ enum Nightfall {
             lighting.fogColor = rgb(120, 130, 150)
             lighting.fogStart = 120
             lighting.fogEnd = 380
+            // Clear nights: more stars, a bigger moon; a few grey clouds.
+            var sky = SkySettings()
+            sky.starCount = 4500
+            sky.moonAngularSize = 15
+            lighting.skyObject = sky
+            var clouds = CloudSettings()
+            clouds.cover = 0.3
+            clouds.density = 0.5
+            clouds.color = rgb(200, 205, 215)
+            lighting.clouds = clouds
             return lighting
         }
 

@@ -81,6 +81,10 @@ struct LightingInspector: View {
 
                 Divider().overlay(Theme.stroke)
 
+                SkyObjectsEditor(model: model)
+
+                Divider().overlay(Theme.stroke)
+
                 section("Ray tracing") {
                     LabeledRow("Quality") {
                         Picker("", selection: Binding(get: { lighting.rayQuality }, set: { value in

@@ -1,7 +1,7 @@
 See [AGENTS.md](AGENTS.md) for the engineering contract: build and test commands,
 architecture invariants, recipes for common changes, and known limitations.
 
-Quick version: `swift run StudioApp --selftest` runs 2707 headless checks and must
+Quick version: `swift run StudioApp --selftest` runs 2729 headless checks and must
 pass before any change is considered done. Xcode 27 is installed and selected (Swift
 6.4), but the project doesn't depend on it: it stays a plain Swift package that
 Command Line Tools alone can build — Metal shaders compile at runtime, and Luau, Wren

@@ -73,7 +73,7 @@ final class RibbonRenderer {
         encoder.setVertexBytes(&frame, length: MemoryLayout<FrameUniforms>.stride, index: 1)
         var start = 0
         for strip in drawn {
-            encoder.setFragmentTexture(texture(for: strip.texture, picture: picture), index: 0)
+            encoder.setFragmentTexture(texture(for: strip.texture, picture: picture), index: 2)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: start, vertexCount: strip.vertices.count)
             start += strip.vertices.count
         }
@@ -169,7 +169,7 @@ vertex RibbonOut ribbon_vertex(uint vid [[vertex_id]],
     return out;
 }
 
-fragment float4 ribbon_fragment(RibbonOut in [[stage_in]], texture2d<float> picture [[texture(0)]]) {
+fragment float4 ribbon_fragment(RibbonOut in [[stage_in]], texture2d<float> picture [[texture(2)]]) {
     constexpr sampler ribbonSampler(filter::linear, s_address::repeat, t_address::clamp_to_edge);
     float4 t = picture.sample(ribbonSampler, in.uv);
     float alpha = t.a * in.color.a;

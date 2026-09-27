@@ -82,6 +82,9 @@ final class ScriptRuntime {
     /// ParticleEmitters scripts have made (or cloned, or taken out of a part) and not yet
     /// put in one.
     var looseEmitters: [UUID: ParticleEmitter] = [:]
+    /// Skies, Atmospheres and Clouds scripts have made (or taken out of Lighting) and not
+    /// yet put there.
+    var looseSkyObjects: [UUID: SkyObject] = [:]
 
     func start() {
         stop()
@@ -360,6 +363,7 @@ final class ScriptRuntime {
         case "npc": return npcCall(name, arguments)
         case "emitter": return emitterCall(name, arguments)
         case "ribbon": return ribbonCall(name, arguments)
+        case "sky": return skyCall(name, arguments)
         case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)

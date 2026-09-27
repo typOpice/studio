@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2707 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # 2729 checks — THE test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -153,6 +153,7 @@ listed in §9.
 | `SceneIndexSelfTest.swift` | The scene index: 3000 random changes of every kind (parts and groups made, deleted, reparented through the array and through update(id:), moved, sent to storage and back, the parts replaced whole with the same count, shuffled, data objects and Sounds made and deleted, reparenting undone) with parts, groups, parents, children, data objects and Sounds all found as a search finds them; finding a part, a Model's pivot, moving a Model and a folder's children no dearer with 16 times the parts |
 | `SoakSelfTest.swift` | Each sample game played by `Soak.play`'s player (running, jumping, swinging, falling; the same moves every time) — Adventure Island and Mega Obby for 40 seconds, Nightfall for 60, night included: no script errors, and no parts, Models, Sounds, values, GUI objects, voices or Luau memory growing from the settled sample to the last; a host and a joined player in Nightfall for 50 seconds, both moving and fighting: no errors, and the joined player's parts and Sounds keeping the same distance from the host's (nothing the host has done with piling up) |
 | `NPCSelfTest.swift` | NPCs: Insert › Rig (the seven parts, a Humanoid, one undo step, standing on the spot, saved and reopened); MoveTo at the WalkSpeed, facing the way it goes with legs swinging, MoveDirection, WalkToPoint and the Running state, MoveToFinished(true) within a stud and standing on the ground; a wall stopping it and MoveToFinished(false) after eight seconds; a kerb stepped up, moved by a script (PivotTo) then walking off a ledge, Jump up and down; the README's PathfindingService example round a wall to a flag; TakeDamage and HealthChanged, MaxHealth lowering Health, Died once at no health, falling apart; Instance.new("Humanoid") in a script's Model walking at its own WalkSpeed, FindFirstChildOfClass, a wrong type refused; the player bumping into an NPC; Adventure Island's Postie Pat round, every stop reached; a host's NPC walking and dying in a joined player's game, their script hearing Died, the parts let go there too |
+| `SkySelfTest.swift` | Lighting's Sky, Atmosphere and Clouds: none in a new place (a default sun, moon and stars) and it saving as before, added with undo, saved and reopened, what the shaders get; drawn — stars at night and none at StarCount 0, the sun's disc and not with CelestialBodiesShown off, clouds whitening the sky and going when disabled, a far wall fading into the Atmosphere's colour, a skybox's sides where they belong and the right way up, the day's sky again without all six; from Luau (made loose then put in Lighting, found by name and class, children, the Roblox types, Offset kept in range, five wrong values refused, Clone, out and back, Destroy); the README's dusk fog as written; a host's Atmosphere and Clouds in a joined player's sky and scripts |
 | `RibbonSelfTest.swift` | Beams: the curve (Segments, its ends, CurveSize bending it), Width0 to Width1, Color and Transparency along it, flat across the attachments, Stretch and Wrap, TextureSpeed scrolling, FaceCamera, Enabled; Trails: a point each MinLength, as wide as the attachments are apart, gone after Lifetime, drawn from now back, WidthScale, MaxLength, Clear, Enabled off, forgotten in storage; a Beam not holding a part up; Studio (the Beam tool middle to middle facing the camera, Add Trail top to bottom, undo, neither a join tool, saved, a joint saving as before); from Luau (Beam and Trail made and read in their types, not Constraints, wrong values refused, a Beam has no Clear, Clear and Enabled); drawn, and not when off; the README's laser as written; a host's Beam and moving Trail in a joined player's game |
 | `ParticleSelfTest.swift` | ParticleEmitters: Rate and Lifetime (how many alive), made in the part and out of its top at their Speed, a turned part's top, SpreadAngle's fan, Acceleration, Drag, Enabled off, Emit(40) at once, Clear, a machine seeing an emitter first making only its last burst, LockedToPart, TimeScale 0, Size/Transparency/Color/Brightness/LightEmission through a life with envelopes, the 2000 cap, none in storage; Studio (presets, undo, saved and reopened, a part without one saving as before, copied with the part, deleted); from Luau (Instance.new, FindFirstChild, the Roblox types read back, six wrong values refused, GetChildren, Emit bursting, Clone, moved between parts and out, Clear, Enabled, Destroy); drawn red where they are, hidden behind a wall, gone when cleared; a host script's emitter and Emit(40) reaching a joined player and bursting there, a joined player's LocalScript emitter staying theirs |
 | `FrameStatsSelfTest.swift` | The Stats service: frame, script and physics times (the frame the most, the scripts' work in it), memory, the service being itself, parts and instances; no drawing time until something draws, then counted in the frame; the HUD's three lines showing the frame, drawing, scripts, physics, memory and the right part count; a version-2 place given them once under its numbers, one with its numbers deleted not; a joined player's numbers being their own machine's |
@@ -319,6 +320,9 @@ Sources/StudioKit/
                                    `UUID(stableFrom:)`, `ensurePlaceID`
   Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them; a
                                    Humanoid's numbers
+  Model/SkyObjects.swift         Lighting's Sky, Atmosphere and Clouds (SkySettings and the rest)
+  Scripting/ScriptRuntime+Sky.swift  `sky.*`: making, reading, moving them; SkyObject; loose ones
+  UI/SkyUI.swift                 SkyObjectsEditor: their sections in Lighting's Properties
   Model/RibbonLook.swift         a Beam's or Trail's looks (SceneConstraint.ribbon), addTrail
   Play/Ribbons.swift             Beams' curves and Trails' history (TrailSystem) as strips
   Render/RibbonRenderer.swift    RibbonRenderer: strips with a repeating picture; the ribbon pictures
@@ -1486,6 +1490,22 @@ Roughly ordered by how much time they will cost you.
       that when changing `place`.
     - A body skips putting its parts while nothing moved (`lastPut`), since each change
       is sent to every joined player.
+
+119. **The sky is drawn from Lighting, and its extras are Lighting's.** Sky, Atmosphere and
+    Clouds are optional structs on `LightingSettings` (`skyObject`, `atmosphere`,
+    `clouds`), so they're saved, undone and sent to joined players with Lighting. The
+    rendering is in the shaders:
+    - `studio_sky_over` puts the halo, stars, sun, moon, clouds and haze over the sky
+      that follows the day, or over a skybox in the sky pass (a cube at fragment
+      texture 6).
+    - `studio_finish` fades lit surfaces into the Atmosphere.
+    - The uniforms are 384 bytes, checked by LightingSelfTest.
+
+    Keep to these rules:
+    - Fragment texture slots are shared across passes: 0 is the shadow map, 3 a mesh's
+      picture, 6 the skybox. Particles and ribbons use 2.
+    - Scripts name the one in Lighting "L:<class>" and a loose one "-:<id>"
+      (`ScriptRuntime.looseSkyObjects`).
 
 118. **Beams and Trails are constraints that are only drawn.** They're `SceneConstraint`
     kinds (`.beam`, `.trail`; `kind.isEffect`), so saving, the Explorer, `constraint.*`,

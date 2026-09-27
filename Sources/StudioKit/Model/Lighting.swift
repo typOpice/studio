@@ -53,6 +53,10 @@ struct LightingSettings: Codable, Equatable {
     var rayQuality = RayQuality.medium
     var reflections = true
     var ambientOcclusion = true
+    /// Lighting's Sky, Atmosphere and Clouds (SkyObjects.swift), when it has them.
+    var skyObject: SkySettings?
+    var atmosphere: AtmosphereSettings?
+    var clouds: CloudSettings?
 
     static let fogLimit: Float = 100_000
 
@@ -61,7 +65,7 @@ struct LightingSettings: Codable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case technology, clockTime, geographicLatitude, brightness, ambient, outdoorAmbient, colorShiftTop
         case globalShadows, shadowSoftness, exposureCompensation, fogColor, fogStart, fogEnd, sky
-        case rayQuality, reflections, ambientOcclusion
+        case rayQuality, reflections, ambientOcclusion, skyObject, atmosphere, clouds
     }
 
     init(from decoder: Decoder) throws {
@@ -84,6 +88,9 @@ struct LightingSettings: Codable, Equatable {
         rayQuality = try c.decodeIfPresent(RayQuality.self, forKey: .rayQuality) ?? d.rayQuality
         reflections = try c.decodeIfPresent(Bool.self, forKey: .reflections) ?? d.reflections
         ambientOcclusion = try c.decodeIfPresent(Bool.self, forKey: .ambientOcclusion) ?? d.ambientOcclusion
+        skyObject = try c.decodeIfPresent(SkySettings.self, forKey: .skyObject)
+        atmosphere = try c.decodeIfPresent(AtmosphereSettings.self, forKey: .atmosphere)
+        clouds = try c.decodeIfPresent(CloudSettings.self, forKey: .clouds)
     }
 
     // MARK: - The sun and the sky

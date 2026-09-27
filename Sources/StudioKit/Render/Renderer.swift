@@ -30,6 +30,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var skyPipeline: MTLRenderPipelineState!
     private var shadowPipeline: MTLRenderPipelineState!
     private var depthSky: MTLDepthStencilState!
+    /// A Sky's six pictures as a cube, and which pictures (and how big) it was made from.
+    private var skyboxCube: (key: [String], sizes: [Int], texture: MTLTexture)?
     /// The particles of the world's ParticleEmitters, this view's own, and what draws them.
     let particles = ParticleSystem()
     private var particleDrawer: ParticleRenderer?
@@ -454,6 +456,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         bindLighting(encoder)
 
         if frameLighting?.sky == true {
+            if let cube = skybox(model: model) { encoder.setFragmentTexture(cube, index: 6) }
             encoder.setRenderPipelineState(skyPipeline)
             encoder.setDepthStencilState(depthSky)
             encoder.setCullMode(.none)
@@ -718,7 +721,9 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         var uniforms = LightingUniforms(settings: settings, shadowViewProjection: shadowViewProjection,
                                         inverseViewProjection: viewProjection.inverse, shadowTexel: texel,
-                                        pointLights: lights.count, groundPlane: model.showGrid)
+                                        pointLights: lights.count, groundPlane: model.showGrid,
+                                        time: Float(CACurrentMediaTime() - startTime),
+                                        skybox: skybox(model: model) != nil)
         lit = litPipelines[wantsRays] ?? litPipelines[false]
 
         var built: RayTracingScene.Built?
@@ -823,6 +828,40 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.setFragmentBuffer(rayTracing.faceNormals, offset: 0, index: 8)
             encoder.useResources(rayTracing.primitiveStructures, usage: .read, stages: .fragment)
         }
+    }
+
+    /// The Sky's six pictures as one cube texture, when it has all six and they load; made
+    /// again only when they change. Faces go +X Rt, −X Lf, +Y Up, −Y Dn, +Z Ft, −Z Bk: the
+    /// sky pass looks the cube up with Z turned round, so north (−Z) is Ft.
+    private func skybox(model: SceneModel) -> MTLTexture? {
+        guard let sky = model.lighting.skyObject, sky.hasSkybox else { return nil }
+        let order: [SkySettings.Face] = [.rt, .lf, .up, .dn, .ft, .bk]
+        let assets = order.map { model.asset(named: sky.picture($0)) }
+        guard assets.allSatisfy({ $0?.kind == .image }) else { return nil }
+        let key = order.map { sky.picture($0) }, sizes = assets.map { $0?.data.count ?? 0 }
+        if let cube = skyboxCube, cube.key == key, cube.sizes == sizes { return cube.texture }
+        let images = assets.compactMap { asset -> CGImage? in
+            guard let data = asset?.data, let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+            return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        }
+        guard images.count == 6 else { return nil }
+        let side = min(max(images.map { max($0.width, $0.height) }.max() ?? 64, 16), 1024)
+        let descriptor = MTLTextureDescriptor.textureCubeDescriptor(pixelFormat: .rgba8Unorm, size: side, mipmapped: false)
+        descriptor.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: descriptor) else { return nil }
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        for (slice, image) in images.enumerated() {
+            pixels.withUnsafeMutableBytes { bytes in
+                guard let context = CGContext(data: bytes.baseAddress, width: side, height: side, bitsPerComponent: 8,
+                                              bytesPerRow: side * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+                context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+            }
+            texture.replace(region: MTLRegionMake2D(0, 0, side, side), mipmapLevel: 0, slice: slice,
+                            withBytes: pixels, bytesPerRow: side * 4, bytesPerImage: side * side * 4)
+        }
+        skyboxCube = (key, sizes, texture)
+        return texture
     }
 
     /// The technology this frame was actually drawn with, for the status bar.

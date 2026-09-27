@@ -105,7 +105,7 @@ enum LightingSelfTest {
     }
 
     private static func testUniformLayout(_ check: Checker) {
-        check("LightingUniforms is 272 bytes", MemoryLayout<LightingUniforms>.stride == 272,
+        check("LightingUniforms is 384 bytes", MemoryLayout<LightingUniforms>.stride == 384,
               "\(MemoryLayout<LightingUniforms>.stride)")
         check("PointLightData is 48 bytes", MemoryLayout<PointLightData>.stride == 48)
         check("InstanceInfo is 96 bytes", MemoryLayout<InstanceInfo>.stride == 96)

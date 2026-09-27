@@ -288,10 +288,17 @@ vertex SkyVertex sky_vertex(uint vid [[vertex_id]])
 
 fragment float4 sky_fragment(SkyVertex in [[stage_in]],
                              constant FrameUniforms &frame [[buffer(1)]],
-                             constant LightingUniforms &lighting [[buffer(4)]])
+                             constant LightingUniforms &lighting [[buffer(4)]],
+                             texturecube<float> skybox [[texture(6)]])
 {
     float4 far = lighting.inverseViewProjection * float4(in.ndc, 1.0, 1.0);
     float3 direction = normalize(far.xyz / far.w - frame.cameraPosition.xyz);
+    if (lighting.cloudParams.w > 0.5) {
+        // A Sky's six pictures, with the sun, moon, clouds and haze over them.
+        constexpr sampler skySampler(filter::linear);
+        float3 picture = skybox.sample(skySampler, float3(direction.x, direction.y, -direction.z)).rgb;
+        return float4(studio_sky_over(picture, direction, lighting, false) * lighting.ambient.w, 1.0);
+    }
     return float4(studio_sky(direction, lighting) * lighting.ambient.w, 1.0);
 }
 """#

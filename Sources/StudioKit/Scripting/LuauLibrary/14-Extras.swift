@@ -996,6 +996,149 @@ do
 	end
 end
 
+--------------------------------------------------------------------------------
+-- Lighting's Sky, Atmosphere and Clouds (SkyObjects.swift): one of each at most, in
+-- Lighting ("L:<class>"), or made and not yet put there ("-:<id>").
+
+do
+	skyKit.classes = { Sky = true, Atmosphere = true, Clouds = true }
+	skyKit.byId = setmetatable({}, { __mode = "v" })
+	skyKit.idOf = setmetatable({}, { __mode = "k" })
+	skyKit.properties = {
+		Sky = {
+			CelestialBodiesShown = "boolean", StarCount = "number", SunAngularSize = "number",
+			MoonAngularSize = "number", SkyboxBk = "string", SkyboxDn = "string", SkyboxFt = "string",
+			SkyboxLf = "string", SkyboxRt = "string", SkyboxUp = "string",
+		},
+		Atmosphere = {
+			Density = "number", Offset = "number", Glare = "number", Haze = "number", Color = "Color3", Decay = "Color3",
+		},
+		Clouds = { Enabled = "boolean", Cover = "number", Density = "number", Color = "Color3" },
+	}
+
+	local function classOf(object)
+		local className = invoke("sky.get", skyKit.idOf[object], "classname")
+		if className == nil then
+			raise("attempt to use a Sky, Atmosphere or Clouds that has been destroyed", 3)
+		end
+		return className
+	end
+
+	local function rename(object, id)
+		if id == nil then
+			return
+		end
+		skyKit.byId[skyKit.idOf[object]] = nil
+		skyKit.byId[id] = object
+		skyKit.idOf[object] = id
+	end
+
+	skyKit.methods = {
+		Destroy = function(self)
+			invoke("sky.destroy", skyKit.idOf[self])
+		end,
+		Clone = function(self)
+			local className = classOf(self)
+			local copy = skyKit.new(className, nil)
+			for key in skyKit.properties[className] do
+				copy[key] = self[key]
+			end
+			return copy
+		end,
+		IsA = function(self, className)
+			return className == classOf(self) or className == "Instance"
+		end,
+		GetChildren = function()
+			return {}
+		end,
+		FindFirstChild = function()
+			return nil
+		end,
+	}
+
+	skyKit.Meta = {
+		__index = function(object, key)
+			local className = classOf(object)
+			local id = skyKit.idOf[object]
+			if key == "Name" or key == "ClassName" then
+				return className
+			elseif key == "Parent" then
+				return if invoke("sky.get", id, "parent") then Lighting else nil
+			end
+			local kind = skyKit.properties[className][key]
+			if kind ~= nil then
+				return emitterKit.read(kind, invoke("sky.get", id, key))
+			end
+			local method = skyKit.methods[key]
+			if method ~= nil then
+				return method
+			end
+			raise(string.format("%s is not a valid member of %s", tostring(key), className), 2)
+		end,
+		__newindex = function(object, key, value)
+			local className = classOf(object)
+			local id = skyKit.idOf[object]
+			if key == "Parent" then
+				if value ~= nil and value ~= Lighting then
+					raise(string.format("A %s goes in Lighting, not %s", className, typeof(value)), 2)
+				end
+				rename(object, invoke("sky.parent", id, value == Lighting))
+				return
+			end
+			local kind = skyKit.properties[className][key]
+			if kind == nil then
+				raise(string.format("%s is not a valid member of %s", tostring(key), className), 2)
+			end
+			local raw = emitterKit.write(kind, value)
+			if raw == nil or not invoke("sky.set", id, key, raw) then
+				raise(string.format("Unable to assign property %s. %s expected, got %s", key, kind, typeof(value)), 2)
+			end
+		end,
+		__tostring = function(object)
+			return invoke("sky.get", skyKit.idOf[object], "classname") or "Sky"
+		end,
+		__metatable = LOCKED,
+	}
+
+	function skyKit.wrap(id)
+		if id == nil then
+			return nil
+		end
+		local existing = skyKit.byId[id]
+		if existing ~= nil then
+			return existing
+		end
+		local object = setmetatable({}, skyKit.Meta)
+		typeTags[object] = "Instance"
+		skyKit.byId[id] = object
+		skyKit.idOf[object] = id
+		return object
+	end
+
+	function skyKit.new(className, parent)
+		if parent ~= nil and parent ~= Lighting then
+			raise(string.format("A %s goes in Lighting, not %s", className, typeof(parent)), 3)
+		end
+		return skyKit.wrap(invoke("sky.create", className, parent == Lighting))
+	end
+
+	-- Lighting's, by class (its name).
+	function skyKit.child(className)
+		if type(className) ~= "string" or not skyKit.classes[className] then
+			return nil
+		end
+		return skyKit.wrap(invoke("sky.find", className))
+	end
+
+	function skyKit.children()
+		local list = {}
+		for _, id in invoke("sky.list") do
+			table.insert(list, skyKit.wrap(id))
+		end
+		return list
+	end
+end
+
 -- Several octaves of math.noise stacked: large shapes plus fine detail.
 function math.fbm(x, y, z, octaves)
 	octaves = octaves or 4

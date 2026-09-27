@@ -342,6 +342,106 @@ enum AvatarSnapshot {
         return true
     }
 
+    static let skyViews = ["clouds", "atmosphere", "night", "skybox"]
+
+    /// `StudioApp --render-sky out.png [clouds|atmosphere|night|skybox]`: Lighting's Sky,
+    /// Atmosphere and Clouds over a plain field with towers going off into the distance.
+    static func renderSky(to url: URL, view name: String, width: Int = 1600, height: Int = 900) -> Bool {
+        guard skyViews.contains(name) else {
+            print("Views: \(skyViews.joined(separator: ", "))")
+            return false
+        }
+        let model = SceneModel()
+        model.parts = []
+        model.groups = []
+        model.showGrid = false
+        var ground = Part()
+        ground.name = "Ground"
+        ground.position = Vec3(0, -0.5, 0)
+        ground.size = Vec3(2000, 1, 2000)
+        ground.color = Vec3(0.32, 0.45, 0.28)
+        model.parts.append(ground)
+        model.lighting.fogEnd = 100_000
+        var look = simd_normalize(Vec3(0, 0.15, -1))
+        switch name {
+        case "clouds":
+            model.lighting.clockTime = 14
+            var clouds = CloudSettings()
+            clouds.cover = 0.6
+            model.lighting.clouds = clouds
+            look = simd_normalize(Vec3(0.3, 0.35, -1))
+        case "atmosphere":
+            model.lighting.clockTime = 17.3
+            var air = AtmosphereSettings()
+            air.density = 0.45
+            air.haze = 2
+            air.glare = 3
+            air.color = Vec3(0.9, 0.78, 0.65)
+            model.lighting.atmosphere = air
+            // Towards the low sun, over the towers.
+            let sun = model.lighting.sunDirection
+            look = simd_normalize(Vec3(sun.x, 0.1, sun.z))
+        case "night":
+            model.lighting.clockTime = 22
+            let moon = -model.lighting.sunDirection
+            look = simd_normalize(Vec3(moon.x, moon.y * 0.8, moon.z))
+        default:
+            // Six pictures, each a colour with its name on it.
+            var sky = SkySettings()
+            let colours: [SkySettings.Face: (CGFloat, CGFloat, CGFloat)] = [
+                .ft: (0.2, 0.4, 0.9), .bk: (0.9, 0.5, 0.2), .lf: (0.3, 0.8, 0.3),
+                .rt: (0.8, 0.3, 0.8), .up: (0.9, 0.9, 0.95), .dn: (0.35, 0.3, 0.25)]
+            for face in SkySettings.Face.allCases {
+                let (r, g, b) = colours[face]!
+                guard let data = labelledPicture(face.rawValue, red: r, green: g, blue: b) else { return false }
+                model.assets.append(SceneAsset(name: face.rawValue, kind: .image, data: data, fileExtension: "png"))
+                sky.setPicture(face, "studio://" + face.rawValue)
+            }
+            model.lighting.skyObject = sky
+            look = simd_normalize(Vec3(0.55, 0.3, -1))
+        }
+        // Towers going off into the distance the way it looks, either side of the line.
+        let ahead = simd_normalize(Vec3(look.x, 0, look.z)), side = Vec3(-ahead.z, 0, ahead.x)
+        for index in 0..<8 {
+            var tower = Part()
+            tower.name = "Tower"
+            let distance = Float(40 + index * index * 18)
+            tower.position = ahead * distance + side * (Float(index % 2 == 0 ? -1 : 1) * (8 + Float(index) * 6))
+                + Vec3(0, 10, 20)
+            tower.size = Vec3(6, 20, 6)
+            tower.color = Vec3(0.75, 0.3, 0.25)
+            model.parts.append(tower)
+        }
+        let setting: (Vec3, Float, Float, Float, String?, Vec3?) =
+            (Vec3(0, 6, 20) + look * 40, atan2(-look.z, -look.x), asin(-look.y), 40, nil, nil)
+        return renderPlace(model, setting, label: "sky: " + name, to: url, technology: .conventional,
+                           width: width, height: height)
+    }
+
+    /// A square picture of one colour with a word in the middle, as PNG data.
+    static func labelledPicture(_ text: String, red: CGFloat, green: CGFloat, blue: CGFloat, size: Int = 256) -> Data? {
+        guard let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.setFillColor(red: red, green: green, blue: blue, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: size, height: size))
+        // A white bar along the top edge, so which way up it is shows.
+        context.setFillColor(red: 1, green: 1, blue: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: size - size / 10, width: size, height: size / 10))
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: CGFloat(size) / 7),
+                                                         .foregroundColor: NSColor.white]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
+        let bounds = CTLineGetBoundsWithOptions(line, [])
+        context.textPosition = CGPoint(x: (CGFloat(size) - bounds.width) / 2, y: CGFloat(size) / 2 - bounds.height / 3)
+        CTLineDraw(line, context)
+        guard let image = context.makeImage() else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+
     /// `StudioApp --render-ribbons out.png [night]`: Beams (a laser, an arrow path on the
     /// ground, a chain hanging between posts) and a Trail behind a block going round.
     static func renderRibbons(to url: URL, night: Bool = false, width: Int = 1600, height: Int = 900) -> Bool {

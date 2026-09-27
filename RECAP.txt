@@ -439,6 +439,17 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the joined player sees the host's Beam, and the trail behind a part the host moves).
    New files: Model/RibbonLook.swift, Play/Ribbons.swift, Render/RibbonRenderer.swift, Scripting/ScriptRuntime+Ribbons.swift, UI/RibbonUI.swift, RibbonSelfTest.swift.
 
+43. Sky, Atmosphere and Clouds, 2026-09-27.
+   Lighting can now have a Sky, an Atmosphere and Clouds, as in Roblox. Right-click Lighting in the Explorer to add them, or tick them in its Properties.
+   Sky: the sun's and moon's size, whether they show, and how many stars come out at night. Six imported pictures can wrap round the world instead of the sky. Every place now has a moon and stars at night, even without a Sky.
+   Atmosphere: far things fade into the air, and the horizon hazes over, warmer towards the sun. Density, Offset, Color, Decay, Glare and Haze.
+   Clouds: a drifting layer across the sky (Cover, Density, Color).
+   Scripts use Roblox's names: Instance.new("Atmosphere", Lighting), Lighting.Sky.StarCount, Lighting:FindFirstChildOfClass("Clouds").
+   Adventure Island and Mega Obby have clouds; Nightfall's nights have more stars and a bigger moon.
+   Tested alone and with a host and a joined player (the joined player's sky and scripts see the host's Atmosphere and Clouds).
+   Also fixed: particles and ribbons no longer borrow the texture slot the shadows use.
+   New files: Model/SkyObjects.swift, Scripting/ScriptRuntime+Sky.swift, UI/SkyUI.swift, SkySelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

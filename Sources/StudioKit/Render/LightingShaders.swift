@@ -1,6 +1,6 @@
 import simd
 
-/// Mirrors `LightingUniforms` in `lightingMetalSource` (272 bytes). Bound at fragment
+/// Mirrors `LightingUniforms` in `lightingMetalSource` (384 bytes). Bound at fragment
 /// buffer 4 for every lit pipeline — built-in and user shaders alike.
 struct LightingUniforms {
     var shadowViewProjection: float4x4 = matrix_identity_float4x4
@@ -24,12 +24,26 @@ struct LightingUniforms {
     var skyHorizon: Vec4 = .zero
     /// x: sun shadow rays, y: occlusion rays, z: 1 for reflections, w: occlusion radius.
     var rayParams: Vec4 = Vec4(4, 6, 1, 4)
+    /// xyz: towards the sun itself (sunDirection is the moon's at night). w: seconds, for drifting clouds.
+    var sunTrue: Vec4 = Vec4(0, 1, 0, 0)
+    /// The Sky: x, y: the sun's and moon's angular radius (radians); z: stars; w: 1 when the sun and moon show.
+    var skyParams: Vec4 = Vec4(0.0315, 0.0315, 3000, 1)
+    /// The Atmosphere: x: density, y: offset, z: glare, w: haze.
+    var atmosphereParams: Vec4 = .zero
+    /// rgb: its Color. w: 1 when there is one.
+    var atmosphereColor: Vec4 = .zero
+    /// rgb: its Decay.
+    var atmosphereDecay: Vec4 = .zero
+    /// The Clouds: x: cover, y: density, z: 1 when shown. w: 1 when a skybox is bound (the sky pass).
+    var cloudParams: Vec4 = .zero
+    /// rgb: the clouds' Color.
+    var cloudColor: Vec4 = .zero
 
     init() {}
 
     /// Everything the shaders need about the lighting for one frame.
     init(settings: LightingSettings, shadowViewProjection: float4x4, inverseViewProjection: float4x4,
-         shadowTexel: Float, pointLights: Int, groundPlane: Bool) {
+         shadowTexel: Float, pointLights: Int, groundPlane: Bool, time: Float = 0, skybox: Bool = false) {
         self.shadowViewProjection = shadowViewProjection
         self.inverseViewProjection = inverseViewProjection
         sunDirection = Vec4(settings.lightDirection, settings.globalShadows ? 1 : 0)
@@ -46,6 +60,22 @@ struct LightingUniforms {
         rayParams = Vec4(Float(settings.rayQuality.shadowSamples),
                          settings.ambientOcclusion ? Float(settings.rayQuality.occlusionSamples) : 0,
                          settings.reflections ? 1 : 0, 4)
+        sunTrue = Vec4(settings.sunDirection, time)
+        let skyObject = settings.skyInEffect
+        // Roblox's sizes are of pictures with a glow round a smaller disc.
+        skyParams = Vec4(max(skyObject.sunAngularSize, 0) * 0.0015, max(skyObject.moonAngularSize, 0) * 0.00287,
+                         Float(min(max(skyObject.starCount, 0), 5000)), skyObject.celestialBodiesShown ? 1 : 0)
+        if let air = settings.atmosphere {
+            atmosphereParams = Vec4(min(max(air.density, 0), 1), min(max(air.offset, 0), 1),
+                                    min(max(air.glare, 0), 10), min(max(air.haze, 0), 10))
+            atmosphereColor = Vec4(air.color, 1)
+            atmosphereDecay = Vec4(air.decay, 0)
+        }
+        if let clouds = settings.clouds, clouds.enabled {
+            cloudParams = Vec4(min(max(clouds.cover, 0), 1), min(max(clouds.density, 0), 1), 1, 0)
+            cloudColor = Vec4(clouds.color, 0)
+        }
+        cloudParams.w = skybox ? 1 : 0
     }
 }
 
@@ -90,6 +120,13 @@ struct LightingUniforms {
     float4 skyZenith;
     float4 skyHorizon;
     float4 rayParams;
+    float4 sunTrue;
+    float4 skyParams;
+    float4 atmosphereParams;
+    float4 atmosphereColor;
+    float4 atmosphereDecay;
+    float4 cloudParams;
+    float4 cloudColor;
 };
 
 struct PointLightData {
@@ -132,6 +169,112 @@ static float studio_noise(float2 pixel) {
     return fract(52.9829189 * fract(dot(pixel, float2(0.06711056, 0.00583715))));
 }
 
+// Noise for stars and clouds: the same everywhere, every frame.
+static float studio_sky_hash(float2 p) {
+    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+static float studio_value_noise(float2 p) {
+    float2 i = floor(p), f = fract(p);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(studio_sky_hash(i), studio_sky_hash(i + float2(1, 0)), u.x),
+               mix(studio_sky_hash(i + float2(0, 1)), studio_sky_hash(i + float2(1, 1)), u.x), u.y);
+}
+
+static float studio_fbm(float2 p) {
+    float total = 0.0, amplitude = 0.5;
+    for (int octave = 0; octave < 5; octave++) {
+        total += studio_value_noise(p) * amplitude;
+        p = p * 2.03 + float2(17.1, 9.3);
+        amplitude *= 0.5;
+    }
+    return total / 0.96875;
+}
+
+// About `count` stars over the whole sky: one in some of the cells of a cube's faces.
+static float studio_stars(float3 d, float count) {
+    float3 a = abs(d);
+    float2 uv;
+    float face;
+    if (a.x >= a.y && a.x >= a.z) { uv = d.zy / a.x; face = d.x > 0.0 ? 0.0 : 1.0; }
+    else if (a.y >= a.z) { uv = d.xz / a.y; face = d.y > 0.0 ? 2.0 : 3.0; }
+    else { uv = d.xy / a.z; face = d.z > 0.0 ? 4.0 : 5.0; }
+    float2 grid = (uv * 0.5 + 0.5) * 96.0;
+    float2 cell = floor(grid) + face * 131.0;
+    if (studio_sky_hash(cell) > count / 55296.0) { return 0.0; }
+    float2 spot = float2(studio_sky_hash(cell + 7.1), studio_sky_hash(cell + 3.7)) * 0.6 + 0.2;
+    float r = length(fract(grid) - spot);
+    return smoothstep(0.14, 0.0, r) * (0.35 + 0.65 * studio_sky_hash(cell + 11.0));
+}
+
+// The air in a direction: the Atmosphere's Color towards the sun, its Decay away.
+static float3 studio_air(float3 direction, constant LightingUniforms &lighting) {
+    float towards = dot(direction, normalize(lighting.sunTrue.xyz)) * 0.5 + 0.5;
+    float3 air = mix(lighting.atmosphereDecay.rgb, lighting.atmosphereColor.rgb, towards);
+    return air * (0.2 + 0.8 * lighting.skyHorizon.w);
+}
+
+// Over the sky's colour (the one that follows the day, or a skybox): the glow round the
+// light, the stars, the sun and moon, the clouds, and the Atmosphere's haze.
+static float3 studio_sky_over(float3 color, float3 direction, constant LightingUniforms &lighting, bool stars) {
+    float h = direction.y;
+    float daylight = lighting.skyHorizon.w;
+    float3 toLight = normalize(lighting.sunDirection.xyz);
+    float facing = saturate(dot(direction, toLight));
+    bool day = daylight > 0.3;
+    float3 glowColor = day ? float3(1.0, 0.85, 0.6) : float3(0.6, 0.65, 0.8);
+    // The wide glow is the sky's; the tight one is the sun's (or moon's) halo, hidden with it.
+    float halo = lighting.skyParams.w > 0.5 ? pow(facing, 200.0) * 0.5 : 0.0;
+    color += glowColor * (pow(facing, 12.0) * 0.18 + halo) * (day ? 1.0 : 0.4);
+
+    if (stars && lighting.skyParams.z > 0.5 && h > 0.0) {
+        float night = 1.0 - smoothstep(0.15, 0.6, daylight);
+        color += float3(0.9, 0.92, 1.0) * studio_stars(direction, lighting.skyParams.z) * night * smoothstep(0.0, 0.2, h);
+    }
+
+    float3 sun = normalize(lighting.sunTrue.xyz);
+    if (lighting.skyParams.w > 0.5) {
+        float sunCos = cos(lighting.skyParams.x);
+        float sunDisc = smoothstep(sunCos - 0.0003, sunCos + 0.0001, dot(direction, sun)) * step(-0.02, sun.y);
+        float3 sunColor = mix(float3(1.7, 0.95, 0.55), float3(1.6, 1.5, 1.3), smoothstep(0.0, 0.25, sun.y));
+        color = mix(color, sunColor, sunDisc);
+        // The moon, opposite the sun: pale, marked, faint by day.
+        float3 moon = -sun;
+        float moonCos = cos(lighting.skyParams.y);
+        float into = dot(direction, moon);
+        float moonDisc = smoothstep(moonCos - 0.0003, moonCos + 0.0001, into) * step(-0.02, moon.y);
+        if (moonDisc > 0.0) {
+            float3 across = normalize(cross(moon, abs(moon.y) < 0.9 ? float3(0, 1, 0) : float3(1, 0, 0)));
+            float3 up = cross(across, moon);
+            float2 local = float2(dot(direction, across), dot(direction, up)) / max(lighting.skyParams.y, 1e-4);
+            float marks = 0.78 + 0.22 * studio_value_noise(local * 3.0 + 5.0);
+            color = mix(color, float3(0.86, 0.88, 0.95) * marks, moonDisc * (1.0 - 0.75 * daylight));
+        }
+    }
+
+    if (lighting.cloudParams.z > 0.5 && h > 0.0) {
+        float time = lighting.sunTrue.w;
+        float2 p = direction.xz / max(h, 0.04) * 0.35 + float2(time * 0.006, time * 0.002);
+        float cover = lighting.cloudParams.x;
+        float amount = smoothstep(1.0 - cover - 0.15, 1.0 - cover + 0.2, studio_fbm(p)) * lighting.cloudParams.y;
+        amount *= smoothstep(0.0, 0.15, h);
+        float3 lit = lighting.cloudColor.rgb * (0.12 + 0.88 * daylight);
+        lit += lighting.sunColor.rgb * 0.25 * pow(saturate(dot(direction, sun)), 4.0);
+        color = mix(color, lit, saturate(amount));
+    }
+
+    if (lighting.atmosphereColor.w > 0.5) {
+        float density = lighting.atmosphereParams.x, offset = lighting.atmosphereParams.y;
+        float glare = lighting.atmosphereParams.z, haze = lighting.atmosphereParams.w;
+        float reach = 0.06 + haze * 0.05;
+        float band = h > 0.0 ? exp(-h / reach) : 1.0;
+        float amount = saturate(band * (0.25 + offset * 0.75) * saturate(density * 1.5 + offset + haze * 0.1));
+        color = mix(color, studio_air(direction, lighting), amount);
+        color += lighting.sunColor.rgb * glare * 0.06 * pow(saturate(dot(direction, sun)), 5.0);
+    }
+    return color;
+}
+
 static float3 studio_sky(float3 direction, constant LightingUniforms &lighting) {
     float h = direction.y;
     float3 zenith = lighting.skyZenith.rgb;
@@ -139,15 +282,7 @@ static float3 studio_sky(float3 direction, constant LightingUniforms &lighting) 
     float3 color = mix(horizon, zenith, pow(saturate(h), 0.5));
     float3 ground = horizon * 0.55 + float3(0.02);
     if (h < 0.0) { color = mix(horizon, ground, saturate(-h * 5.0)); }
-
-    float3 toLight = normalize(lighting.sunDirection.xyz);
-    float facing = saturate(dot(direction, toLight));
-    bool day = lighting.skyHorizon.w > 0.3;
-    float3 glowColor = day ? float3(1.0, 0.85, 0.6) : float3(0.6, 0.65, 0.8);
-    color += glowColor * (pow(facing, 12.0) * 0.18 + pow(facing, 200.0) * 0.5) * (day ? 1.0 : 0.4);
-    float disc = smoothstep(0.9993, 0.9997, dot(direction, toLight));
-    color = mix(color, day ? float3(1.6, 1.5, 1.3) : float3(0.85, 0.88, 0.95), disc * step(-0.02, toLight.y));
-    return color;
+    return studio_sky_over(color, direction, lighting, true);
 }
 
 static float studio_shadow_map(float3 position, float3 normal, constant LightingUniforms &lighting,
@@ -354,6 +489,12 @@ static float3 studio_finish(float3 color, float3 position, float3 cameraPosition
     float start = lighting.fogColor.w;
     float end = lighting.fogParams.x;
     float fog = saturate((distance - start) / max(end - start, 0.01));
+    // The Atmosphere: far things fade into the air.
+    if (lighting.atmosphereColor.w > 0.5) {
+        float density = lighting.atmosphereParams.x;
+        float amount = 1.0 - exp(-distance * pow(density, 1.5) * 0.006);
+        color = mix(color, studio_air((position - cameraPosition) / max(distance, 1e-4), lighting), amount);
+    }
     color = mix(color, lighting.fogColor.rgb, fog);
     return color * lighting.ambient.w;
 }

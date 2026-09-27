@@ -83,6 +83,11 @@ enum AdventureIsland {
             lighting.fogColor = rgb(190, 214, 235)
             lighting.fogStart = 160
             lighting.fogEnd = 460
+            // Fair-weather clouds drifting over.
+            var clouds = CloudSettings()
+            clouds.cover = 0.45
+            clouds.density = 0.6
+            lighting.clouds = clouds
             return lighting
         }
 

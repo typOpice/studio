@@ -433,7 +433,10 @@ enum LuauAPI {
             property("FogStart", "number"), property("FogEnd", "number"),
             property("GeographicLatitude", "number"), property("Technology", "EnumItem"),
             method("GetSunDirection", "", "Vector3"), method("GetMinutesAfterMidnight", "", "number"),
-            method("SetMinutesAfterMidnight", "minutes", "()")
+            method("SetMinutesAfterMidnight", "minutes", "()"),
+            property("Sky", "Sky"), property("Atmosphere", "Atmosphere"), property("Clouds", "Clouds"),
+            method("GetChildren", "", "table"), method("FindFirstChild", "name", "Instance"),
+            method("FindFirstChildOfClass", "className", "Instance")
         ],
         "Attachment": [
             property("Name", "string"), property("Parent", "Part"), property("Position", "Vector3"),
@@ -567,6 +570,24 @@ enum LuauAPI {
             property("TextureLength", "number"), property("TextureMode", "EnumItem"),
             property("LightEmission", "number"), property("Brightness", "number"),
             method("Clear", "", "()"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "Sky": [
+            property("Name", "string"), property("Parent", "Lighting"), property("CelestialBodiesShown", "boolean"),
+            property("StarCount", "number"), property("SunAngularSize", "number"), property("MoonAngularSize", "number"),
+            property("SkyboxBk", "string"), property("SkyboxDn", "string"), property("SkyboxFt", "string"),
+            property("SkyboxLf", "string"), property("SkyboxRt", "string"), property("SkyboxUp", "string"),
+            method("Clone", "", "Sky"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "Atmosphere": [
+            property("Name", "string"), property("Parent", "Lighting"), property("Density", "number"),
+            property("Offset", "number"), property("Color", "Color3"), property("Decay", "Color3"),
+            property("Glare", "number"), property("Haze", "number"),
+            method("Clone", "", "Atmosphere"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "Clouds": [
+            property("Name", "string"), property("Parent", "Lighting"), property("Enabled", "boolean"),
+            property("Cover", "number"), property("Density", "number"), property("Color", "Color3"),
+            method("Clone", "", "Clouds"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
         ],
         "ParticleEmitter": [
             property("Name", "string"), property("Parent", "Part"), property("Enabled", "boolean"),
