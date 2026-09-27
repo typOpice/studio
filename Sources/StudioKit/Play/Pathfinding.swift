@@ -56,6 +56,8 @@ final class NavigationGrid {
     private(set) var width = 0, depth = 0
     private var spans: [[Span]] = []
     private var footprints: [UUID: (signature: Signature, cells: [Int])] = [:]
+    /// How many parts it has drawn (`--soak` watches it).
+    var partsDrawn: Int { footprints.count }
     /// Each cell's solid intervals, merged, and the material on top of each; made when asked.
     private var merged: [[(bottom: Float, top: Float, material: String)]?] = []
     var ground = true

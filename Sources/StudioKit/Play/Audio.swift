@@ -18,34 +18,107 @@ protocol AudioOutput: AnyObject {
 /// varispeed (PlaybackSpeed), into the 3D environment if it's in a part, else straight
 /// to the mix. Fading with distance is done by `SoundSystem`, not the environment, so
 /// every Sound can have its own reach.
+///
+/// AVAudioEngine throws — an Objective-C exception, which ends the app — if a player
+/// is started without a way to the output. Three things once made that happen, and are
+/// guarded against here:
+/// - `connect(_:to:format:)` into a mixer takes its input bus 0, knocking off whatever
+///   was there: every sound goes to the mixer's *next free* bus instead.
+/// - Starting the engine drops the environment's connection while nothing feeds it: it
+///   is wired when a 3D sound first needs it, and checked every time.
+/// - macOS stops the engine when the audio device changes (headphones, a display
+///   waking): it is started again, and looping sounds resume.
+/// A player is only ever started once its way to the output is there.
 final class SpeakerOutput: AudioOutput {
     private let engine = AVAudioEngine()
     private let environment = AVAudioEnvironmentNode()
-    private var voices: [UUID: (player: AVAudioPlayerNode, pitch: AVAudioUnitVarispeed)] = [:]
-    private var running = false
+    private struct Voice {
+        let player: AVAudioPlayerNode
+        let pitch: AVAudioUnitVarispeed
+        let buffer: AVAudioPCMBuffer
+        let looped: Bool
+        let spatial: Bool
+    }
+    private var voices: [UUID: Voice] = [:]
+    private var changes: NSObjectProtocol?
+    /// Rendering to a buffer instead of the speakers (the self-tests).
+    let offline: Bool
 
-    init() {
+    init(offline: Bool = false) {
+        self.offline = offline
         engine.attach(environment)
-        engine.connect(environment, to: engine.mainMixerNode, format: nil)
         environment.distanceAttenuationParameters.rolloffFactor = 0
         environment.reverbParameters.enable = false
+        if offline, let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2) {
+            try? engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 4096)
+        }
+        changes = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine,
+                                                         queue: .main) { [weak self] _ in
+            self?.recover()
+        }
     }
 
-    private func run() {
-        guard !running else { return }
+    deinit {
+        if let changes { NotificationCenter.default.removeObserver(changes) }
+        engine.stop()
+    }
+
+    /// The engine running, started (again) if it isn't.
+    @discardableResult
+    private func run() -> Bool {
+        if engine.isRunning { return true }
         engine.prepare()
-        running = (try? engine.start()) != nil
+        do { try engine.start() } catch { return false }
+        return engine.isRunning
+    }
+
+    private var mixFormat: AVAudioFormat {
+        let format = engine.mainMixerNode.outputFormat(forBus: 0)
+        return format.sampleRate > 0 && format.channelCount > 0
+            ? format : AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
+    }
+
+    /// The environment into the mixer, on a bus of its own, if it isn't already.
+    private func wireEnvironment() {
+        guard engine.outputConnectionPoints(for: environment, outputBus: 0).isEmpty else { return }
+        let mixer = engine.mainMixerNode
+        engine.connect(environment, to: mixer, fromBus: 0, toBus: mixer.nextAvailableInputBus, format: mixFormat)
+    }
+
+    private func wire(_ pitch: AVAudioUnitVarispeed, format: AVAudioFormat, spatial: Bool) {
+        if spatial {
+            wireEnvironment()
+            engine.connect(pitch, to: environment, fromBus: 0, toBus: environment.nextAvailableInputBus, format: format)
+        } else {
+            let mixer = engine.mainMixerNode
+            engine.connect(pitch, to: mixer, fromBus: 0, toBus: mixer.nextAvailableInputBus, format: format)
+        }
+    }
+
+    /// Whether a voice's sound can reach the output.
+    private func reaches(_ pitch: AVAudioUnitVarispeed, spatial: Bool) -> Bool {
+        let out = engine.outputConnectionPoints(for: pitch, outputBus: 0)
+        guard !out.isEmpty else { return false }
+        return !spatial || !engine.outputConnectionPoints(for: environment, outputBus: 0).isEmpty
+    }
+
+    /// Whether a sound is playing with a way to the output (the self-tests ask).
+    func isHeard(_ id: UUID) -> Bool {
+        guard let voice = voices[id] else { return false }
+        return voice.player.isPlaying && reaches(voice.pitch, spatial: voice.spatial)
     }
 
     func start(_ id: UUID, buffer: AVAudioPCMBuffer, from time: Double, looped: Bool,
                volume: Float, speed: Float, at position: Vec3?) {
         stop(id)
+        guard buffer.frameLength > 0 else { return }
         let player = AVAudioPlayerNode()
         let pitch = AVAudioUnitVarispeed()
+        let spatial = position != nil
         engine.attach(player)
         engine.attach(pitch)
         engine.connect(player, to: pitch, format: buffer.format)
-        engine.connect(pitch, to: position == nil ? engine.mainMixerNode : environment, format: buffer.format)
+        wire(pitch, format: buffer.format, spatial: spatial)
         if let position {
             player.renderingAlgorithm = .equalPowerPanning
             player.position = AVAudio3DPoint(x: position.x, y: position.y, z: position.z)
@@ -59,10 +132,20 @@ final class SpeakerOutput: AudioOutput {
         } else {
             player.scheduleBuffer(buffer, at: nil, options: looped ? .loops : [])
         }
-        run()
-        guard running else { return }
-        player.play()
-        voices[id] = (player, pitch)
+        let voice = Voice(player: player, pitch: pitch, buffer: buffer, looped: looped, spatial: spatial)
+        voices[id] = voice
+        play(voice)
+    }
+
+    /// Starts a voice's player — only with the engine running and its way to the output
+    /// there (wired again if starting the engine undid it); otherwise it stays silent.
+    private func play(_ voice: Voice) {
+        guard run() else { return }
+        if !reaches(voice.pitch, spatial: voice.spatial) {
+            if voice.spatial { wireEnvironment() }
+            guard reaches(voice.pitch, spatial: voice.spatial) else { return }
+        }
+        voice.player.play()
     }
 
     func stop(_ id: UUID) {
@@ -70,6 +153,31 @@ final class SpeakerOutput: AudioOutput {
         voice.player.stop()
         engine.detach(voice.player)
         engine.detach(voice.pitch)
+    }
+
+    /// The engine was stopped by a change of audio device: start it again. Looping
+    /// sounds (music, ambience) carry on from their start; the rest were short and are let go.
+    func recover() {
+        for (id, voice) in voices where !voice.looped { stop(id) }
+        guard run() else { return }
+        for voice in voices.values {
+            voice.player.stop()
+            voice.player.scheduleBuffer(voice.buffer, at: nil, options: .loops)
+            play(voice)
+        }
+    }
+
+    /// What comes out, rendered offline: the loudest sample over `frames` (the self-tests).
+    func renderOffline(frames: AVAudioFrameCount) -> Float {
+        guard offline, run(),
+              let out = AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: frames),
+              (try? engine.renderOffline(frames, to: out)) == .success,
+              let channels = out.floatChannelData else { return 0 }
+        var peak: Float = 0
+        for channel in 0..<Int(out.format.channelCount) {
+            for frame in 0..<Int(out.frameLength) { peak = max(peak, abs(channels[channel][frame])) }
+        }
+        return peak
     }
 
     func update(_ id: UUID, volume: Float, speed: Float, at position: Vec3?) {
@@ -142,6 +250,8 @@ final class SoundSystem {
         let duration: Double
     }
     private var voices: [UUID: Voice] = [:]
+    /// How many Sounds are being heard (`--soak` watches it).
+    var voiceCount: Int { voices.count }
     /// Sounds that ran out, by the `plays` they ran out at: not started again until played again.
     private var finished: [UUID: Int] = [:]
 

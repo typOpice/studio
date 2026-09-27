@@ -122,6 +122,9 @@ final class ClientAppDelegate: NSObject, NSApplicationDelegate {
 /// Entry point for the client executable.
 public enum StudioClientApp {
     public static func run() -> Never {
+        // An Objective-C exception (AVFoundation's, say) ends the app with a crash report,
+        // rather than AppKit swallowing it mid-frame and leaving the game frozen.
+        UserDefaults.standard.register(defaults: ["NSApplicationCrashOnExceptions": true])
         let app = NSApplication.shared
         let delegate = ClientAppDelegate()
         app.delegate = delegate

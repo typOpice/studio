@@ -141,6 +141,11 @@ final class PlayController: ViewportSource, PlayerBridge {
     func start() {
         model.clearLocalScreenShaders()
         BuiltinSounds.prepare(for: model)
+        // A game is running: macOS mustn't nap the app when its window is hidden or
+        // behind another, or its timers slow to a crawl and — hosting — the world stops
+        // for everyone who joined.
+        activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
+                                                         reason: "Playing a game")
         scripts.runsSceneScripts = !worldFromHost
         settings = model.starterPlayer
         respawnTime = settings.respawnTime
@@ -154,6 +159,8 @@ final class PlayController: ViewportSource, PlayerBridge {
     }
 
     func stop() {
+        if let activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = nil
         model.clearLocalScreenShaders()
         scripts.stop()
         sounds.stopAll()
@@ -349,6 +356,9 @@ final class PlayController: ViewportSource, PlayerBridge {
         step(dt: dt)
         refreshHUD(dt: dt)
     }
+
+    /// Keeps App Nap away while the game runs (`start` to `stop`).
+    private var activity: NSObjectProtocol?
 
     /// What Stop in the debugger does: the editor ends the session.
     var onDebuggerStop: (() -> Void)?

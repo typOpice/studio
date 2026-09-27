@@ -18,6 +18,8 @@ import simd
 /// one stops Wren's updates. Wren has no watchdog.
 final class ScriptRuntime {
     private var interpreter: LuauInterpreter?
+    /// What the Luau VM holds, in bytes (`--soak` watches it).
+    var luauMemory: Int { interpreter?.memoryUsed ?? 0 }
     private var wren: WrenInterpreter?
     unowned let model: SceneModel
     let console: ScriptConsole

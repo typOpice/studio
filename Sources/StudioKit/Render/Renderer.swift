@@ -291,12 +291,16 @@ final class Renderer: NSObject, MTKViewDelegate {
     }
 
     func draw(in view: MTKView) {
+        // The game's frame first — scripts, physics, sounds — and only then a command
+        // buffer. Anything that goes wrong in the game can then never leave a buffer
+        // taken and not committed: the queue holds only 64, and once they're gone the
+        // next frame waits for one for ever.
+        source.stepFrame()
         guard let descriptor = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let buffer = commandQueue.makeCommandBuffer()
         else { return }
 
-        source.stepFrame()
         encodeFrame(buffer, into: descriptor)
         buffer.present(drawable)
         buffer.commit()

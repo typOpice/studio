@@ -378,6 +378,16 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the host stops in a RemoteEvent handler showing the joined player's message, and the reply reaches them when it continues).
    New files: Scripting/ScriptDebugger.swift, UI/DebuggerPanel.swift, DebuggerSelfTest.swift. The Luau shim (not Luau itself) gained the debugger hooks.
 
+35. Engine check: the crash in long games, found and fixed, 2026-09-26.
+   The cause: the first 3D sound (a sound in a part) crashed the game. In Nightfall that's the zombies' groans at nightfall; in Mega Obby, a jump pad. Apple's audio engine refused to play a sound whose connection to the speakers had been lost, and threw an error that ends the app.
+   How the connection got lost: the spatial-sound part of the audio engine was wired only once, at startup, and starting the engine silently undid that. Also, every new sound took the first input of the mixer, knocking whatever was there off it. That could cut the music out when a gong or a hit played.
+   Why it sometimes froze instead of crashing: when the error happened while drawing a frame, macOS quietly swallowed it but left that frame's graphics work half-started. After 64 frames the game waited for ever for graphics that never came: a frozen picture with no crash report.
+   Fixed: each sound gets its own input to the mixer; the 3D part is wired when needed and checked every time; the audio engine is restarted if macOS stops it (for example when headphones go in), with the music carrying on; a sound is only started when it can actually reach the speakers; each frame runs the game before starting its graphics work; and both apps now crash with a report instead of freezing if anything like this ever happens again.
+   Also: a running game is no longer slowed down by macOS's App Nap when its window is hidden or behind another (important when hosting: the world no longer stops for the other players).
+   Checked by playing Nightfall in the real client through several minutes of night, and by a new self-test suite (EngineSelfTest) that runs the real audio engine offline.
+   New tools: swift run StudioApp --soak nightfall 300 (plays a game for minutes and prints memory and object counts; add render, audio or window), and --make-place (writes a sample game as a file).
+   New files: App/Soak.swift, EngineSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

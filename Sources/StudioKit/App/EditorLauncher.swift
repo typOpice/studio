@@ -606,6 +606,44 @@ public enum StudioEditor {
             exit(AvatarSnapshot.renderScene(to: URL(fileURLWithPath: path), technology: technology,
                                             clockTime: clock) ? 0 : 1)
         }
+        if let flag = CommandLine.arguments.firstIndex(of: "--make-place") {
+            // A sample game as a scene file: adventure, nightfall, obby or starter.
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let games: [String: PlaceTemplate] = ["adventure": .adventure, "nightfall": .nightfall, "obby": .megaObby,
+                                                  "starter": .starter]
+            guard let game = arguments.first.flatMap({ games[$0.lowercased()] }), arguments.count > 1 else {
+                print("--make-place adventure|nightfall|obby|starter <file>")
+                exit(1)
+            }
+            let model = MainActor.assumeIsolated { () -> SceneModel in
+                let model = SceneModel()
+                model.loadTemplate(game)
+                return model
+            }
+            do {
+                try MainActor.assumeIsolated { try model.encodeScene() }.write(to: URL(fileURLWithPath: arguments[1]))
+                print("Wrote \(arguments[1])")
+                exit(0)
+            } catch {
+                print("Could not write \(arguments[1]): \(error)")
+                exit(1)
+            }
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--soak") {
+            // Plays a sample game headlessly for a while, reporting what grows.
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let seconds = arguments.count > 1 ? Double(arguments[1]) ?? 300 : 300
+            let render = arguments.contains("render")
+            if arguments.contains("window") {
+                exit(MainActor.assumeIsolated {
+                    Soak.runInWindow(game: arguments.first ?? "nightfall", seconds: seconds)
+                } ? 0 : 1)
+            }
+            exit(MainActor.assumeIsolated {
+                Soak.run(game: arguments.first ?? "nightfall", seconds: seconds, render: render,
+                         audio: arguments.contains("audio"))
+            } ? 0 : 1)
+        }
         if let flag = CommandLine.arguments.firstIndex(of: "--write-sounds") {
             // Every built-in sound as a WAV file, to listen to.
             let folder = URL(fileURLWithPath: flag + 1 < CommandLine.arguments.count ? CommandLine.arguments[flag + 1] : "Sounds")
@@ -684,6 +722,9 @@ public enum StudioEditor {
             let path = flag + 1 < arguments.count ? arguments[flag + 1] : "avatar.png"
             exit(AvatarSnapshot.render(to: URL(fileURLWithPath: path)) ? 0 : 1)
         }
+        // An Objective-C exception (AVFoundation's, say) ends the app with a crash report,
+        // rather than AppKit swallowing it mid-frame and leaving the game frozen.
+        UserDefaults.standard.register(defaults: ["NSApplicationCrashOnExceptions": true])
         let app = NSApplication.shared
         let delegate = EditorAppDelegate()
         app.delegate = delegate
