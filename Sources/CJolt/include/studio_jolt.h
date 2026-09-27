@@ -117,6 +117,9 @@ uint32_t studio_jolt_add_joint(StudioJoltWorld *world, int kind, uint32_t bodyA,
                                const float *normalA, const float *normalB,
                                const float *values, int valueCount, int noCollide);
 void studio_jolt_remove_joint(StudioJoltWorld *world, uint32_t joint);
+/// Two bodies that pass through each other (a NoCollisionConstraint): counted, so `on` 0
+/// undoes one `on` 1, and a joint's own no-colliding is kept apart from it.
+void studio_jolt_ignore_pair(StudioJoltWorld *world, uint32_t bodyA, uint32_t bodyB, int on);
 /// Drives a hinge (rad/s, torque) or slider (studs/s, force) at a speed, or stops
 /// driving it when `on` is 0.
 void studio_jolt_drive_joint(StudioJoltWorld *world, uint32_t joint, int on, float speed, float limit);

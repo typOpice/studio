@@ -450,6 +450,15 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Also fixed: particles and ribbons no longer borrow the texture slot the shadows use.
    New files: Model/SkyObjects.swift, Scripting/ScriptRuntime+Sky.swift, UI/SkyUI.swift, SkySelfTest.swift.
 
+44. Pushes, pulls and passing through (AlignPosition, VectorForce, NoCollisionConstraint), 2026-09-27.
+   Three more physics constraints, as in Roblox, for parts that aren't anchored.
+   AlignPosition pulls a part to another (or to a point) and holds it there, as hard as MaxForce allows, no faster than MaxVelocity. Physics tab > Align Position: click the part, then where it goes.
+   VectorForce pushes a part all the time: thrusters, wind, floating. Physics tab > VectorForce adds one that makes the part float.
+   NoCollisionConstraint lets two parts pass through each other. Physics tab > No Collision.
+   Scripts use Roblox's names: Instance.new("AlignPosition"), Enum.PositionAlignmentMode, Enum.ActuatorRelativeTo, and the rest.
+   Tested alone and with a host and a joined player (the joined player sees a crate the host's AlignPosition lifts).
+   New files: Scripting/ScriptRuntime+Forces.swift, ForceSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

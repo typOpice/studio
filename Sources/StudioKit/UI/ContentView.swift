@@ -365,7 +365,7 @@ struct RibbonView: View {
 
     @ViewBuilder private var physicsGroups: some View {
         group("Join tools") {
-            ForEach(SceneConstraint.Kind.allCases.filter { !$0.isEffect }) { kind in
+            ForEach(SceneConstraint.Kind.allCases.filter { !$0.isEffect && $0.joinsTwoParts }) { kind in
                 RibbonButton(title: kind.displayName, icon: kind.symbolName,
                              active: model.joinTool == kind) {
                     toggleTool(kind)
@@ -383,6 +383,16 @@ struct RibbonView: View {
             RibbonButton(title: "Trail", icon: SceneConstraint.Kind.trail.symbolName,
                          enabled: model.selectedParts.count == 1) {
                 if let part = model.selectedParts.first { model.addTrail(to: part.id) }
+            }
+        }
+
+        divider
+
+        // A push on the selected part (Align Position and No Collision are join tools).
+        group("Forces") {
+            RibbonButton(title: "VectorForce", icon: SceneConstraint.Kind.vectorForce.symbolName,
+                         enabled: model.selectedParts.count == 1) {
+                if let part = model.selectedParts.first { model.addVectorForce(to: part.id) }
             }
         }
 

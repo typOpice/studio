@@ -635,6 +635,22 @@ constraintKit.constraintMembers = {
 		Velocity = "number", MotorMaxForce = "number", TargetPosition = "number", Speed = "number",
 		ServoMaxForce = "number", CurrentPosition = "read",
 	},
+	-- Pushes and pulls, applied each physics step (PhysicsWorld.applyForces). A table's
+	-- third entry is the host call it goes through.
+	AlignPosition = {
+		Attachment0 = "attachment", Attachment1 = "attachment", Enabled = "bool", Active = "read",
+		Mode = { "mode", "PositionAlignmentMode", "force" }, Position = { "position", "Vector3", "force" },
+		MaxForce = { "maxforce", "number", "force" }, MaxVelocity = { "maxvelocity", "number", "force" },
+		Responsiveness = { "responsiveness", "number", "force" },
+		RigidityEnabled = { "rigidityenabled", "boolean", "force" },
+		ApplyAtCenterOfMass = { "applyatcenterofmass", "boolean", "force" },
+	},
+	VectorForce = {
+		Attachment0 = "attachment", Attachment1 = "attachment", Enabled = "bool", Active = "read",
+		Force = { "force", "Vector3", "force" }, RelativeTo = { "relativeto", "ActuatorRelativeTo", "force" },
+		ApplyAtCenterOfMass = { "applyatcenterofmass", "boolean", "force" },
+	},
+	NoCollisionConstraint = { Part0 = "part", Part1 = "part", Enabled = "bool", Active = "read" },
 	-- Beams and Trails: drawn, not joints. A table is a look (Ribbons.swift): its host
 	-- name and type, converted as a ParticleEmitter's are.
 	Beam = {
@@ -722,7 +738,7 @@ constraintKit.ConstraintMeta.__index = function(object, key)
 	local members = constraintKit.constraintMembers[kind]
 	local member = members[key]
 	if type(member) == "table" then
-		return emitterKit.read(member[2], invoke("ribbon.get", id, member[1]))
+		return emitterKit.read(member[2], invoke((member[3] or "ribbon") .. ".get", id, member[1]))
 	elseif member == "number" then
 		return invoke("constraint.get", id, constraintKit.constraintNumbers[key])
 	elseif member == "bool" then
@@ -812,7 +828,7 @@ constraintKit.ConstraintMeta.__newindex = function(object, key, value)
 		if raw == nil then
 			raise(string.format("Unable to assign property %s. %s expected, got %s", key, member[2], typeof(value)), 2)
 		end
-		if not invoke("ribbon.set", id, member[1], raw) then
+		if not invoke((member[3] or "ribbon") .. ".set", id, member[1], raw) then
 			raise(string.format("Unable to assign property %s: %s is out of range", key, tostring(value)), 2)
 		end
 		return

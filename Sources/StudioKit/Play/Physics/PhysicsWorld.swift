@@ -49,6 +49,22 @@ final class PhysicsWorld {
     private var written: [UUID: Pose] = [:]
     private var partMass: [UUID: Float] = [:]
     private var joints: [UUID: JointRecord] = [:]
+    /// NoCollisionConstraints' pairs of bodies, as last told to Jolt.
+    private var ignoredPairs: [UUID: (UInt32, UInt32)] = [:]
+    /// AlignPositions and VectorForces, worked out at each sync and applied each step.
+    private var forces: [ForceRecord] = []
+
+    /// A push on a body: what the constraint says, and where its ends are on bodies (or
+    /// fixed in the world).
+    private struct ForceRecord {
+        let constraint: SceneConstraint
+        let body: UInt32
+        /// Attachment0 in its body's frame, and its axes (for RelativeTo Attachment0).
+        let point: Vec3
+        let frame0: simd_quatf
+        /// Attachment1: on a body, in its frame; or where it is, if its part isn't simulated.
+        let target: (body: UInt32?, point: Vec3, frame: simd_quatf)?
+    }
     private var recentlyAwake: Set<UInt32> = []
     private var accumulator: Float = 0
     private var touchCounts: [[UUID]: Int] = [:]
@@ -347,6 +363,10 @@ final class PhysicsWorld {
 
     private func remove(_ handle: UInt32) {
         guard let assembly = assemblies.removeValue(forKey: handle) else { return }
+        for (id, pair) in ignoredPairs where pair.0 == handle || pair.1 == handle {
+            studio_jolt_ignore_pair(world, pair.0, pair.1, 0)
+            ignoredPairs.removeValue(forKey: id)
+        }
         // Jolt drops the body's joints with it; forget them here too.
         for (id, joint) in joints where joint.bodies.0 == handle || joint.bodies.1 == handle {
             joints.removeValue(forKey: id)
@@ -371,7 +391,9 @@ final class PhysicsWorld {
     private func syncJoints(_ constraints: [SceneConstraint], attachments: [SceneAttachment], parts: [UUID: Part]) {
         let byID = Dictionary(uniqueKeysWithValues: attachments.map { ($0.id, $0) })
         var live: Set<UUID> = []
-        for constraint in constraints where constraint.kind != .weld && !constraint.kind.isEffect && constraint.enabled {
+        syncNoCollisions(constraints, parts: parts)
+        syncForces(constraints, attachments: byID, parts: parts)
+        for constraint in constraints where constraint.kind.isJoint && constraint.enabled {
             guard let a0 = constraint.attachment0.flatMap({ byID[$0] }), let a1 = constraint.attachment1.flatMap({ byID[$0] }),
                   let p0 = parts[a0.parentID], let p1 = parts[a1.parentID],
                   let b0 = assemblyOf[p0.id], let b1 = assemblyOf[p1.id], b0 != b1,
@@ -420,7 +442,7 @@ final class PhysicsWorld {
                 case .prismatic:
                     kind = STUDIO_JOLT_SLIDER
                     values = [constraint.limitsEnabled ? 1 : 0, constraint.lowerLimit, constraint.upperLimit]
-                case .weld, .beam, .trail:
+                case .weld, .beam, .trail, .alignPosition, .vectorForce, .noCollision:
                     continue
                 }
                 // Parts joined at a point shouldn't grind against each other.
@@ -462,6 +484,119 @@ final class PhysicsWorld {
         for (id, joint) in joints where !live.contains(id) {
             studio_jolt_remove_joint(world, joint.handle)
             joints.removeValue(forKey: id)
+        }
+    }
+
+    // MARK: - NoCollisionConstraints
+
+    /// Each enabled one between parts of two different bodies: that pair ignored.
+    private func syncNoCollisions(_ constraints: [SceneConstraint], parts: [UUID: Part]) {
+        var live: [UUID: (UInt32, UInt32)] = [:]
+        for constraint in constraints where constraint.kind == .noCollision && constraint.enabled {
+            guard let a = constraint.part0, let b = constraint.part1, parts[a] != nil, parts[b] != nil,
+                  let b0 = assemblyOf[a], let b1 = assemblyOf[b], b0 != b1 else { continue }
+            live[constraint.id] = (b0, b1)
+        }
+        for (id, pair) in ignoredPairs where live[id].map({ $0 != pair }) ?? true {
+            studio_jolt_ignore_pair(world, pair.0, pair.1, 0)
+            ignoredPairs.removeValue(forKey: id)
+        }
+        for (id, pair) in live where ignoredPairs[id] == nil {
+            studio_jolt_ignore_pair(world, pair.0, pair.1, 1)
+            ignoredPairs[id] = pair
+        }
+    }
+
+    // MARK: - AlignPosition and VectorForce
+
+    /// Where each enabled one's ends are, on which bodies; only those on a body that moves.
+    private func syncForces(_ constraints: [SceneConstraint], attachments: [UUID: SceneAttachment], parts: [UUID: Part]) {
+        forces = []
+        for constraint in constraints where constraint.kind.isForce && constraint.enabled {
+            guard let a0 = constraint.attachment0.flatMap({ attachments[$0] }), let p0 = parts[a0.parentID],
+                  let body = assemblyOf[p0.id], let assembly = assemblies[body], !assembly.isStatic,
+                  let local = assembly.members.first(where: { $0.id == p0.id })?.local else { continue }
+            let point = local.position + local.orientation.act(a0.position)
+            let frame0 = local.orientation * Self.frame(axis: a0.axis, secondary: a0.secondaryAxis)
+            var target: (body: UInt32?, point: Vec3, frame: simd_quatf)?
+            if let a1 = constraint.attachment1.flatMap({ attachments[$0] }), let p1 = parts[a1.parentID] {
+                let frame1 = Self.frame(axis: a1.axis, secondary: a1.secondaryAxis)
+                if let other = assemblyOf[p1.id], let otherAssembly = assemblies[other], !otherAssembly.isStatic,
+                   let otherLocal = otherAssembly.members.first(where: { $0.id == p1.id })?.local {
+                    target = (other, otherLocal.position + otherLocal.orientation.act(a1.position),
+                              otherLocal.orientation * frame1)
+                } else {
+                    target = (nil, p1.position + p1.orientation.act(a1.position), p1.orientation * frame1)
+                }
+            }
+            if constraint.kind == .alignPosition, constraint.alignMode == .twoAttachment, target == nil { continue }
+            forces.append(ForceRecord(constraint: constraint, body: body, point: point, frame0: frame0, target: target))
+        }
+    }
+
+    /// An attachment's axes as a rotation: X along Axis, Y along SecondaryAxis.
+    private static func frame(axis: Vec3, secondary: Vec3) -> simd_quatf {
+        let x = simd_normalize(axis), y = simd_normalize(secondary), z = simd_cross(x, y)
+        return simd_quatf(float3x3(x, y, z))
+    }
+
+    private func pose(of body: UInt32) -> Pose {
+        var p = [Float](repeating: 0, count: 3)
+        var q: [Float] = [0, 0, 0, 1]
+        studio_jolt_get_pose(world, body, &p, &q)
+        return Pose(position: Vec3(p[0], p[1], p[2]), orientation: simd_quatf(vector: SIMD4(q[0], q[1], q[2], q[3])))
+    }
+
+    /// Before each step: every VectorForce's push, and every AlignPosition's pull towards
+    /// where it's going — the velocity it wants (Responsiveness × the gap, no more than
+    /// MaxVelocity) got to as far as MaxForce allows in one step.
+    private func applyForces(dt: Float) {
+        for record in forces {
+            let c = record.constraint, bodyPose = pose(of: record.body)
+            let point = bodyPose.position + bodyPose.orientation.act(record.point)
+            var impulse = Vec3.zero
+            switch c.kind {
+            case .vectorForce:
+                var push = c.force
+                switch c.relativeTo {
+                case .world: break
+                case .attachment0: push = (bodyPose.orientation * record.frame0).act(push)
+                case .attachment1:
+                    if let target = record.target {
+                        let frame = target.body.map { pose(of: $0).orientation * target.frame } ?? target.frame
+                        push = frame.act(push)
+                    }
+                }
+                impulse = push * dt
+            case .alignPosition:
+                var goal = c.position
+                if c.alignMode == .twoAttachment, let target = record.target {
+                    goal = target.body.map { pose(of: $0).applying(Pose(position: target.point, orientation: target.frame)).position }
+                        ?? target.point
+                }
+                var velocity = [Float](repeating: 0, count: 3)
+                studio_jolt_get_velocity(world, record.body, &velocity)
+                let current = Vec3(velocity[0], velocity[1], velocity[2])
+                let gap = goal - point
+                var wanted = c.rigidityEnabled ? gap / dt : gap * max(c.responsiveness, 0) * 0.35
+                let most = c.maxVelocity.isFinite ? max(c.maxVelocity, 0) : Float.greatestFiniteMagnitude
+                if simd_length(wanted) > most { wanted = simd_normalize(wanted) * most }
+                let mass = studio_jolt_mass(world, record.body)
+                // What getting there takes this step, gravity's pull made good.
+                impulse = (wanted - current) * mass + Vec3(0, gravity * mass * dt, 0)
+                let limit = (c.rigidityEnabled ? Float.greatestFiniteMagnitude : max(c.maxForce, 0)) * dt
+                if simd_length(impulse) > limit { impulse = simd_normalize(impulse) * limit }
+            default:
+                continue
+            }
+            guard simd_length(impulse) > 0, impulse.x.isFinite, impulse.y.isFinite, impulse.z.isFinite else { continue }
+            studio_jolt_wake(world, record.body)
+            studio_jolt_add_impulse(world, record.body, Self.floats(impulse))
+            if !c.applyAtCenterOfMass, c.kind == .vectorForce {
+                // Off the middle, it turns the body too.
+                let turn = simd_cross(point - bodyPose.position, impulse)
+                if simd_length(turn) > 1e-6 { studio_jolt_add_angular_impulse(world, record.body, Self.floats(turn)) }
+            }
         }
     }
 
@@ -598,6 +733,7 @@ final class PhysicsWorld {
         accumulator += min(max(dt, 0), 0.1)
         var steps = 0
         while accumulator >= Self.timeStep && steps < Self.maxSteps {
+            applyForces(dt: Self.timeStep)
             studio_jolt_step(world, Self.timeStep, Self.collisionSteps)
             accumulator -= Self.timeStep
             steps += 1

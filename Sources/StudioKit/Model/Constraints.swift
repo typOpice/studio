@@ -46,6 +46,21 @@ struct SceneAttachment: Codable, Equatable, Identifiable {
     }
 }
 
+/// How an AlignPosition finds where to go — Roblox's PositionAlignmentMode.
+enum AlignMode: String, Codable, CaseIterable, Identifiable {
+    /// To Position, in the world.
+    case oneAttachment = "OneAttachment"
+    /// To Attachment1.
+    case twoAttachment = "TwoAttachment"
+    var id: String { rawValue }
+}
+
+/// Which way a VectorForce's Force points — Roblox's ActuatorRelativeTo.
+enum ForceFrame: String, Codable, CaseIterable, Identifiable {
+    case attachment0 = "Attachment0", attachment1 = "Attachment1", world = "World"
+    var id: String { rawValue }
+}
+
 /// How a hinge or slider is driven — Roblox's ActuatorType.
 enum ActuatorType: String, Codable, CaseIterable, Identifiable {
     case none = "None"
@@ -72,6 +87,12 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
         case spring = "SpringConstraint"
         /// Slides along an axis: lifts, pistons, drawers.
         case prismatic = "PrismaticConstraint"
+        /// Pulls Attachment0's part to Attachment1 (or to Position), as hard as MaxForce lets it.
+        case alignPosition = "AlignPosition"
+        /// Pushes Attachment0's part with a Force, all the time: thrusters, wind, anti-gravity.
+        case vectorForce = "VectorForce"
+        /// Two parts that pass through each other.
+        case noCollision = "NoCollisionConstraint"
         /// Not a joint: a ribbon drawn between its two attachments (Ribbons.swift).
         case beam = "Beam"
         /// Not a joint: a ribbon left behind its two attachments as they move.
@@ -87,6 +108,9 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
             case .rope: return "Rope"
             case .spring: return "Spring"
             case .prismatic: return "Prismatic"
+            case .alignPosition: return "Align Position"
+            case .vectorForce: return "Vector Force"
+            case .noCollision: return "No Collision"
             case .beam: return "Beam"
             case .trail: return "Trail"
             }
@@ -100,6 +124,9 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
             case .rope: return "point.topleft.down.to.point.bottomright.curvepath"
             case .spring: return "alternatingcurrent"
             case .prismatic: return "arrow.left.and.right"
+            case .alignPosition: return "scope"
+            case .vectorForce: return "arrow.up.forward"
+            case .noCollision: return "square.on.square.dashed"
             case .beam: return "wand.and.rays"
             case .trail: return "scribble.variable"
             }
@@ -108,8 +135,14 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
         /// Beams and Trails: drawn, never simulated, and not among the join tools.
         var isEffect: Bool { self == .beam || self == .trail }
 
-        /// Welds join parts directly; everything else joins two attachments.
-        var usesAttachments: Bool { self != .weld }
+        /// Welds and NoCollisionConstraints name parts; everything else, attachments.
+        var usesAttachments: Bool { self != .weld && self != .noCollision }
+        /// Jolt joints between two bodies (PhysicsWorld.syncJoints).
+        var isJoint: Bool { [.hinge, .ballSocket, .rope, .spring, .prismatic].contains(self) }
+        /// Applied as a push each physics step (PhysicsWorld.applyForces).
+        var isForce: Bool { self == .alignPosition || self == .vectorForce }
+        /// Made by clicking two parts; a VectorForce (like a Trail) goes on one.
+        var joinsTwoParts: Bool { self != .vectorForce && self != .trail }
     }
 
     var id = UUID()
@@ -148,6 +181,23 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
     var speed: Float = 5
     var servoMaxForce: Float = 100_000
 
+    // AlignPosition (Roblox's defaults).
+    var alignMode = AlignMode.twoAttachment
+    /// OneAttachment's target, in the world.
+    var position = Vec3.zero
+    var maxForce: Float = 10_000
+    var maxVelocity: Float = .infinity
+    /// How quickly it gets there, 5 (slow) to 200.
+    var responsiveness: Float = 10
+    /// Straight there, as fast as MaxVelocity allows, never mind Responsiveness.
+    var rigidityEnabled = false
+
+    // VectorForce.
+    var force = Vec3(1000, 0, 0)
+    var relativeTo = ForceFrame.attachment0
+    /// At the centre of mass (no turning), rather than at Attachment0.
+    var applyAtCenterOfMass = false
+
     // Rope and spring (studs).
     var length: Float = 5
     var freeLength: Float = 5
@@ -169,7 +219,7 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
 
     /// Parts it joins, through its attachments or directly.
     func parts(in model: SceneModel) -> (UUID?, UUID?) {
-        if kind == .weld { return (part0, part1) }
+        if !kind.usesAttachments { return (part0, part1) }
         return (attachment0.flatMap { model.attachment(id: $0)?.parentID },
                 attachment1.flatMap { model.attachment(id: $0)?.parentID })
     }
@@ -179,6 +229,8 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
         case actuator, limitsEnabled, lowerAngle, upperAngle, angularVelocity, motorMaxTorque
         case targetAngle, angularSpeed, servoMaxTorque, lowerLimit, upperLimit, velocity, motorMaxForce
         case targetPosition, speed, servoMaxForce, length, freeLength, stiffness, damping, ribbon
+        case alignMode, position, maxForce, maxVelocity, responsiveness, rigidityEnabled, force, relativeTo
+        case applyAtCenterOfMass
     }
 
     init(from decoder: Decoder) throws {
@@ -215,6 +267,65 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
         stiffness = try c.decodeIfPresent(Float.self, forKey: .stiffness) ?? d.stiffness
         damping = try c.decodeIfPresent(Float.self, forKey: .damping) ?? d.damping
         ribbon = try c.decodeIfPresent(RibbonLook.self, forKey: .ribbon) ?? d.ribbon
+        alignMode = try c.decodeIfPresent(AlignMode.self, forKey: .alignMode) ?? d.alignMode
+        position = try c.decodeIfPresent(Vec3.self, forKey: .position) ?? d.position
+        maxForce = try c.decodeIfPresent(Float.self, forKey: .maxForce) ?? d.maxForce
+        // JSON has no infinity: a missing or negative one is "no limit".
+        maxVelocity = try c.decodeIfPresent(Float.self, forKey: .maxVelocity).flatMap { $0 < 0 ? nil : $0 } ?? d.maxVelocity
+        responsiveness = try c.decodeIfPresent(Float.self, forKey: .responsiveness) ?? d.responsiveness
+        rigidityEnabled = try c.decodeIfPresent(Bool.self, forKey: .rigidityEnabled) ?? d.rigidityEnabled
+        force = try c.decodeIfPresent(Vec3.self, forKey: .force) ?? d.force
+        relativeTo = try c.decodeIfPresent(ForceFrame.self, forKey: .relativeTo) ?? d.relativeTo
+        applyAtCenterOfMass = try c.decodeIfPresent(Bool.self, forKey: .applyAtCenterOfMass) ?? d.applyAtCenterOfMass
+    }
+
+    /// Saved with only what its kind uses (a joint saves as it always did), and MaxVelocity's
+    /// "no limit" as −1, JSON having no infinity.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(kind, forKey: .kind)
+        try c.encodeIfPresent(parentID, forKey: .parentID)
+        try c.encode(enabled, forKey: .enabled)
+        try c.encodeIfPresent(part0, forKey: .part0)
+        try c.encodeIfPresent(part1, forKey: .part1)
+        try c.encodeIfPresent(attachment0, forKey: .attachment0)
+        try c.encodeIfPresent(attachment1, forKey: .attachment1)
+        try c.encode(actuator, forKey: .actuator)
+        try c.encode(limitsEnabled, forKey: .limitsEnabled)
+        try c.encode(lowerAngle, forKey: .lowerAngle)
+        try c.encode(upperAngle, forKey: .upperAngle)
+        try c.encode(angularVelocity, forKey: .angularVelocity)
+        try c.encode(motorMaxTorque, forKey: .motorMaxTorque)
+        try c.encode(targetAngle, forKey: .targetAngle)
+        try c.encode(angularSpeed, forKey: .angularSpeed)
+        try c.encode(servoMaxTorque, forKey: .servoMaxTorque)
+        try c.encode(lowerLimit, forKey: .lowerLimit)
+        try c.encode(upperLimit, forKey: .upperLimit)
+        try c.encode(velocity, forKey: .velocity)
+        try c.encode(motorMaxForce, forKey: .motorMaxForce)
+        try c.encode(targetPosition, forKey: .targetPosition)
+        try c.encode(speed, forKey: .speed)
+        try c.encode(servoMaxForce, forKey: .servoMaxForce)
+        try c.encode(length, forKey: .length)
+        try c.encode(freeLength, forKey: .freeLength)
+        try c.encode(stiffness, forKey: .stiffness)
+        try c.encode(damping, forKey: .damping)
+        try c.encodeIfPresent(ribbon, forKey: .ribbon)
+        if kind == .alignPosition {
+            try c.encode(alignMode, forKey: .alignMode)
+            try c.encode(position, forKey: .position)
+            try c.encode(maxForce, forKey: .maxForce)
+            try c.encode(maxVelocity.isFinite ? maxVelocity : -1, forKey: .maxVelocity)
+            try c.encode(responsiveness, forKey: .responsiveness)
+            try c.encode(rigidityEnabled, forKey: .rigidityEnabled)
+        }
+        if kind == .vectorForce {
+            try c.encode(force, forKey: .force)
+            try c.encode(relativeTo, forKey: .relativeTo)
+        }
+        if kind.isForce { try c.encode(applyAtCenterOfMass, forKey: .applyAtCenterOfMass) }
     }
 }
 
@@ -276,9 +387,13 @@ extension SceneModel {
         if kind == .weld, let existing = weld(between: a, and: b) { return existing }
         var constraint = SceneConstraint(kind: kind)
         constraint.parentID = a
-        if kind == .weld {
+        if !kind.usesAttachments {
             constraint.part0 = a
             constraint.part1 = b
+        } else if kind == .alignPosition {
+            // The first part pulled to the middle of the second.
+            constraint.attachment0 = addAttachment(on: a, world: partA.position, axis: Vec3(1, 0, 0), name: "Attachment0")
+            constraint.attachment1 = addAttachment(on: b, world: partB.position, axis: Vec3(1, 0, 0), name: "Attachment1")
         } else if kind.isEffect {
             // A beam from the middle of one to the middle of the other, the same from
             // every side (FaceCamera); a trail is made on one part (addTrail).
@@ -443,7 +558,7 @@ extension SceneModel {
         attachments.removeAll { !partIDs.contains($0.parentID) }
         let attachmentIDs = Set(attachments.map(\.id))
         constraints.removeAll { c in
-            if c.kind == .weld {
+            if !c.kind.usesAttachments {
                 return [c.part0, c.part1].contains { $0.map { !partIDs.contains($0) } ?? false }
             }
             return [c.attachment0, c.attachment1].contains { $0.map { !attachmentIDs.contains($0) } ?? false }
@@ -455,5 +570,27 @@ extension SceneModel {
             selectedAttachment = nil
         }
         if let held = joinPending, !partIDs.contains(held) { joinPending = nil }
+    }
+}
+
+extension SceneModel {
+    /// Studio's Add VectorForce: one on a part, at its middle, pushing up as hard as
+    /// holds it against gravity (a hover to start from). One step to undo.
+    @discardableResult
+    func addVectorForce(to partID: UUID) -> UUID? {
+        guard let part = part(id: partID) else { return nil }
+        var made: UUID?
+        commit("Added VectorForce") {
+            var push = SceneConstraint(kind: .vectorForce)
+            push.parentID = partID
+            push.attachment0 = addAttachment(on: partID, world: part.position, axis: Vec3(1, 0, 0), name: "Attachment0")
+            push.relativeTo = .world
+            push.applyAtCenterOfMass = true
+            push.force = Vec3(0, PhysicsWorld.massProperties(of: part).mass * CharacterController.gravity, 0)
+            constraints.append(push)
+            made = push.id
+        }
+        if let made { selectedConstraint = made }
+        return made
     }
 }

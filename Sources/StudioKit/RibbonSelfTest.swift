@@ -238,8 +238,8 @@ enum RibbonSelfTest {
         check("Add Trail: between the top and bottom of the part, picked, a step to undo",
               trailEnds.map { abs($0.0.position.y - $0.1.position.y) > 0.5 } == true && model.selectedConstraint == trail
               && model.undoCount == undo + 2)
-        check("neither is a join tool", !SceneConstraint.Kind.beam.displayName.isEmpty
-              && SceneConstraint.Kind.allCases.filter { !$0.isEffect }.count == 6)
+        let joinTools = SceneConstraint.Kind.allCases.filter { !$0.isEffect && $0.joinsTwoParts }
+        check("neither is a join tool", !joinTools.contains(.beam) && !joinTools.contains(.trail) && joinTools.contains(.hinge))
         if let beam { model.updateConstraint(id: beam) { $0.look.width0 = 3; $0.look.texture = "builtin://Arrows" } }
         let reopened = SceneModel()
         if let data = try? model.encodeScene() { try? reopened.loadScene(from: data) }

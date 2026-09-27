@@ -614,6 +614,19 @@ void studio_jolt_remove_joint(StudioJoltWorld *world, uint32_t id) {
     world->joints.erase(found);
 }
 
+void studio_jolt_ignore_pair(StudioJoltWorld *world, uint32_t a, uint32_t b, int on) {
+    auto key = JointFilter::key(a, b);
+    if (on) {
+        world->jointFilter->pairs[key] += 1;
+    } else {
+        auto pair = world->jointFilter->pairs.find(key);
+        if (pair != world->jointFilter->pairs.end() && --pair->second <= 0) world->jointFilter->pairs.erase(pair);
+    }
+    // Bodies already touching find out at once.
+    world->bodies().ActivateBody(BodyID(a));
+    world->bodies().ActivateBody(BodyID(b));
+}
+
 void studio_jolt_drive_joint(StudioJoltWorld *world, uint32_t id, int on, float speed, float limit) {
     auto found = world->joints.find(id);
     if (found == world->joints.end()) return;

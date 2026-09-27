@@ -53,7 +53,9 @@ enum LuauAPI {
             property("Technology", "Enum.Technology"), property("ActuatorType", "Enum.ActuatorType"),
             property("TextXAlignment", "Enum.TextXAlignment"), property("PlaybackState", "Enum.PlaybackState"),
             property("MouseBehavior", "Enum.MouseBehavior"), property("NormalId", "Enum.NormalId"),
-            property("TextureMode", "Enum.TextureMode")
+            property("TextureMode", "Enum.TextureMode"),
+            property("PositionAlignmentMode", "Enum.PositionAlignmentMode"),
+            property("ActuatorRelativeTo", "Enum.ActuatorRelativeTo")
         ],
         "Enum.Material": enumItems(["Plastic", "SmoothPlastic", "Metal", "Neon", "Wood", "Water"]),
         "Enum.PartType": enumItems(["Block", "Ball", "Cylinder", "Wedge"]),
@@ -74,6 +76,8 @@ enum LuauAPI {
         "Enum.MouseBehavior": enumItems(["Default", "LockCenter", "LockCurrentPosition"]),
         "Enum.NormalId": enumItems(["Right", "Top", "Back", "Left", "Bottom", "Front"]),
         "Enum.TextureMode": enumItems(["Stretch", "Wrap"]),
+        "Enum.PositionAlignmentMode": enumItems(["OneAttachment", "TwoAttachment"]),
+        "Enum.ActuatorRelativeTo": enumItems(["Attachment0", "Attachment1", "World"]),
         "task": [
             method("wait", "seconds", "number"), method("spawn", "callback, ...", "thread"),
             method("delay", "seconds, callback, ...", "thread"), method("defer", "callback, ...", "thread"),
@@ -550,6 +554,25 @@ enum LuauAPI {
             method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name", "Instance"),
             method("GetChildren", "", "table"), method("Clone", "", "Tool"), method("Destroy", "", "()"),
             method("IsA", "className", "boolean")
+        ],
+        "AlignPosition": [
+            property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
+            property("Active", "boolean"), property("Attachment0", "Attachment"), property("Attachment1", "Attachment"),
+            property("Mode", "EnumItem"), property("Position", "Vector3"), property("MaxForce", "number"),
+            property("MaxVelocity", "number"), property("Responsiveness", "number"),
+            property("RigidityEnabled", "boolean"), property("ApplyAtCenterOfMass", "boolean"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "VectorForce": [
+            property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
+            property("Active", "boolean"), property("Attachment0", "Attachment"), property("Attachment1", "Attachment"),
+            property("Force", "Vector3"), property("RelativeTo", "EnumItem"), property("ApplyAtCenterOfMass", "boolean"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "NoCollisionConstraint": [
+            property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
+            property("Active", "boolean"), property("Part0", "Part"), property("Part1", "Part"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
         ],
         "Beam": [
             property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),

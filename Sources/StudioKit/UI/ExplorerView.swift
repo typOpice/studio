@@ -529,6 +529,10 @@ struct ExplorerView: View {
                 expandedParts.insert(part.id)
                 model.addTrail(to: part.id)
             }
+            Button("Add VectorForce") {
+                expandedParts.insert(part.id)
+                model.addVectorForce(to: part.id)
+            }
             Menu("Add ParticleEmitter") {
                 ForEach(ParticleEmitter.Preset.allCases) { preset in
                     Button(preset.rawValue) {

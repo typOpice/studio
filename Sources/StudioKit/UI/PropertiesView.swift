@@ -512,6 +512,60 @@ struct ConstraintInspector: View {
                         .foregroundStyle(Theme.textDim)
                 case .beam, .trail:
                     RibbonSection(model: model, constraint: constraint)
+                case .alignPosition:
+                    LabeledRow("Mode") {
+                        Picker("", selection: Binding(get: { constraint.alignMode }, set: { value in
+                            model.commit("Set Mode") { model.updateConstraint(id: constraint.id) { $0.alignMode = value } }
+                        })) {
+                            ForEach(AlignMode.allCases) { Text($0 == .oneAttachment ? "One" : "Two").tag($0) }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                    }
+                    if constraint.alignMode == .oneAttachment {
+                        VectorEditor(title: "Position", value: constraint.position) { axis, value in
+                            model.commit("Set Position") { model.updateConstraint(id: constraint.id) { $0.position[axis] = value } }
+                        }
+                    }
+                    number("MaxForce", \.maxForce, 0...1_000_000_000)
+                    number("Responsiveness", \.responsiveness, 5...200)
+                    Toggle("Limit speed (MaxVelocity)", isOn: Binding(get: { constraint.maxVelocity.isFinite }, set: { on in
+                        model.commit("Set MaxVelocity") {
+                            model.updateConstraint(id: constraint.id) { $0.maxVelocity = on ? 20 : .infinity }
+                        }
+                    }))
+                    .toggleStyle(.checkbox)
+                    if constraint.maxVelocity.isFinite { number("MaxVelocity", \.maxVelocity, 0...10_000) }
+                    Toggle("RigidityEnabled", isOn: toggle(\.rigidityEnabled)).toggleStyle(.checkbox)
+                    Text(constraint.alignMode == .oneAttachment
+                         ? "Pulls Attachment0's part to Position, as hard as MaxForce lets it."
+                         : "Pulls Attachment0's part to Attachment1, as hard as MaxForce lets it.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.textDim)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .vectorForce:
+                    VectorEditor(title: "Force", value: constraint.force) { axis, value in
+                        model.commit("Set Force") { model.updateConstraint(id: constraint.id) { $0.force[axis] = value } }
+                    }
+                    LabeledRow("RelativeTo") {
+                        Picker("", selection: Binding(get: { constraint.relativeTo }, set: { value in
+                            model.commit("Set RelativeTo") { model.updateConstraint(id: constraint.id) { $0.relativeTo = value } }
+                        })) {
+                            ForEach(ForceFrame.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    Toggle("ApplyAtCenterOfMass", isOn: toggle(\.applyAtCenterOfMass)).toggleStyle(.checkbox)
+                    Text("A push, all the time: equal to the part's mass × \(Int(CharacterController.gravity)) upwards, it floats.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.textDim)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .noCollision:
+                    Text("The two parts pass through each other; everything else still collides with them.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.textDim)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 SmallButton("Delete", icon: "trash") { model.deleteConstraint(id: constraint.id) }

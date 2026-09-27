@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2729 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2756 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -598,6 +598,46 @@ car:PivotTo(car:GetPivot() * CFrame.Angles(0, math.rad(90), 0))   -- turn a whol
 
 `swift run StudioApp --render-physics out.png 0.9` knocks a pyramid of crates over with a
 ball and renders the result.
+
+### Pushes, pulls and passing through
+
+Three more constraints, on the Physics tab, act on unanchored parts:
+
+- **AlignPosition** pulls Attachment0's part to Attachment1, or to `Position` when
+  `Mode` is `OneAttachment`. It holds the part there against gravity. `MaxForce` caps
+  how hard it pulls, `MaxVelocity` how fast it goes, and `Responsiveness` how quickly
+  it closes the gap. `RigidityEnabled` sends it straight there. Use the **Align
+  Position** tool: click the part to move, then where it goes.
+- **VectorForce** pushes its part with a `Force` all the time, in the world's
+  directions or its attachment's (`RelativeTo`). Off the middle, unless
+  `ApplyAtCenterOfMass`, it turns the part too. **VectorForce** on the Physics tab (or a
+  part's right-click menu) adds one pushing up as hard as the part weighs, so it floats.
+- **NoCollisionConstraint** lets two parts pass through each other. Everything else still
+  collides with them. Use the **No Collision** tool.
+
+```lua
+-- A Script: a lift that floats up to the ledge and back, passing through the Ghost.
+local lift = workspace.Lift
+local align = Instance.new("AlignPosition")
+align.Attachment0 = Instance.new("Attachment", lift)
+align.Mode = Enum.PositionAlignmentMode.OneAttachment
+align.MaxForce = 1e6
+align.MaxVelocity = 8
+align.Parent = lift
+
+local apart = Instance.new("NoCollisionConstraint")
+apart.Part0 = lift
+apart.Part1 = workspace.Ghost
+apart.Parent = lift
+
+local low, high = lift.Position, lift.Position + Vector3.new(0, 20, 0)
+while true do
+	align.Position = high
+	task.wait(4)
+	align.Position = low
+	task.wait(4)
+end
+```
 
 ## Controls
 
@@ -1246,7 +1286,7 @@ Every one runs cleanly as it is, and so does every line it suggests trying.
 | --- | --- |
 | `workspace` | `:FindFirstChild`, `:WaitForChild`, `:GetChildren`, and children by name (`workspace.Baseplate`) |
 | Parts | `Name`, `Position`, `Size`, `Orientation`, `CFrame`, `Color`, `Transparency`, `Anchored`, `Locked`, `CanCollide`, `CanTouch`, `Material`, `Shape`, `ClassName`, `Parent`, `Touched`, `TouchEnded`, `AssemblyLinearVelocity`, `AssemblyAngularVelocity`, `Mass`, `:ApplyImpulse()`, `:ApplyAngularImpulse()`, `:GetPivot()`, `:PivotTo()`, `:Destroy()`, `:Clone()`, `:IsA()` |
-| Welds and joints | `WeldConstraint` (`Part0`, `Part1`, `Enabled`, `Active`), `HingeConstraint` and `PrismaticConstraint` (`ActuatorType`, `AngularVelocity`/`Velocity`, `MotorMaxTorque`/`MotorMaxForce`, `TargetAngle`/`TargetPosition`, `AngularSpeed`/`Speed`, `Servo…`, `LimitsEnabled`, limits, `CurrentAngle`/`CurrentPosition`), `BallSocketConstraint`, `RopeConstraint` (`Length`), `SpringConstraint` (`FreeLength`, `Stiffness`, `Damping`), `Attachment` (`Position`, `Axis`, `WorldPosition`, `CFrame`), `Enum.ActuatorType` |
+| Welds and joints | `WeldConstraint` (`Part0`, `Part1`, `Enabled`, `Active`), `HingeConstraint` and `PrismaticConstraint` (`ActuatorType`, `AngularVelocity`/`Velocity`, `MotorMaxTorque`/`MotorMaxForce`, `TargetAngle`/`TargetPosition`, `AngularSpeed`/`Speed`, `Servo…`, `LimitsEnabled`, limits, `CurrentAngle`/`CurrentPosition`), `BallSocketConstraint`, `RopeConstraint` (`Length`), `SpringConstraint` (`FreeLength`, `Stiffness`, `Damping`), `AlignPosition` (`Mode`, `Position`, `MaxForce`, `MaxVelocity`, `Responsiveness`, `RigidityEnabled`), `VectorForce` (`Force`, `RelativeTo`, `ApplyAtCenterOfMass`), `NoCollisionConstraint`, `Attachment` (`Position`, `Axis`, `WorldPosition`, `CFrame`), `Enum.ActuatorType`, `Enum.PositionAlignmentMode`, `Enum.ActuatorRelativeTo` |
 | The tree | `Model` (`PrimaryPart`, `:GetPivot`, `:PivotTo`, `:MoveTo`, `:GetBoundingBox`), `Folder`; on everything: `:GetChildren`, `:GetDescendants`, `:FindFirstChild(name, recursive)`, `:WaitForChild`, `:FindFirstChildOfClass`, `:IsDescendantOf`, `:FindFirstAncestor…`, `:GetFullName`, `:ClearAllChildren`, children by name (`workspace.Car.Seat`) |
 | `CFrame` | `new` (every form), `lookAt`, `Angles`, `fromEulerAnglesXYZ/YXZ`, `fromOrientation`, `fromAxisAngle`, `fromMatrix`, `identity`; `*`, `+`, `-`; `Position`, `LookVector`, `RightVector`, `UpVector`, `Rotation`; `:Inverse`, `:Lerp`, `:ToWorldSpace`, `:ToObjectSpace`, `:PointTo…Space`, `:VectorTo…Space`, `:GetComponents`, `:ToEulerAnglesXYZ/YXZ`, `:ToOrientation`, `:ToAxisAngle`, `:FuzzyEq` |
 | `Instance.new` | `"Part"`, `"WedgePart"`, `"MeshPart"`, `"Model"`, `"Folder"`, `"PointLight"`, `"Animation"`, `"Attachment"`, `"WeldConstraint"` and the five joint classes, `"IntValue"`, `"NumberValue"`, `"StringValue"`, `"BoolValue"`, `"RemoteEvent"`, `"RemoteFunction"`, `"Accessory"`, `"Shirt"`, `"Pants"`, `"HumanoidDescription"`, `"Sound"`, the GUI classes — with Roblox's defaults |
