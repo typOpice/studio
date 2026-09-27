@@ -83,7 +83,7 @@ enum HudSelfTest {
         starter.clearScene()
         check("a new scene starts with it too, and the leaderboard",
               starter.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName, DefaultHud.listName]
-              && starter.scripts.filter { !$0.isModule }.count == 3 && starter.defaultGui == DefaultHud.version)
+              && starter.scripts.filter { !$0.isModule }.count == 4 && starter.defaultGui == DefaultHud.version)
 
         // Deleted and saved, it stays deleted.
         let deleting = SceneModel()
@@ -102,7 +102,8 @@ enum HudSelfTest {
         let upgraded = old.upgradedToDefaultHud()
         check("an old scene with its own ControlScript gets the HUD but keeps its own F and R",
               upgraded.starterGui.contains { $0.name == DefaultHud.screenName }
-              && upgraded.scripts.map(\.name) == ["ControlScript", DefaultHud.hudScriptName, DefaultHud.listScriptName])
+              && upgraded.scripts.map(\.name) == ["ControlScript", DefaultHud.hudScriptName, DefaultHud.frameStatsName,
+                                                  DefaultHud.listScriptName])
 
         // One saved with the first HUD (before the leaderboard) gets the leaderboard, unless
         // its HUD was deleted.
@@ -128,7 +129,7 @@ enum HudSelfTest {
         restoring.addDefaultHud()
         check("Insert Default HUD puts it back, one step to undo",
               restoring.guiChildren(of: nil).map(\.name) == [DefaultHud.screenName, DefaultHud.listName]
-              && restoring.scripts.count == 3
+              && restoring.scripts.count == 4
               && restoring.undoCount == steps + 1)
     }
 

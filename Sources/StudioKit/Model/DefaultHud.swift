@@ -9,13 +9,15 @@ import Foundation
 enum DefaultHud {
     /// Scenes remember which HUD they were offered, so one saved before it existed gets
     /// it on opening — and one whose maker deleted it doesn't get it back.
-    /// 1: PlayerHud. 2: the PlayerList (leaderboard) as well.
-    static let version = 2
+    /// 1: PlayerHud. 2: the PlayerList (leaderboard) as well. 3: frame times and memory
+    /// in the numbers top right (FrameStats).
+    static let version = 3
     static let screenName = "PlayerHud"
     static let listName = "PlayerList"
     static let listScriptName = "LeaderboardScript"
     static let hudScriptName = "HudScript"
     static let keysScriptName = "FlyAndRespawn"
+    static let frameStatsName = "FrameStats"
 
     /// A fresh copy — new ids every time — of the objects and the LocalScripts inside.
     /// `keys` leaves out FlyAndRespawn (a scene with its own ControlScript may already
@@ -139,9 +141,50 @@ enum DefaultHud {
 
         var scripts = [script(hudScriptName, hudSource, in: screen)]
         if keys { scripts.append(script(keysScriptName, keysSource, in: screen)) }
+        let frames = makeFrameStats(in: stats)
         let list = makeLeaderboard()
-        return (objects + list.objects, scripts + list.scripts)
+        return (objects + frames.objects + list.objects, scripts + frames.scripts + list.scripts)
     }
+
+    /// Three lines under the numbers top right — where each frame's time goes, and what
+    /// the game holds — and the LocalScript that fills them from the Stats service.
+    static func makeFrameStats(in stats: UUID) -> (objects: [StarterGuiObject], scripts: [ScriptObject]) {
+        let lines = [("FrameTime", "frame 0.0 ms · draw 0.0"), ("Work", "scripts 0.0 · physics 0.0"),
+                     ("Memory", "memory 0 MB · 0 parts")]
+        let objects = lines.enumerated().map { order, line -> StarterGuiObject in
+            var label = StarterGuiObject(kind: .textLabel, name: line.0, parentID: stats)
+            label.properties = [
+                "text": .string(line.1), "textsize": .number(11), "font": .string("RobotoMono"),
+                "textcolor3": .triple(0.7, 0.72, 0.76), "textxalignment": .string("Right"),
+                "backgroundtransparency": .number(1),
+                "size": .list([.number(1), .number(0), .number(0), .number(15)]),
+                "layoutorder": .number(Double(4 + order)),
+            ]
+            return label
+        }
+        return (objects, [script(frameStatsName, frameStatsSource, in: stats)])
+    }
+
+    static let frameStatsSource = """
+    -- FrameStats: where this machine's frames go, and what the game holds, from the
+    -- Stats service — in the numbers top right, twice a second.
+    local RunService = game:GetService("RunService")
+    local Stats = game:GetService("Stats")
+    local panel = script.Parent
+
+    local waited = 0
+    RunService.Heartbeat:Connect(function(dt)
+    \twaited += dt
+    \tif waited < 0.5 then
+    \t\treturn
+    \tend
+    \twaited = 0
+    \tpanel.FrameTime.Text = string.format("frame %.1f ms · draw %.1f", Stats.HeartbeatTimeMs, Stats.RenderTimeMs)
+    \tpanel.Work.Text = string.format("scripts %.1f · physics %.1f", Stats.ScriptTimeMs, Stats.PhysicsStepTimeMs)
+    \tpanel.Memory.Text = string.format("memory %d MB · %d parts", math.floor(Stats:GetTotalMemoryUsageMb()),
+    \t\tStats.PrimitivesCount)
+    end)
+    """
 
     /// The leaderboard: a ScreenGui of its own, top right, which its LocalScript fills
     /// from each player's leaderstats — and shows only when someone has some.
@@ -547,11 +590,21 @@ extension SceneState {
             let made = DefaultHud.make(keys: !SceneModel.handlesStudioKeys(scripts))
             state.starterGui += made.objects
             state.scripts += made.scripts
-        } else if starterGui.contains(where: { $0.parentID == nil && $0.name == DefaultHud.screenName }),
-                  !starterGui.contains(where: { $0.parentID == nil && $0.name == DefaultHud.listName }) {
-            let list = DefaultHud.makeLeaderboard()
-            state.starterGui += list.objects
-            state.scripts += list.scripts
+        } else {
+            let screen = starterGui.first { $0.parentID == nil && $0.name == DefaultHud.screenName }
+            if screen != nil, !starterGui.contains(where: { $0.parentID == nil && $0.name == DefaultHud.listName }) {
+                let list = DefaultHud.makeLeaderboard()
+                state.starterGui += list.objects
+                state.scripts += list.scripts
+            }
+            // Frame times under the numbers, if the numbers are still there and haven't them.
+            if defaultGui < 3, let screen,
+               let stats = starterGui.first(where: { $0.parentID == screen.id && $0.name == "Stats" }),
+               !starterGui.contains(where: { $0.parentID == stats.id && $0.name == "FrameTime" }) {
+                let frames = DefaultHud.makeFrameStats(in: stats.id)
+                state.starterGui += frames.objects
+                state.scripts += frames.scripts
+            }
         }
         state.defaultGui = DefaultHud.version
         return state

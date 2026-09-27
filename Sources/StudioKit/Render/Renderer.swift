@@ -309,6 +309,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// One frame — the world, any screen effects in turn, and the editor's overlays —
     /// into a pass: the view's drawable, or a snapshot's own target.
     private func encodeFrame(_ buffer: MTLCommandBuffer, into descriptor: MTLRenderPassDescriptor) {
+        // How long drawing takes on the CPU, for the Stats service.
+        let began = CACurrentMediaTime()
+        defer { (source as? PlayController)?.frameStats.note(draw: CACurrentMediaTime() - began) }
 
         let model = source.model
         let camera = source.renderCamera

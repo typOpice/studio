@@ -555,6 +555,36 @@ local services = {
 	LogService = LogService,
 }
 
+-- Stats: where this machine's frames go (milliseconds, smoothed over about a third of
+-- a second) and what it holds. Roblox's names, and ScriptTimeMs and RenderTimeMs besides.
+services.Stats = service("Stats", {
+	HeartbeatTimeMs = function()
+		return invoke("stats.get")[1] or 0
+	end,
+	ScriptTimeMs = function()
+		return invoke("stats.get")[2] or 0
+	end,
+	PhysicsStepTimeMs = function()
+		return invoke("stats.get")[3] or 0
+	end,
+	RenderTimeMs = function()
+		return invoke("stats.get")[4] or 0
+	end,
+	PrimitivesCount = function()
+		return invoke("stats.get")[6] or 0
+	end,
+	InstanceCount = function()
+		return invoke("stats.get")[7] or 0
+	end,
+}, {
+	GetTotalMemoryUsageMb = function()
+		return invoke("stats.get")[5] or 0
+	end,
+	IsA = function(_, className)
+		return className == "Stats" or className == "Instance"
+	end,
+})
+
 game = service("Game", nil, {
 	GetService = function(_, name)
 		local found = services[name]

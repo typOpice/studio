@@ -320,6 +320,12 @@ enum LuauAPI {
         "OrderedDataStore": dataStoreMembers + [
             method("GetSortedAsync", "ascending, pageSize, minValue, maxValue", "DataStorePages")
         ],
+        "Stats": [
+            property("HeartbeatTimeMs", "number"), property("ScriptTimeMs", "number"),
+            property("PhysicsStepTimeMs", "number"), property("RenderTimeMs", "number"),
+            property("PrimitivesCount", "number"), property("InstanceCount", "number"),
+            method("GetTotalMemoryUsageMb", "", "number"), method("IsA", "className", "boolean")
+        ],
         "PathfindingService": [
             method("CreatePath", "agentParameters", "Path"), method("FindPathAsync", "start, finish", "Path"),
             method("IsA", "className", "boolean")
@@ -659,7 +665,7 @@ enum LuauAPI {
         "StarterPack": "StarterPack", "SoundService": "SoundService",
         "ReplicatedStorage": "ReplicatedStorage", "ServerScriptService": "ServerScriptService",
         "ServerStorage": "ServerStorage", "LogService": "LogService", "DataStoreService": "DataStoreService",
-        "PathfindingService": "PathfindingService"
+        "PathfindingService": "PathfindingService", "Stats": "Stats"
     ]
 
     static let globalFunctions: [CompletionItem] = [

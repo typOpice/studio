@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2580 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2594 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1009,7 +1009,9 @@ game that shouldn't have it. A script can also take it away from one player with
 **The default HUD.** Nothing on the screen in play is built into the app — in Studio's
 play test or the client. What a new scene shows is **StarterGui › PlayerHud**, an
 ordinary ScreenGui made of Frames and TextLabels: the health bar (bottom), the countdown
-after dying, the position, speed, state and frame rate (top right), the controls
+after dying, the position, speed, state and frame rate (top right) — with where each
+frame's time goes (the whole frame, drawing it, the scripts, the physics) and the
+memory used and parts, from its **FrameStats** LocalScript — the controls
 (bottom left; `H` hides them), a crosshair in first person, and a script output window
 (`` ` `` shows it; it also counts errors). Its **HudScript** LocalScript keeps it up to date
 through the Humanoid, `RunService` and `LogService`, and its **FlyAndRespawn** LocalScript
@@ -1318,6 +1320,14 @@ end)
 Like the rest of the screen, the leaderboard is ordinary GUI — StarterGui ›
 **PlayerList**, with its LeaderboardScript — so it can be restyled or deleted. New
 scenes have it; older ones that kept the default HUD get it when opened.
+
+### Stats: where the time goes
+
+`game:GetService("Stats")` tells a script about this machine's frames, in
+milliseconds and smoothed over about a third of a second: `HeartbeatTimeMs` (the whole
+frame), `ScriptTimeMs`, `PhysicsStepTimeMs` and `RenderTimeMs`. It also has
+`PrimitivesCount` (parts), `InstanceCount` and `GetTotalMemoryUsageMb()`. The default
+HUD's numbers top right come from it. A joined player's are their own machine's.
 
 ### Raycasts
 

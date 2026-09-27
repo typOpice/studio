@@ -74,6 +74,9 @@ final class ScriptRuntime {
     var navigationSyncedAt = -1.0
     /// Luau's debugger, when the session is being debugged (Studio's Play); joins each new VM.
     var debugger: ScriptDebugger?
+    /// The Stats service's numbers (`stats.get`): the play session's, as
+    /// [frame, scripts, physics, draw ms, memory MB, parts, instances].
+    var statsSource: (() -> ScriptValue)?
 
     func start() {
         stop()
@@ -348,6 +351,7 @@ final class ScriptRuntime {
         case "data": return dataCall(name, arguments)
         case "datastore": return dataStoreCall(name, arguments)
         case "path": return pathCall(name, arguments)
+        case "stats": return statsSource?() ?? .list([])
         case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)

@@ -401,6 +401,13 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    This adds about a minute and a half to the self tests.
    New file: SoakSelfTest.swift.
 
+38. Frame times in the game, 2026-09-27.
+   The numbers top right while playing now also show where each frame's time goes (the whole frame and drawing it, the scripts and the physics, in milliseconds) and how much memory the game uses and how many parts there are. They update twice a second.
+   Scripts can read the same numbers through a new Stats service, with Roblox's names: game:GetService("Stats").HeartbeatTimeMs, PhysicsStepTimeMs, PrimitivesCount, GetTotalMemoryUsageMb(), plus ScriptTimeMs and RenderTimeMs.
+   Places saved before get the new lines when opened (unless their numbers panel was deleted).
+   Tested alone and with a host and a joined player (each sees their own machine's numbers).
+   New files: Play/FrameStats.swift, FrameStatsSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

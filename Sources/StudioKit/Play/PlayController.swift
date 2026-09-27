@@ -127,6 +127,14 @@ final class PlayController: ViewportSource, PlayerBridge {
         // What the Output shows, LogService hears: each line the frame after.
         console.onAppend = { [weak self] line in self?.log(line) }
         scripts.logSource = { [weak self] in self?.logHistory ?? [] }
+        scripts.statsSource = { [weak self] in
+            guard let self else { return .nothing }
+            let stats = self.frameStats
+            return .list([.number(stats.frame), .number(stats.scripts), .number(stats.physics), .number(stats.draw),
+                          .number(FrameStats.memoryMB()), .number(Double(self.model.parts.count)),
+                          .number(Double(self.model.parts.count + self.model.groups.count + self.model.dataObjects.count
+                                         + self.model.sounds.count + self.gui.objects.count))])
+        }
         if !withPlayer {
             scripts.eventSource = { [weak self] in
                 guard let self else { return [] }
@@ -357,6 +365,9 @@ final class PlayController: ViewportSource, PlayerBridge {
         refreshHUD(dt: dt)
     }
 
+    /// Where the frames go (FrameStats.swift): the Stats service reads it.
+    var frameStats = FrameStats()
+
     /// Keeps App Nap away while the game runs (`start` to `stop`).
     private var activity: NSObjectProtocol?
 
@@ -367,18 +378,28 @@ final class PlayController: ViewportSource, PlayerBridge {
     func step(dt: Float) {
         // Not while stopped at a breakpoint: the scripts are mid-run.
         guard scripts.debugger?.paused == nil else { return }
+        let began = CACurrentMediaTime()
+        var scriptTime = 0.0, physicsTime = 0.0
+        defer { frameStats.note(step: CACurrentMediaTime() - began, scripts: scriptTime, physics: physicsTime) }
+        func timed(_ total: inout Double, _ work: () -> Void) {
+            let started = CACurrentMediaTime()
+            work()
+            total += CACurrentMediaTime() - started
+        }
         clock += Double(dt)
         noteDataChanges()
         guard hasPlayer else {
-            scripts.update(dt: Double(dt))
-            simulateParts(dt: dt)
+            timed(&scriptTime) { scripts.update(dt: Double(dt)) }
+            timed(&physicsTime) { simulateParts(dt: dt) }
             updateSounds()
             return
         }
         glideRemotePlayers(dt: dt)
-        scripts.update(dt: Double(dt))
-        simulate(dt: dt)
-        simulateParts(dt: dt)
+        timed(&scriptTime) { scripts.update(dt: Double(dt)) }
+        timed(&physicsTime) {
+            simulate(dt: dt)
+            simulateParts(dt: dt)
+        }
         animator.update(dt: dt, state: humanoid.state, horizontalSpeed: character.horizontalSpeed,
                         verticalVelocity: character.velocity.y)
         for (handle, event) in animationPlayer.step(dt: dt, animation: model.animation(id:)) {
