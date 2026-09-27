@@ -8,12 +8,19 @@ import Foundation
 /// waiting while stopped, and the watchdog not counting the wait; Stop; breakpoints
 /// saved with the place and kept through Stop in Studio; and a host stopped in a
 /// RemoteEvent handler with a joined player's message, the reply reaching them after.
+/// Then watch expressions (locals, upvalues, globals, another call's; errors, a runaway
+/// one cut short); conditional breakpoints (true, false, failing, calling code with a
+/// breakpoint of its own, two on one line, changed while running); and tables opened,
+/// nested and in order.
 enum DebuggerSelfTest {
     static func run(check: Checker) {
         testBreakpoints(check)
         testStepping(check)
         testElsewhere(check)
         testWaiting(check)
+        testWatches(check)
+        testConditions(check)
+        testTables(check)
         testStudio(check)
         testTogether(check)
     }
@@ -70,6 +77,29 @@ enum DebuggerSelfTest {
             return queue.isEmpty ? .resume : queue.removeFirst()
         }
         return (model, session, { stops })
+    }
+
+    /// Like `debugged`, but the handler gets the debugger too, to look around while stopped.
+    private static func looking(_ source: String, breakpoints: [Int], conditions: [Int: String] = [:],
+                                watches: [String] = [],
+                                handler: @escaping (ScriptDebugger, ScriptDebugger.Pause) -> Void)
+        -> (SceneModel, PlayController) {
+        let model = SceneModel()
+        var script = ScriptObject.blank(language: .luau)
+        script.name = "Counter"
+        script.source = source
+        script.breakpoints = breakpoints
+        script.breakpointConditions = conditions
+        model.scripts = [script]
+        let session = PlayController(model: model, console: ScriptConsole())
+        let debugger = ScriptDebugger()
+        debugger.watches = watches
+        debugger.handler = { [unowned debugger] pause in
+            handler(debugger, pause)
+            return .resume
+        }
+        session.scripts.debugger = debugger
+        return (model, session)
     }
 
     private static func variable(_ frame: ScriptDebugger.Frame?, _ name: String) -> String? {
@@ -288,6 +318,173 @@ enum DebuggerSelfTest {
         session.stop()
     }
 
+    // MARK: - Watches
+
+    private static func testWatches(_ check: Checker) {
+        print("\nDebugger: watch expressions")
+        var stops: [ScriptDebugger.Pause] = []
+        var outer: [LuauInterpreter.Evaluation] = []
+        var runaway: LuauInterpreter.Evaluation?
+        let (_, session) = looking(counting, breakpoints: [4],
+                                   watches: ["amount * 2", "total", "before", "workspace.Name", "math.max(amount, 2)",
+                                             "#items", "nope +"]) { debugger, pause in
+            stops.append(pause)
+            // The script's own call: its locals, which `add` can't see.
+            outer.append(debugger.evaluate("index * 10 + #items", inFrame: 1))
+            if runaway == nil { runaway = debugger.evaluate("(function() while true do end end)()") }
+        }
+        session.start()
+        step(session, seconds: 0.2)
+        func watch(_ pause: ScriptDebugger.Pause?, _ expression: String) -> LuauInterpreter.Evaluation? {
+            pause?.watches.first { $0.expression == expression }?.result
+        }
+        let first = stops.first, last = stops.last
+        check("watches are worked out at every stop", stops.count == 3 && stops.allSatisfy { $0.watches.count == 7 },
+              "\(stops.map(\.watches.count))")
+        check("…seeing the call's locals", watch(first, "amount * 2")?.value == "2" && watch(first, "amount * 2")?.type == "number"
+              && watch(last, "amount * 2")?.value == "6" && watch(first, "before")?.value == "0",
+              "\(String(describing: watch(first, "amount * 2"))) \(String(describing: watch(last, "amount * 2")))")
+        check("…its upvalues", watch(first, "total")?.value == "0" && watch(last, "total")?.value == "3",
+              "\(String(describing: watch(last, "total")))")
+        check("…and the script's globals", watch(first, "workspace.Name")?.value == "\"Workspace\""
+              && watch(first, "math.max(amount, 2)")?.value == "2",
+              "\(String(describing: watch(first, "workspace.Name")))")
+        let missing = watch(first, "#items"), broken = watch(first, "nope +")
+        check("a watch that fails says why", missing?.error?.hasPrefix("attempt to get length of a nil value") == true
+              && missing?.truthy == false,
+              "\(String(describing: missing))")
+        check("…as does one that isn't Luau", broken?.error?.isEmpty == false && broken?.value == "", "\(String(describing: broken))")
+        check("any call on the stack can be looked in", outer.map(\.value) == ["12", "22", "32"], "\(outer)")
+        check("one that runs away is cut short", runaway?.error?.isEmpty == false, "\(String(describing: runaway))")
+        check("…and the script goes on as before", said(session).contains("total 6 2") && said(session, .error).isEmpty,
+              "\(said(session)) \(said(session, .error))")
+        session.stop()
+    }
+
+    // MARK: - Conditions
+
+    static let limited = """
+    local function limit(n)
+    \treturn n > 2
+    end
+    local seen = 0
+    for i = 1, 5 do
+    \tseen += i
+    end
+    print("seen", seen)
+    """
+
+    private static func testConditions(_ check: Checker) {
+        print("\nDebugger: conditional breakpoints")
+        func stopped(_ breakpoints: [Int], _ conditions: [Int: String], in source: String = limited)
+            -> ([ScriptDebugger.Pause], [String], [String]) {
+            var stops: [ScriptDebugger.Pause] = []
+            let (_, session) = looking(source, breakpoints: breakpoints, conditions: conditions) { _, pause in
+                stops.append(pause)
+            }
+            session.start()
+            step(session, seconds: 0.1)
+            defer { session.stop() }
+            return (stops, said(session), said(session, .error))
+        }
+        func values(_ stops: [ScriptDebugger.Pause], _ name: String) -> [String] {
+            stops.compactMap { variable($0.frames.first, name) }
+        }
+        let (held, heldOut, heldErrors) = stopped([6], [6: "i >= 4"])
+        check("a condition stops only when it holds", held.count == 2 && values(held, "i") == ["4", "5"]
+              && held.allSatisfy { $0.reason == .breakpoint && $0.note == nil }, "\(values(held, "i"))")
+        check("…and the script is none the wiser", heldOut.contains("seen 15") && heldErrors.isEmpty, "\(heldOut)")
+        let (never, _, _) = stopped([6], [6: "i > 99"])
+        check("one that never holds never stops", never.isEmpty)
+        let (calling, callingOut, _) = stopped([2, 6], [6: "limit(i)"])
+        check("a condition can call the script's functions, their breakpoints passed over",
+              values(calling, "i") == ["3", "4", "5"] && calling.allSatisfy { $0.frames.first?.line == 6 }
+              && callingOut.contains("seen 15"), "\(calling.map { $0.frames.first?.line ?? 0 })")
+        let (failing, failingOut, _) = stopped([6], [6: "i.size > 1"])
+        check("one that fails stops, to say why", failing.count == 5
+              && failing.allSatisfy { $0.note?.contains("i.size > 1") == true && $0.note?.contains("index") == true }
+              && failingOut.contains("seen 15"), "\(String(describing: failing.first?.note))")
+        let (unfinished, _, _) = stopped([6], [6: "i >"])
+        check("…as does one that isn't Luau", unfinished.count == 5 && unfinished.first?.note != nil)
+        // `counting`: line 11 is a comment, so its breakpoint lands on 13 with 13's own.
+        let (either, _, _) = stopped([11, 13], [11: "false", 13: "total == 6"], in: counting)
+        let (always, _, _) = stopped([11, 13], [11: "false"], in: counting)
+        let (neither, _, _) = stopped([11, 13], [11: "false", 13: "total == 7"], in: counting)
+        check("two on one line stop when either holds — always, if one has no condition",
+              either.count == 1 && always.count == 1 && neither.isEmpty, "\(either.count) \(always.count) \(neither.count)")
+
+        // Changed while the game runs.
+        let ticking = """
+        local count = 0
+        while true do
+        \tcount += 1
+        \ttask.wait(0.05)
+        end
+        """
+        var stops: [ScriptDebugger.Pause] = []
+        let (model, session) = looking(ticking, breakpoints: [3], conditions: [3: "count > 1000"]) { _, pause in
+            stops.append(pause)
+        }
+        let id = model.scripts[0].id
+        session.start()
+        step(session, seconds: 0.5)
+        let quiet = stops.count
+        model.setBreakpointCondition("count % 2 == 0", line: 3, forScript: id)
+        session.scripts.debugger?.breakpointsChanged(script: id)
+        step(session, seconds: 0.5)
+        let even = stops.dropFirst(quiet).compactMap { variable($0.frames.first, "count").flatMap { Int($0) } }
+        model.setBreakpointCondition(nil, line: 3, forScript: id)
+        session.scripts.debugger?.breakpointsChanged(script: id)
+        let before = stops.count
+        step(session, seconds: 0.5)
+        check("a condition changed while running takes effect", quiet == 0 && even.count >= 3 && even.allSatisfy { $0 % 2 == 0 },
+              "\(quiet) \(even)")
+        check("…and taken away, it stops every time", stops.count - before >= 6, "\(stops.count - before)")
+        session.stop()
+    }
+
+    // MARK: - Tables
+
+    private static func testTables(_ check: Checker) {
+        print("\nDebugger: opening tables")
+        let source = """
+        local stats = { best = 12, name = "Ada", list = { 10, 20, 30 }, ["odd key"] = true, nested = { deeper = { value = 7 } } }
+        local empty = {}
+        local dozen = {}
+        for n = 1, 12 do dozen[n] = n * n end
+        print(stats.best, #dozen)
+        """
+        var variables: [LuauInterpreter.DebugVariable] = []
+        var opened: [String: [LuauInterpreter.DebugVariable]?] = [:]
+        let (_, session) = looking(source, breakpoints: [5]) { debugger, pause in
+            variables = pause.frames.first?.variables ?? []
+            for expression in ["stats", "stats.list", "stats.nested.deeper", "stats[\"odd key\"]", "stats.best", "empty",
+                               "dozen", "(stats.nested)", "nothing.here"] {
+                opened[expression] = debugger.fields(of: expression)
+            }
+        }
+        session.start()
+        step(session, seconds: 0.1)
+        func fields(_ expression: String) -> [LuauInterpreter.DebugVariable]? { opened[expression] ?? nil }
+        let stats = fields("stats")
+        check("a variable's path is its name", variables.first { $0.name == "stats" }?.path == "stats"
+              && variables.first { $0.name == "stats" }?.type == "table")
+        check("a table opens to its entries, by name", stats?.map(\.name) == ["best", "list", "name", "nested", "odd key"]
+              && stats?.first?.value == "12" && stats?.first?.type == "number", "\(String(describing: stats?.map(\.name)))")
+        check("…each with its path from the table", stats?.map(\.path) == [".best", ".list", ".name", ".nested", "[\"odd key\"]"],
+              "\(String(describing: stats?.map(\.path)))")
+        check("a list inside opens too, numbered", fields("stats.list")?.map(\.name) == ["[1]", "[2]", "[3]"]
+              && fields("stats.list")?.map(\.value) == ["10", "20", "30"] && fields("stats.list")?.first?.path == "[1]")
+        check("…and deeper", fields("stats.nested.deeper")?.first.map { "\($0.name)=\($0.value)" } == "value=7")
+        check("numbered entries come in order", fields("dozen")?.map(\.name) == (1...12).map { "[\($0)]" },
+              "\(String(describing: fields("dozen")?.map(\.name)))")
+        check("an empty table opens to nothing", fields("empty")?.isEmpty == true)
+        check("anything else doesn't open", fields("stats.best") == nil && fields("stats[\"odd key\"]") == nil
+              && fields("nothing.here") == nil && fields("(stats.nested)")?.count == 1)
+        check("…and the script goes on", said(session).contains("12 12") && said(session, .error).isEmpty, "\(said(session))")
+        session.stop()
+    }
+
     // MARK: - Studio
 
     private static func testStudio(_ check: Checker) {
@@ -297,7 +494,11 @@ enum DebuggerSelfTest {
         let saved = (try? JSONEncoder().encode(script)).flatMap { try? JSONDecoder().decode(ScriptObject.self, from: $0) }
         check("breakpoints are saved with the script", saved?.breakpoints == [2, 7])
         let plain = (try? JSONEncoder().encode(ScriptObject.blank(language: .luau))).map { String(decoding: $0, as: UTF8.self) }
-        check("…and a script without any saves as before", plain?.contains("breakpoints") == false)
+        check("…and a script without any saves as before", plain?.contains("breakpoints") == false
+              && plain?.contains("conditions") == false)
+        script.breakpointConditions = [7: "health < 20"]
+        let conditioned = (try? JSONEncoder().encode(script)).flatMap { try? JSONDecoder().decode(ScriptObject.self, from: $0) }
+        check("…and their conditions", conditioned?.breakpointConditions == [7: "health < 20"])
 
         let model = SceneModel()
         let session = EditorSession(model: model)
@@ -313,11 +514,37 @@ enum DebuggerSelfTest {
         session.stopPlay()
         check("…and those changed while playing are kept when it stops", model.script(id: id)?.breakpoints == [5],
               "\(String(describing: model.script(id: id)?.breakpoints))")
+
+        session.startPlay()
+        session.setBreakpointCondition(script: id, line: 5, "  lives == 0 ")
+        session.setBreakpointCondition(script: id, line: 6, "lives == 1")
+        session.stopPlay()
+        check("a condition set while playing is kept too, trimmed", model.script(id: id)?.breakpointConditions == [5: "lives == 0"],
+              "\(String(describing: model.script(id: id)?.breakpointConditions))")
+        let unedited = model.revision
+        model.moveBreakpoints([5: 8], forScript: id)
+        session.setBreakpointCondition(script: id, line: 8, "lives == 0 or dead")
+        check("…and moves with its breakpoint, neither an edit to undo", model.script(id: id)?.breakpoints == [8]
+              && model.script(id: id)?.breakpointConditions == [8: "lives == 0 or dead"] && model.revision == unedited)
+        session.toggleBreakpoint(script: id, line: 8)
+        session.toggleBreakpoint(script: id, line: 8)
+        check("…but not once the breakpoint's gone", model.script(id: id)?.breakpointConditions.isEmpty == true)
+        session.setBreakpointCondition(script: id, line: 8, "true")
+        session.setBreakpointCondition(script: id, line: 8, "   ")
+        check("…and a blank one is none", model.script(id: id)?.breakpointConditions.isEmpty == true)
+        session.addWatch("  lives * 2 ")
+        session.addWatch("")
+        session.addWatch("name")
+        session.removeWatch(at: 0)
+        check("watches are added and taken away", session.watchExpressions == ["name"])
         check("lines added or taken away above a breakpoint move it",
               ScriptObject.movingBreakpoints([5, 9], editing: NSRange(location: 0, length: 0), replacement: "\n\n",
                                              in: "one\ntwo\n" as NSString) == [7, 11]
               && ScriptObject.movingBreakpoints([5, 9], editing: NSRange(location: 4, length: 4), replacement: "",
                                                 in: "one\ntwo\nthree\nfour\nfive\nsix\n" as NSString) == [4, 8])
+        check("…each line mapped to where it goes, those taken away left out",
+              ScriptObject.movingLines([1, 2, 5], editing: NSRange(location: 4, length: 4), replacement: "",
+                                       in: "one\ntwo\nthree\nfour\nfive\nsix\n" as NSString) == [1: 1, 5: 4])
     }
 
     // MARK: - Together
@@ -334,12 +561,13 @@ enum DebuggerSelfTest {
         \tBuy.Name = "Buy"
         \tBuy.Parent = ReplicatedStorage
         end
-        Buy.OnServerEvent:Connect(function(player, item)
+        Buy.OnServerEvent:Connect(function(player, item, options)
         \tlocal price = if item == "sword" then 10 else 5
         \tBuy:FireClient(player, item, price)
         end)
         """
         handler.breakpoints = [10]
+        handler.breakpointConditions = [10: "item == \"sword\""]
         var shopper = ScriptObject.blank(language: .luau)
         shopper.name = "Shopper"
         shopper.host = .starterPlayer
@@ -349,7 +577,8 @@ enum DebuggerSelfTest {
         \tprint("bought", item, price)
         end)
         task.wait(0.5)
-        Buy:FireServer("sword")
+        Buy:FireServer("shield", { quantity = 1 })
+        Buy:FireServer("sword", { quantity = 2, gift = true })
         """
         guard let (hosting, joining) = LANSelfTest.twoPlayers({ model in
             model.scripts += [handler, shopper]
@@ -359,11 +588,16 @@ enum DebuggerSelfTest {
         }
         // Debugging the host's scripts from the start again.
         var stops: [ScriptDebugger.Pause] = []
+        var options: [String: [LuauInterpreter.DebugVariable]] = [:]
         host.scripts.stop()
-        host.scripts.debugger = ScriptDebugger { pause in
+        let debugger = ScriptDebugger()
+        debugger.watches = ["player.Name .. \" buys \" .. item"]
+        debugger.handler = { [unowned debugger] pause in
             stops.append(pause)
+            if let name = variable(pause.frames.first, "player") { options[name] = debugger.fields(of: "options") }
             return .resume
         }
+        host.scripts.debugger = debugger
         host.scripts.start()
         LANSelfTest.run([hosting, joining], seconds: 2)
         let stop = stops.first { $0.frames.first?.script == "Shop" && variable($0.frames.first, "player")?.contains("Sam") == true }
@@ -372,7 +606,15 @@ enum DebuggerSelfTest {
               && variable(stop?.frames.first, "price") == "10"
               && variable(stop?.frames.first, "player")?.contains("Sam") == true,
               "\(String(describing: stop?.frames.first?.variables))")
-        check("…and when it goes on, the reply reaches them", said(sam).contains("bought sword 10"), "\(said(sam))")
+        check("…only for what the breakpoint's condition asks", stops.allSatisfy { variable($0.frames.first, "item") == "\"sword\"" }
+              && stops.contains { variable($0.frames.first, "player")?.contains("Sam") == true }, "\(stops.count)")
+        check("…their name in its watch", stop?.watches.first?.result.value == "\"Sam buys sword\"",
+              "\(String(describing: stop?.watches))")
+        let sent = options.first { $0.key.contains("Sam") }?.value
+        check("…and the table they sent opens", sent?.map { "\($0.name)=\($0.value)" } == ["gift=true", "quantity=2"],
+              "\(String(describing: sent))")
+        check("…and when it goes on, the replies reach them", said(sam).contains("bought sword 10")
+              && said(sam).contains("bought shield 5"), "\(said(sam))")
         let errors = said(host, .error) + said(sam, .error)
         check("…with no errors on either", errors.isEmpty, "\(errors)")
         joining.leaveGame()

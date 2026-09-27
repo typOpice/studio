@@ -143,6 +143,10 @@ final class LineNumberRuler: NSRulerView {
     var breakpoints: Set<Int> = [] {
         didSet { if breakpoints != oldValue { needsDisplay = true } }
     }
+    /// Those of them with a condition, drawn in orange.
+    var conditional: Set<Int> = [] {
+        didSet { if conditional != oldValue { needsDisplay = true } }
+    }
     var pausedLine: Int? {
         didSet { if pausedLine != oldValue { needsDisplay = true } }
     }
@@ -150,6 +154,7 @@ final class LineNumberRuler: NSRulerView {
     var onToggle: ((Int) -> Void)?
 
     static let breakpointColor = NSColor(srgbRed: 0.86, green: 0.27, blue: 0.27, alpha: 1)
+    static let conditionalColor = NSColor(srgbRed: 0.92, green: 0.52, blue: 0.16, alpha: 1)
     static let pausedColor = NSColor(srgbRed: 0.98, green: 0.80, blue: 0.35, alpha: 1)
 
     /// The line at a point in the ruler, if there's one there.
@@ -249,7 +254,7 @@ final class LineNumberRuler: NSRulerView {
                 path.line(to: NSPoint(x: tag.maxX - 5, y: tag.maxY))
                 path.line(to: NSPoint(x: tag.minX + 2, y: tag.maxY))
                 path.close()
-                Self.breakpointColor.setFill()
+                (conditional.contains(number) ? Self.conditionalColor : Self.breakpointColor).setFill()
                 path.fill()
             }
             if number == pausedLine {
@@ -335,9 +340,10 @@ struct CodeEditor: NSViewRepresentable {
     /// The debugger's: breakpoints in the gutter (and what clicking a number does), the
     /// line the game is stopped at, and breakpoints moving with their lines as they're edited.
     var breakpoints: [Int] = []
+    var conditionalBreakpoints: Set<Int> = []
     var pausedLine: Int? = nil
     var onToggleBreakpoint: ((Int) -> Void)? = nil
-    var onBreakpointsMoved: (([Int]) -> Void)? = nil
+    var onBreakpointsMoved: (([Int: Int]) -> Void)? = nil
     let onChange: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -502,6 +508,7 @@ struct CodeEditor: NSViewRepresentable {
         coordinator.onBreakpointsMoved = onBreakpointsMoved
         if let ruler = entry.scrollView.verticalRulerView as? LineNumberRuler {
             ruler.breakpoints = Set(breakpoints)
+            ruler.conditional = conditionalBreakpoints
             ruler.pausedLine = pausedLine
             ruler.onToggle = onToggleBreakpoint
         }
@@ -562,9 +569,9 @@ struct CodeEditor: NSViewRepresentable {
         var lastReveal: UUID?
         /// The debugger's: breakpoints to move as lines come and go, and the line lit.
         var breakpoints: [Int] = []
-        var onBreakpointsMoved: (([Int]) -> Void)?
+        var onBreakpointsMoved: (([Int: Int]) -> Void)?
         var litLine: Int?
-        private var movedBreakpoints: [Int]?
+        private var movedBreakpoints: [Int: Int]?
         /// For a text view built without an entry, as the tests do.
         private lazy var ownUndo = UndoManager()
 
@@ -587,9 +594,9 @@ struct CodeEditor: NSViewRepresentable {
         /// Where lines are added or taken away, the breakpoints below move with them.
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
             guard !isApplyingExternalChange, !breakpoints.isEmpty, let replacementString else { return true }
-            let moved = ScriptObject.movingBreakpoints(breakpoints, editing: range, replacement: replacementString,
-                                                       in: textView.string as NSString)
-            if moved != breakpoints { movedBreakpoints = moved }
+            let moved = ScriptObject.movingLines(breakpoints, editing: range, replacement: replacementString,
+                                                 in: textView.string as NSString)
+            if moved.contains(where: { $0.key != $0.value }) || moved.count != breakpoints.count { movedBreakpoints = moved }
             return true
         }
 
@@ -601,7 +608,7 @@ struct CodeEditor: NSViewRepresentable {
             onChange(textView.string)
             if let moved = movedBreakpoints {
                 movedBreakpoints = nil
-                breakpoints = moved
+                breakpoints = Array(Set(moved.values)).sorted()
                 onBreakpointsMoved?(moved)
             }
 

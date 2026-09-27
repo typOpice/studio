@@ -9,6 +9,11 @@ import Foundation
 /// script loads again for every character). A step is a breakpoint on every line of
 /// every script, taken away at the next stop; stops in other threads, or deeper than a
 /// step over wants, are passed over. See LuauInterpreter's debugger calls and the shim.
+///
+/// A breakpoint may have a condition, a Luau expression worked out in the stopped call
+/// (its locals, then its upvalues, then the script's globals): it stops only when that
+/// holds, or when it fails (to say why). Watch expressions are worked out the same way
+/// at every stop, and while stopped any expression can be, and any table opened.
 final class ScriptDebugger {
     enum Command: Equatable { case resume, stepOver, stepInto, stepOut, stop }
     enum Reason: Equatable { case breakpoint, step }
@@ -20,13 +25,28 @@ final class ScriptDebugger {
         var function: String
         var line: Int
         var variables: [LuauInterpreter.DebugVariable]
+        /// Where it is on the VM's stack, to work expressions out in it.
+        var level = 0
+    }
+
+    /// A watch expression, and what it came to.
+    struct Watch: Equatable {
+        var expression: String
+        var result: LuauInterpreter.Evaluation
     }
 
     struct Pause: Equatable {
         var reason: Reason
         /// The calls in scripts, innermost first (the library's own are left out).
         var frames: [Frame]
+        /// The watch expressions, worked out in the innermost call.
+        var watches: [Watch] = []
+        /// Anything else to know: that the breakpoint's condition failed, and why.
+        var note: String?
     }
+
+    /// Expressions worked out at every stop (Pause.watches).
+    var watches: [String] = []
 
     /// What to do at a stop: the answer lets the scripts go on. Studio asks the person
     /// (in a nested event loop); tests answer at once.
@@ -38,8 +58,10 @@ final class ScriptDebugger {
 
     private weak var runtime: ScriptRuntime?
     private weak var vm: LuauInterpreter?
-    /// Each script's breakpoints as they landed (a line with no code moves to the next).
+    /// Each script's breakpoints as they landed (a line with no code moves to the next),
+    /// and the conditions of those that have them.
     private var landed: [UUID: Set<Int>] = [:]
+    private var conditions: [UUID: [Int: String]] = [:]
     private var stepping: (mode: Command, thread: UnsafeRawPointer?, depth: Int)?
 
     init(handler: ((Pause) -> Command)? = nil) {
@@ -51,6 +73,7 @@ final class ScriptDebugger {
         self.vm = vm
         self.runtime = runtime
         landed = [:]
+        conditions = [:]
         stepping = nil
         vm.attachDebugger()
         vm.onLoaded = { [weak self] environment in self?.loaded(environment) }
@@ -68,26 +91,52 @@ final class ScriptDebugger {
         guard let vm, let id = Self.scriptID(inEnvironment: environment),
               let script = runtime?.model.script(id: id) else { return }
         vm.keepChunk(key: id.uuidString)
+        land(script)
+    }
+
+    /// Puts a script's breakpoints on its chunks, noting where they landed and with what
+    /// conditions: two on one line stop when either would, one without a condition always.
+    private func land(_ script: ScriptObject) {
+        guard let vm else { return }
+        var lines: Set<Int> = [], when: [Int: String] = [:], always: Set<Int> = []
         for line in script.breakpoints {
-            let at = vm.setBreakpoint(key: id.uuidString, line: line, enabled: true)
-            if at > 0 { landed[id, default: []].insert(at) }
+            let at = vm.setBreakpoint(key: script.id.uuidString, line: line, enabled: true)
+            guard at > 0 else { continue }
+            lines.insert(at)
+            if let condition = script.breakpointConditions[line] {
+                when[at] = when[at].map { "(\($0)) or (\(condition))" } ?? condition
+            } else {
+                always.insert(at)
+            }
         }
+        for at in always { when[at] = nil }
+        landed[script.id] = lines.isEmpty ? nil : lines
+        conditions[script.id] = when.isEmpty ? nil : when
     }
 
     /// A breakpoint put on or taken off while the scripts run.
     func setBreakpoint(script id: UUID, line: Int, on: Bool) {
         guard let vm else { return }
-        let at = vm.setBreakpoint(key: id.uuidString, line: line, enabled: on)
-        guard at > 0 else { return }
+        if !on {
+            // Off where it landed; any other breakpoint that landed there goes back on.
+            vm.setBreakpoint(key: id.uuidString, line: line, enabled: false)
+        }
+        breakpointsChanged(script: id)
         if on {
-            landed[id, default: []].insert(at)
+            // On even if the script's breakpoints don't have it yet.
+            let at = vm.setBreakpoint(key: id.uuidString, line: line, enabled: true)
+            if at > 0 { landed[id, default: []].insert(at) }
+        }
+    }
+
+    /// A script's breakpoints or their conditions changed while the scripts run.
+    func breakpointsChanged(script id: UUID) {
+        guard let script = runtime?.model.script(id: id) else { return }
+        if script.breakpoints.isEmpty {
+            landed[id] = nil
+            conditions[id] = nil
         } else {
-            landed[id]?.remove(at)
-            // Another breakpoint may have landed on the same line.
-            for other in runtime?.model.script(id: id)?.breakpoints ?? [] where other != line {
-                let again = vm.setBreakpoint(key: id.uuidString, line: other, enabled: true)
-                if again > 0 { landed[id, default: []].insert(again) }
-            }
+            land(script)
         }
     }
 
@@ -96,29 +145,40 @@ final class ScriptDebugger {
     private func reached(_ line: Int) {
         guard let vm, let handler, !stopRequested, let top = vm.frame(0) else { return }
         let id = Self.scriptID(inEnvironment: top.environment)
-        let isBreakpoint = id.map { landed[$0]?.contains(line) == true } ?? false
+        var isBreakpoint = id.map { landed[$0]?.contains(line) == true } ?? false
         let thread = vm.pausedThread
         let depth = vm.pausedDepth
-        var reason = Reason.breakpoint
+        var wanted = false
         if let step = stepping {
             // A step stops at the next line in the same thread: any, for Step Into; no
             // deeper, for Step Over; shallower, for Step Out. A breakpoint stops anyway.
             let here = thread == step.thread
-            let wanted: Bool
             switch step.mode {
             case .stepInto: wanted = here && id != nil
             case .stepOver: wanted = here && depth <= step.depth
             case .stepOut: wanted = here && depth < step.depth
             default: wanted = false
             }
-            guard wanted || isBreakpoint else { return }
-            if !isBreakpoint { reason = .step }
-            endStepping()
-        } else if !isBreakpoint {
-            return
         }
+        // A condition that doesn't hold passes the breakpoint over; one that fails stops,
+        // to say so.
+        var note: String?
+        if isBreakpoint, !wanted, let id, let condition = conditions[id]?[line] {
+            let result = vm.evaluate(condition, at: 0)
+            if let error = result.error {
+                note = "The breakpoint's condition (\(condition)) failed: \(error)"
+            } else if !result.truthy {
+                isBreakpoint = false
+            }
+        }
+        guard wanted || isBreakpoint else { return }
+        if stepping != nil { endStepping() }
 
-        let pause = Pause(reason: reason, frames: frames(depth: depth))
+        let frames = frames(depth: depth)
+        let level = frames.first?.level ?? 0
+        let pause = Pause(reason: isBreakpoint ? .breakpoint : .step, frames: frames,
+                          watches: watches.map { Watch(expression: $0, result: vm.evaluate($0, at: level)) },
+                          note: note)
         paused = pause
         let command = handler(pause)
         paused = nil
@@ -153,8 +213,43 @@ final class ScriptDebugger {
             guard let id = Self.scriptID(inEnvironment: frame.environment) else { continue }
             let name = runtime?.model.script(id: id)?.name ?? "Script"
             list.append(Frame(scriptID: id, script: name, function: frame.function, line: frame.line,
-                              variables: vm.variables(at: level)))
+                              variables: vm.variables(at: level), level: level))
         }
         return list
+    }
+
+    // MARK: - While stopped
+
+    /// An expression worked out in one of the stop's calls (by its place in Pause.frames).
+    func evaluate(_ expression: String, inFrame index: Int = 0) -> LuauInterpreter.Evaluation {
+        let trimmed = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let vm, let pause = paused else { return LuauInterpreter.Evaluation(error: "not stopped") }
+        guard !trimmed.isEmpty else { return LuauInterpreter.Evaluation(error: "nothing to work out") }
+        return vm.evaluate(trimmed, at: level(of: index, in: pause))
+    }
+
+    /// What's in the table an expression comes to (a variable's path, or one inside it:
+    /// `stats.best`, `list[2]`), numbered entries first, then by name; nil if it isn't one.
+    func fields(of expression: String, inFrame index: Int = 0) -> [LuauInterpreter.DebugVariable]? {
+        guard let vm, let pause = paused else { return nil }
+        return vm.fields(of: expression, at: level(of: index, in: pause)).map(Self.ordered)
+    }
+
+    private func level(of index: Int, in pause: Pause) -> Int {
+        pause.frames.indices.contains(index) ? pause.frames[index].level : (pause.frames.first?.level ?? 0)
+    }
+
+    static func ordered(_ fields: [LuauInterpreter.DebugVariable]) -> [LuauInterpreter.DebugVariable] {
+        func number(_ field: LuauInterpreter.DebugVariable) -> Double? {
+            field.path.hasPrefix("[") && !field.path.hasPrefix("[\"") ? Double(field.path.dropFirst().dropLast()) : nil
+        }
+        return fields.sorted { a, b in
+            switch (number(a), number(b)) {
+            case let (x?, y?): return x < y
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            }
+        }
     }
 }

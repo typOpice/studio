@@ -239,10 +239,11 @@ struct ScriptDocumentView: View {
                        focusOnAppear: true,
                        reveal: session.revealRequest(for: document),
                        breakpoints: script.breakpoints,
+                       conditionalBreakpoints: Set(script.breakpointConditions.keys),
                        pausedLine: pausedLine,
                        onToggleBreakpoint: script.language == .luau
                            ? { [session, id = script.id] line in session.toggleBreakpoint(script: id, line: line) } : nil,
-                       onBreakpointsMoved: { [model, id = script.id] lines in model.setBreakpoints(lines, forScript: id) }
+                       onBreakpointsMoved: { [model, id = script.id] moves in model.moveBreakpoints(moves, forScript: id) }
             ) { updated in
                 model.setScriptSource(id: script.id, source: updated)
             }

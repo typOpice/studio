@@ -4,7 +4,9 @@
 #include "lualib.h"
 #include "luacode.h"
 
+#include <cctype>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -34,8 +36,12 @@ struct StudioLuaImpl {
     /// Environments by their table, to tell whose code a frame is.
     std::unordered_map<const void *, std::string> environments;
     std::string frameEnvironment, frameFunction;
-    struct Variable { std::string name, kind, type, value; };
+    /// `path`: how to reach it in a watch expression (a local's name, `.key`, `[1]`); "" for no way.
+    struct Variable { std::string name, kind, type, value, path; };
     std::vector<Variable> variables;
+    /// The last expression evaluated while paused: what it came to, or why not.
+    struct Evaluation { std::string type, value, error; bool truthy = false; };
+    Evaluation evaluation;
 };
 
 StudioLuaImpl *impl(StudioLua *vm) { return reinterpret_cast<StudioLuaImpl *>(vm); }
@@ -586,6 +592,7 @@ int studio_lua_debug_variables(StudioLua *vm, int level) {
         if (name[0] != '(') {
             StudioLuaImpl::Variable variable;
             variable.name = name;
+            variable.path = name;
             variable.kind = "local";
             describe(self, P, -1, variable.type, variable.value);
             // A later local of the same name hides an earlier one.
@@ -608,6 +615,7 @@ int studio_lua_debug_variables(StudioLua *vm, int level) {
             if (name[0] != '\0' && name[0] != '(') {
                 StudioLuaImpl::Variable variable;
                 variable.name = name;
+                variable.path = name;
                 variable.kind = "upvalue";
                 describe(self, P, -1, variable.type, variable.value);
                 self->variables.push_back(variable);
@@ -624,6 +632,191 @@ int studio_lua_debug_variables(StudioLua *vm, int level) {
     }
     self->variables = shown;
     return static_cast<int>(self->variables.size());
+}
+
+namespace {
+
+/// A table holding a frame's upvalues, then its locals (the later of a name winning),
+/// whose metatable reads anything else from the function's environment: what a watch
+/// expression sees. Pushed; false if there's no such frame.
+bool pushFrameScope(lua_State *P, int level) {
+    lua_Debug ar;
+    lua_rawcheckstack(P, 6);
+    if (!lua_getinfo(P, level, "f", &ar)) {
+        return false;
+    }
+    int function = lua_gettop(P);
+    lua_newtable(P);
+    int scope = lua_gettop(P);
+    for (int n = 1;; ++n) {
+        const char *name = lua_getupvalue(P, function, n);
+        if (name == nullptr) {
+            break;
+        }
+        if (name[0] != '\0' && name[0] != '(') {
+            lua_setfield(P, scope, name);
+        } else {
+            lua_pop(P, 1);
+        }
+    }
+    for (int n = 1;; ++n) {
+        const char *name = lua_getlocal(P, level, n);
+        if (name == nullptr) {
+            break;
+        }
+        if (name[0] != '(') {
+            lua_setfield(P, scope, name);
+        } else {
+            lua_pop(P, 1);
+        }
+    }
+    lua_newtable(P);
+    lua_getfenv(P, function);
+    lua_setfield(P, -2, "__index");
+    lua_setmetatable(P, scope);
+    lua_remove(P, function);
+    return true;
+}
+
+/// Evaluates `return <expression>` in a frame's scope, leaving its value on the stack.
+/// False (and the reason in the evaluation's error) if it wouldn't compile or failed.
+bool evaluateInFrame(StudioLuaImpl *self, lua_State *P, int level, const char *expression) {
+    self->evaluation = StudioLuaImpl::Evaluation();
+    if (!pushFrameScope(P, level)) {
+        self->evaluation.error = "no such frame";
+        return false;
+    }
+    int scope = lua_gettop(P);
+    std::string source = std::string("return ") + expression + "\n";
+    size_t size = 0;
+    lua_CompileOptions options = {};
+    options.optimizationLevel = 1;
+    char *bytecode = luau_compile(source.c_str(), source.size(), &options, &size);
+    if (bytecode == nullptr) {
+        lua_pop(P, 1);
+        self->evaluation.error = "could not compile it";
+        return false;
+    }
+    int loaded = luau_load(P, "=watch", bytecode, size, scope);
+    std::free(bytecode);
+    lua_remove(P, scope);
+    if (loaded != 0) {
+        const char *message = lua_tostring(P, -1);
+        self->evaluation.error = message != nullptr ? message : "could not compile it";
+        lua_pop(P, 1);
+        return false;
+    }
+    // A moment to run, as describing a value gets.
+    self->timing = true;
+    self->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+    int status = lua_pcall(P, 0, 1, 0);
+    self->timing = false;
+    if (status != 0) {
+        const char *message = lua_tostring(P, -1);
+        self->evaluation.error = message != nullptr ? message : "it failed";
+        lua_pop(P, 1);
+        return false;
+    }
+    return true;
+}
+
+bool isIdentifier(const char *text, size_t length) {
+    if (length == 0 || !(std::isalpha((unsigned char)text[0]) || text[0] == '_')) {
+        return false;
+    }
+    for (size_t i = 1; i < length; ++i) {
+        if (!(std::isalnum((unsigned char)text[i]) || text[i] == '_')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+int studio_lua_debug_evaluate(StudioLua *vm, int level, const char *expression) {
+    StudioLuaImpl *self = impl(vm);
+    lua_State *P = self->paused;
+    if (P == nullptr) {
+        self->evaluation = StudioLuaImpl::Evaluation();
+        self->evaluation.error = "not paused";
+        return 0;
+    }
+    if (!evaluateInFrame(self, P, level, expression)) {
+        return 0;
+    }
+    self->evaluation.truthy = lua_toboolean(P, -1) != 0;
+    describe(self, P, -1, self->evaluation.type, self->evaluation.value);
+    lua_pop(P, 1);
+    return 1;
+}
+
+void studio_lua_debug_evaluation(StudioLua *vm, const char **type, const char **value, const char **error, int *truthy) {
+    StudioLuaImpl *self = impl(vm);
+    *type = self->evaluation.type.c_str();
+    *value = self->evaluation.value.c_str();
+    *error = self->evaluation.error.c_str();
+    *truthy = self->evaluation.truthy ? 1 : 0;
+}
+
+int studio_lua_debug_fields(StudioLua *vm, int level, const char *expression, int most) {
+    StudioLuaImpl *self = impl(vm);
+    self->variables.clear();
+    lua_State *P = self->paused;
+    if (P == nullptr || !evaluateInFrame(self, P, level, expression)) {
+        return -1;
+    }
+    if (!lua_istable(P, -1)) {
+        lua_pop(P, 1);
+        return -1;
+    }
+    int table = lua_gettop(P);
+    lua_rawcheckstack(P, 4);
+    lua_pushnil(P);
+    while (lua_next(P, table) != 0) {
+        if (static_cast<int>(self->variables.size()) < most) {
+            StudioLuaImpl::Variable field;
+            field.kind = "field";
+            if (lua_type(P, -2) == LUA_TSTRING) {
+                size_t length = 0;
+                const char *key = lua_tolstring(P, -2, &length);
+                field.name = std::string(key, length);
+                if (isIdentifier(key, length)) {
+                    field.path = "." + field.name;
+                } else {
+                    std::string quoted;
+                    for (size_t i = 0; i < length; ++i) {
+                        if (key[i] == '"' || key[i] == '\\') quoted += '\\';
+                        quoted += key[i];
+                    }
+                    field.path = "[\"" + quoted + "\"]";
+                }
+            } else if (lua_type(P, -2) == LUA_TNUMBER) {
+                double number = lua_tonumber(P, -2);
+                char text[64];
+                std::snprintf(text, sizeof text, "%.14g", number);
+                field.name = std::string("[") + text + "]";
+                field.path = field.name;
+            } else {
+                std::string ignored;
+                describe(self, P, -2, ignored, field.name);
+                field.name = "[" + field.name + "]";
+            }
+            describe(self, P, -1, field.type, field.value);
+            self->variables.push_back(field);
+        }
+        lua_pop(P, 1);
+    }
+    lua_pop(P, 1);
+    return static_cast<int>(self->variables.size());
+}
+
+const char *studio_lua_debug_variable_path(StudioLua *vm, int index) {
+    StudioLuaImpl *self = impl(vm);
+    if (index < 0 || index >= static_cast<int>(self->variables.size())) {
+        return "";
+    }
+    return self->variables[index].path.c_str();
 }
 
 void studio_lua_debug_variable(StudioLua *vm, int index, const char **name, const char **kind,

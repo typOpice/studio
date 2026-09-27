@@ -467,6 +467,13 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Also fixed: a raycast straight down at a whole-number position could slip through MeshParts.
    New files: Model/Terrain.swift, Play/TerrainMesher.swift, Scripting/ScriptRuntime+Terrain.swift, UI/TerrainUI.swift, TerrainSelfTest.swift.
 
+46. Debugger: watches, conditional breakpoints and opening tables, 2026-09-27.
+   The Debugger tab has a new Watch column: type an expression (player.Name, #inventory, health < 20) and it's worked out every time the game stops, using the stopped function's variables and the script's globals. Errors say why.
+   Breakpoints can have a condition: type one under the breakpoint in the Debugger tab and it only stops when that's true. Its tag in the script turns orange. The condition is saved with the place and moves with its line.
+   Tables in Variables (and in watches) have an arrow that opens them, and the tables inside them too.
+   Tested alone and with a host and a joined player (the host stops only for the joined player's sword purchase, sees their name in a watch, and opens the table they sent).
+   No new files; the changes are in the Luau shim, ScriptDebugger, the Debugger panel and DebuggerSelfTest.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

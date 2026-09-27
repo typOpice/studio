@@ -61,6 +61,16 @@ int studio_lua_debug_frame(StudioLua *vm, int level, const char **environment, c
 int studio_lua_debug_variables(StudioLua *vm, int level);
 void studio_lua_debug_variable(StudioLua *vm, int index, const char **name, const char **kind,
                                const char **type, const char **value);
+/// How a variable (or field) is reached in an expression: a name, `.key`, `["key"]`, `[1]`;
+/// "" when it can't be (a table as a key).
+const char *studio_lua_debug_variable_path(StudioLua *vm, int index);
+/// Evaluates an expression in a frame, seeing its locals and upvalues, then the script's
+/// globals: 1 and the result described, or 0 and why (studio_lua_debug_evaluation).
+int studio_lua_debug_evaluate(StudioLua *vm, int level, const char *expression);
+void studio_lua_debug_evaluation(StudioLua *vm, const char **type, const char **value, const char **error, int *truthy);
+/// A table an expression comes to: up to `most` of its entries as variables (read with
+/// studio_lua_debug_variable and _path); -1 if it isn't a table or fails.
+int studio_lua_debug_fields(StudioLua *vm, int level, const char *expression, int most);
 
 StudioLua *studio_lua_new(void *context, StudioInvokeFn invoke);
 void studio_lua_free(StudioLua *vm);

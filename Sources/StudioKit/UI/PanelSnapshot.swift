@@ -296,22 +296,33 @@ enum PanelSnapshot {
             session.openScript(script, line: 3)
             session.splitView = true
         case "debugger":
-            // Stopped at a breakpoint in a function the script called, as a real stop is caught.
+            // Stopped at a breakpoint, as a real stop is caught: watches, a condition, and
+            // a table opened.
             var counter = ScriptObject.blank(language: .luau)
             counter.name = "Counter"
             counter.source = DebuggerSelfTest.counting
             counter.breakpoints = [4, 9]
+            counter.breakpointConditions = [4: "amount > 1"]
             model.scripts.append(counter)
+            for watch in ["total", "#items", "index * 10", "items.missing.field"] { session.addWatch(watch) }
             let play = PlayController(model: model, console: ScriptConsole())
             var caught: ScriptDebugger.Pause?
-            play.scripts.debugger = ScriptDebugger { pause in
-                if caught == nil && pause.frames.first?.line == 4 { caught = pause }
+            var opened: [String: [LuauInterpreter.DebugVariable]] = [:]
+            let debugger = ScriptDebugger()
+            debugger.watches = session.watchExpressions
+            debugger.handler = { [unowned debugger] pause in
+                if caught == nil && pause.frames.first?.line == 9 && pause.frames.first?.variables.first(where: { $0.name == "index" })?.value == "2" {
+                    caught = pause
+                    opened["items"] = debugger.fields(of: "items")
+                }
                 return .resume
             }
+            play.scripts.debugger = debugger
             play.start()
             for _ in 0..<5 { play.step(dt: 1.0 / 60) }
             play.stop()
-            if let caught { session.show(caught) }
+            if let caught { session.show(caught, opened: opened) }
+            session.dockHeight = 330
         case "sounds", "picture":
             // A sound and a picture imported, a Sound in SoundService and one in a part,
             // and the Sound's (or the picture's) properties.

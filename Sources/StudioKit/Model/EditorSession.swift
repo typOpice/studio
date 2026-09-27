@@ -224,7 +224,9 @@ final class EditorSession: ObservableObject {
         let controller = PlayController(model: model, console: console, shaderStatus: shaderStatus,
                                         withPlayer: withPlayer)
         // Luau's debugger: stops at breakpoints, and asks here what next.
-        controller.scripts.debugger = ScriptDebugger { [weak self] pause in self?.paused(pause) ?? .resume }
+        let debugger = ScriptDebugger { [weak self] pause in self?.paused(pause) ?? .resume }
+        debugger.watches = watchExpressions
+        controller.scripts.debugger = debugger
         controller.onDebuggerStop = { [weak self] in
             DispatchQueue.main.async { self?.stopPlay() }
         }
@@ -252,9 +254,9 @@ final class EditorSession: ObservableObject {
         isRunMode = false
         // Scripts edit the live scene, so restore what was there before play began —
         // but not the breakpoints, which aren't the game's.
-        let breakpoints = model.scripts.map { ($0.id, $0.breakpoints) }
+        let breakpoints = model.scripts.map { ($0.id, $0.breakpoints, $0.breakpointConditions) }
         model.state = snapshot
-        for (id, lines) in breakpoints { model.setBreakpoints(lines, forScript: id) }
+        for (id, lines, conditions) in breakpoints { model.setBreakpoints(lines, conditions: conditions, forScript: id) }
         console.info(wasRunning ? "■ Run stopped — scene restored" : "■ Play stopped — scene restored")
         model.statusText = "Stopped — scene restored"
     }
@@ -270,6 +272,57 @@ final class EditorSession: ObservableObject {
     /// The call whose variables the Debugger panel shows.
     @Published var debugFrame = 0
     private var debugCommand: ScriptDebugger.Command?
+    /// Expressions the Debugger panel works out at every stop, for this session.
+    @Published private(set) var watchExpressions: [String] = []
+    /// While stopped: the tables opened in the Debugger panel, by their expressions
+    /// ("stats", "stats.best", "(watch)"), and what's in them.
+    @Published private(set) var debugOpened: [String: [LuauInterpreter.DebugVariable]] = [:]
+
+    private var debugger: ScriptDebugger? { play?.scripts.debugger }
+
+    func addWatch(_ expression: String) {
+        let trimmed = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        watchExpressions.append(trimmed)
+        watchesChanged()
+    }
+
+    func removeWatch(at index: Int) {
+        guard watchExpressions.indices.contains(index) else { return }
+        watchExpressions.remove(at: index)
+        watchesChanged()
+    }
+
+    private func watchesChanged() {
+        debugger?.watches = watchExpressions
+        rewatch()
+    }
+
+    /// The watches again, in the call shown.
+    private func rewatch() {
+        guard let debugger, debugPause != nil else { return }
+        debugPause?.watches = watchExpressions.map {
+            ScriptDebugger.Watch(expression: $0, result: debugger.evaluate($0, inFrame: debugFrame))
+        }
+    }
+
+    /// Opens a table in the Debugger panel (its expression), or closes it.
+    func toggleOpened(_ expression: String) {
+        if debugOpened[expression] != nil {
+            // It, and the tables opened inside it.
+            debugOpened = debugOpened.filter { key, _ in
+                key != expression && !key.hasPrefix(expression + ".") && !key.hasPrefix(expression + "[")
+            }
+        } else if let fields = debugger?.fields(of: expression, inFrame: debugFrame) {
+            debugOpened[expression] = fields
+        }
+    }
+
+    /// A breakpoint's condition — in the running game too.
+    func setBreakpointCondition(script id: UUID, line: Int, _ condition: String) {
+        model.setBreakpointCondition(condition, line: line, forScript: id)
+        debugger?.breakpointsChanged(script: id)
+    }
 
     /// A Luau script's breakpoint on or off — in the running game too.
     func toggleBreakpoint(script id: UUID, line: Int) {
@@ -288,15 +341,23 @@ final class EditorSession: ObservableObject {
     /// Shows a call in the stack: its variables, and its line in its script.
     func showFrame(_ index: Int) {
         guard let pause = debugPause, pause.frames.indices.contains(index) else { return }
+        let changed = debugFrame != index
         debugFrame = index
+        if changed {
+            debugOpened = [:]
+            rewatch()
+        }
         let frame = pause.frames[index]
         if let id = frame.scriptID { reveal(.script(id), line: frame.line) }
     }
 
-    /// Shows a stop: the Debugger tab, and the line in its script.
-    func show(_ pause: ScriptDebugger.Pause) {
+    /// Shows a stop: the Debugger tab, and the line in its script (and any tables open,
+    /// for a picture of the panel).
+    func show(_ pause: ScriptDebugger.Pause, opened: [String: [LuauInterpreter.DebugVariable]] = [:]) {
         debugPause = pause
         debugCommand = nil
+        debugOpened = opened
+        debugFrame = 0
         showDock(.debugger)
         showFrame(0)
         if let top = pause.frames.first {
@@ -321,6 +382,7 @@ final class EditorSession: ObservableObject {
         let command = debugCommand ?? .resume
         debugCommand = nil
         debugPause = nil
+        debugOpened = [:]
         model.statusText = command == .stop ? "Stopping" : "Playing"
         return command
     }

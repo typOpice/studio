@@ -65,6 +65,9 @@ struct ScriptObject: Identifiable, Codable, Equatable {
     /// Lines the debugger stops at (Luau), in order. Saved with the place, but not an
     /// edit: toggling one is never undone, and Stop keeps them (EditorSession.stopPlay).
     var breakpoints: [Int] = []
+    /// Breakpoints that stop only when a Luau expression holds, by line (each one of
+    /// `breakpoints`). Saved and kept the same way.
+    var breakpointConditions: [Int: String] = [:]
 
     var isModule: Bool { kind == .module }
 
@@ -78,7 +81,7 @@ struct ScriptObject: Identifiable, Codable, Equatable {
         return script
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, language, host, source, enabled, parentID, kind, breakpoints }
+    private enum CodingKeys: String, CodingKey { case id, name, language, host, source, enabled, parentID, kind, breakpoints, conditions }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -93,6 +96,10 @@ struct ScriptObject: Identifiable, Codable, Equatable {
         parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
         kind = try c.decodeIfPresent(ScriptKind.self, forKey: .kind) ?? .script
         breakpoints = try c.decodeIfPresent([Int].self, forKey: .breakpoints) ?? []
+        // Saved by line as text ("12"), as JSON objects' keys are.
+        for (line, condition) in try c.decodeIfPresent([String: String].self, forKey: .conditions) ?? [:] {
+            if let line = Int(line), breakpoints.contains(line) { breakpointConditions[line] = condition }
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -105,6 +112,10 @@ struct ScriptObject: Identifiable, Codable, Equatable {
         try c.encode(enabled, forKey: .enabled)
         try c.encodeIfPresent(parentID, forKey: .parentID)
         if !breakpoints.isEmpty { try c.encode(breakpoints, forKey: .breakpoints) }
+        if !breakpointConditions.isEmpty {
+            try c.encode(Dictionary(uniqueKeysWithValues: breakpointConditions.map { (String($0.key), $0.value) }),
+                         forKey: .conditions)
+        }
         if kind != .script { try c.encode(kind, forKey: .kind) }
     }
 

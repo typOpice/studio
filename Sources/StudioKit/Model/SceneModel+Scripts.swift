@@ -110,10 +110,34 @@ extension SceneModel {
 extension SceneModel {
     /// A script's breakpoints: not an edit (nothing to undo, and the place isn't marked
     /// changed), but saved with it the next time it is.
-    func setBreakpoints(_ lines: [Int], forScript id: UUID) {
+    /// Conditions go with lines that are no longer breakpoints; `conditions`, if given,
+    /// replaces them all.
+    func setBreakpoints(_ lines: [Int], conditions: [Int: String]? = nil, forScript id: UUID) {
         guard let index = scripts.firstIndex(where: { $0.id == id }) else { return }
         let sorted = Array(Set(lines)).sorted()
         if scripts[index].breakpoints != sorted { scripts[index].breakpoints = sorted }
+        let kept = (conditions ?? scripts[index].breakpointConditions).filter { sorted.contains($0.key) }
+        if scripts[index].breakpointConditions != kept { scripts[index].breakpointConditions = kept }
+    }
+
+    /// Breakpoints (and their conditions) moved by an edit: old line → new, those whose
+    /// lines went left out (ScriptObject.movingLines).
+    func moveBreakpoints(_ moves: [Int: Int], forScript id: UUID) {
+        guard let script = script(id: id) else { return }
+        var conditions: [Int: String] = [:]
+        for (line, condition) in script.breakpointConditions {
+            if let to = moves[line] { conditions[to] = condition }
+        }
+        setBreakpoints(Array(moves.values), conditions: conditions, forScript: id)
+    }
+
+    /// A breakpoint stops only when `condition` holds; blank, or nil, and it always does.
+    func setBreakpointCondition(_ condition: String?, line: Int, forScript id: UUID) {
+        guard let index = scripts.firstIndex(where: { $0.id == id }),
+              scripts[index].breakpoints.contains(line) else { return }
+        let trimmed = condition?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let value: String? = trimmed.isEmpty ? nil : trimmed
+        if scripts[index].breakpointConditions[line] != value { scripts[index].breakpointConditions[line] = value }
     }
 }
 
@@ -121,25 +145,31 @@ extension ScriptObject {
     /// Breakpoints after `range` of `text` is replaced by `replacement`: those below the
     /// edit move with their lines, and those on lines taken away go.
     static func movingBreakpoints(_ lines: [Int], editing range: NSRange, replacement: String, in text: NSString) -> [Int] {
-        guard !lines.isEmpty, range.location <= text.length else { return lines }
+        Array(Set(movingLines(lines, editing: range, replacement: replacement, in: text).values)).sorted()
+    }
+
+    /// Where each line goes after the edit (movingBreakpoints); lines taken away are left out.
+    static func movingLines(_ lines: [Int], editing range: NSRange, replacement: String, in text: NSString) -> [Int: Int] {
+        let unmoved = Dictionary(lines.map { ($0, $0) }, uniquingKeysWith: { first, _ in first })
+        guard !lines.isEmpty, range.location <= text.length else { return unmoved }
         let start = LineNumbers.line(atOffset: range.location, in: text)
         let removedText = range.length > 0 && NSMaxRange(range) <= text.length ? text.substring(with: range) : ""
         let removed = removedText.filter { $0 == "\n" }.count
         let added = replacement.filter { $0 == "\n" }.count
-        guard removed != 0 || added != 0 else { return lines }
+        guard removed != 0 || added != 0 else { return unmoved }
         // From the start of a line, that line moves too; from its middle, only those after.
         let atLineStart = range.location == 0 || text.character(at: range.location - 1) == 10
         let first = atLineStart ? start : start + 1
-        var moved: [Int] = []
+        var moved: [Int: Int] = [:]
         for line in lines {
             if line < first {
-                moved.append(line)
+                moved[line] = line
             } else if line < first + removed {
                 continue
             } else {
-                moved.append(line + added - removed)
+                moved[line] = line + added - removed
             }
         }
-        return Array(Set(moved)).sorted()
+        return moved
     }
 }

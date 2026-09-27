@@ -147,18 +147,57 @@ final class LuauInterpreter {
         var kind: String
         var type: String
         var value: String
+        /// How to reach it in an expression — a name, or after its table's: `.key`,
+        /// `["key"]`, `[1]`; "" when it can't be.
+        var path = ""
     }
 
     func variables(at level: Int) -> [DebugVariable] {
         guard let vm else { return [] }
-        let count = studio_lua_debug_variables(vm, Int32(level))
+        return debugVariables(count: studio_lua_debug_variables(vm, Int32(level)))
+    }
+
+    /// The entries (up to `most`) of the table an expression comes to in a frame, while
+    /// paused; nil if it isn't a table.
+    func fields(of expression: String, at level: Int, most: Int = 200) -> [DebugVariable]? {
+        guard let vm else { return nil }
+        let count = studio_lua_debug_fields(vm, Int32(level), expression, Int32(most))
+        return count < 0 ? nil : debugVariables(count: count)
+    }
+
+    private func debugVariables(count: Int32) -> [DebugVariable] {
+        guard let vm else { return [] }
         return (0..<count).map { index in
             var name: UnsafePointer<CChar>?, kind: UnsafePointer<CChar>?, type: UnsafePointer<CChar>?,
                 value: UnsafePointer<CChar>?
             studio_lua_debug_variable(vm, index, &name, &kind, &type, &value)
             func text(_ pointer: UnsafePointer<CChar>?) -> String { pointer.map { String(cString: $0) } ?? "" }
-            return DebugVariable(name: text(name), kind: text(kind), type: text(type), value: text(value))
+            return DebugVariable(name: text(name), kind: text(kind), type: text(type), value: text(value),
+                                 path: text(studio_lua_debug_variable_path(vm, index)))
         }
+    }
+
+    /// An expression, worked out in a frame while paused: its locals and upvalues first,
+    /// then the script's globals.
+    struct Evaluation: Equatable {
+        var type = ""
+        var value = ""
+        /// Why there's no value (it wouldn't compile, or failed); nil when there is one.
+        var error: String?
+        var truthy = false
+    }
+
+    func evaluate(_ expression: String, at level: Int) -> Evaluation {
+        guard let vm else { return Evaluation(error: "not running") }
+        let succeeded = studio_lua_debug_evaluate(vm, Int32(level), expression) != 0
+        var type: UnsafePointer<CChar>?, value: UnsafePointer<CChar>?, error: UnsafePointer<CChar>?
+        var truthy: Int32 = 0
+        studio_lua_debug_evaluation(vm, &type, &value, &error, &truthy)
+        func text(_ pointer: UnsafePointer<CChar>?) -> String { pointer.map { String(cString: $0) } ?? "" }
+        // Without the expression's own chunk name ("watch:1: attempt to…").
+        let reason = text(error).replacingOccurrences(of: #"^watch:\d+: "#, with: "", options: .regularExpression)
+        return Evaluation(type: text(type), value: text(value), error: succeeded ? nil : reason,
+                          truthy: succeeded && truthy != 0)
     }
 
     // MARK: - Running code

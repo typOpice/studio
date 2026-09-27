@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2810 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2847 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1859,7 +1859,7 @@ What a module hands back is read from its code, without running it:
 
 A module built some other way just isn't listed.
 
-### Debugging: breakpoints, stepping and variables
+### Debugging: breakpoints, stepping, variables and watches
 
 **Click beside a line number** in a Luau script for a breakpoint (a red tag), or press
 **F9** on the caret's line; click again to take it away. When a line with one runs —
@@ -1872,14 +1872,22 @@ along the bottom shows:
   script. Click one to see its line and its variables.
 - **Variables**: the call's locals and upvalues, with their values — numbers, strings,
   a table's first few entries, a part as `Part "Door"`, a player as `Player "Robin"`.
-- **Breakpoints**: every one in the place. Click to go there; × takes it away.
+  Click the arrow beside a table to open it, and the tables inside it too.
+- **Watch**: expressions worked out at every stop, in the call picked: type one in
+  (`player.Name`, `#inventory`, `health < 20`, `workspace.Door.Position.Y`) and press
+  Return. It sees the call's locals and upvalues, then the script's globals. One that
+  fails says why; × takes it away. Watches stay for the rest of the session.
+- **Breakpoints**: every one in the place. Click to go there; × takes it away. Type a
+  **condition** under one — a Luau expression, like `amount > 100` or
+  `player.Name == "Robin"` — and it stops only when that's true (its tag turns
+  orange). If the condition fails, it stops anyway and says why above the panels.
 
 Then **Continue** (F5), **Step Over** (F10: the next line, not into what it calls),
 **Step Into** (F11: into a function the line calls), **Step Out** (⇧F11: back to
 the caller) or **Stop**. The same are in the Test menu. A breakpoint on a line with no
 code stops at the next line that has some. Breakpoints are saved with the place, and
-added lines above one move it down. They're not edits: nothing to undo, and Stop
-keeps them.
+added lines above one move it down (with its condition). They're not edits: nothing
+to undo, and Stop keeps them.
 
 Luau only: Wren scripts have no breakpoints yet.
 

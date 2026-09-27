@@ -2,15 +2,26 @@ import SwiftUI
 
 /// The Debugger tab: while the scripts are stopped at a breakpoint, where (the calls,
 /// innermost first — pick one to see its variables and its line) and what each
-/// variable holds, with Continue, Step Over, Step Into, Step Out and Stop; and always,
-/// the place's breakpoints. Breakpoints are set by clicking beside a line number.
+/// variable holds (tables open to show what's in them), with Continue, Step Over, Step
+/// Into, Step Out and Stop; watch expressions, worked out at every stop; and always,
+/// the place's breakpoints, each with an optional condition. Breakpoints are set by
+/// clicking beside a line number.
 struct DebuggerPanel: View {
     @ObservedObject var model: SceneModel
     @ObservedObject var session: EditorSession
+    @State private var newWatch = ""
 
     var body: some View {
         VStack(spacing: 0) {
             controls
+            if let note = session.debugPause?.note {
+                Text(note)
+                    .foregroundStyle(Self.warning)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 5)
+            }
             Divider().overlay(Theme.stroke)
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -25,6 +36,23 @@ struct DebuggerPanel: View {
                     heading("Variables")
                     variables
                 }
+                .frame(maxWidth: .infinity)
+                Divider().overlay(Theme.stroke)
+                VStack(alignment: .leading, spacing: 0) {
+                    heading("Watch")
+                    watchList
+                    Divider().overlay(Theme.stroke)
+                    TextField("Add a watch, like player.Name", text: $newWatch)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11, design: .monospaced))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .onSubmit {
+                            session.addWatch(newWatch)
+                            newWatch = ""
+                        }
+                }
+                .frame(maxWidth: .infinity)
             }
         }
         .font(.system(size: 11))
@@ -113,26 +141,157 @@ struct DebuggerPanel: View {
                 }
                 ForEach(all) { mark in
                     let script = mark.script, line = mark.line
-                    HStack(spacing: 6) {
-                        Circle().fill(Color(red: 0.9, green: 0.3, blue: 0.3)).frame(width: 7, height: 7)
-                        Button { session.openScript(script.id, line: line) } label: {
-                            Text("\(script.name):\(line)")
+                    let condition = script.breakpointConditions[line] ?? ""
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            Circle().fill(condition.isEmpty ? Color(red: 0.9, green: 0.3, blue: 0.3) : Self.conditional)
+                                .frame(width: 7, height: 7)
+                            Button { session.openScript(script.id, line: line) } label: {
+                                Text("\(script.name):\(line)")
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                            Button { session.toggleBreakpoint(script: script.id, line: line) } label: {
+                                Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Theme.textDim)
+                            .help("Remove this breakpoint")
                         }
-                        .buttonStyle(.plain)
-                        Spacer()
-                        Button { session.toggleBreakpoint(script: script.id, line: line) } label: {
-                            Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Theme.textDim)
-                        .help("Remove this breakpoint")
+                        ConditionField(condition: condition) { session.setBreakpointCondition(script: script.id, line: line, $0) }
+                            .padding(.leading, 13)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 2)
                 }
             }
         }
-        .frame(maxHeight: 110)
+        .frame(maxHeight: 150)
+    }
+
+    static let warning = Color(red: 0.98, green: 0.62, blue: 0.3)
+    static let conditional = Color(red: 0.92, green: 0.52, blue: 0.16)
+    static let valueColor = Color(red: 0.72, green: 0.85, blue: 1)
+
+    /// A breakpoint's condition: a Luau expression, set on Return or on leaving the field.
+    private struct ConditionField: View {
+        let condition: String
+        let commit: (String) -> Void
+        @State private var text = ""
+        @FocusState private var focused: Bool
+
+        var body: some View {
+            TextField("Condition — stops always when empty", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(DebuggerPanel.conditional)
+                .focused($focused)
+                .onSubmit { commit(text) }
+                .onAppear { text = condition }
+                .onChange(of: condition) { new in if !focused { text = new } }
+                .onChange(of: focused) { isFocused in if !isFocused { commit(text) } }
+                .help("Stop here only when this Luau expression is true — say, health < 20")
+        }
+    }
+
+    // MARK: - Watches and variables
+
+    private var watchList: some View {
+        let results = session.debugPause?.watches ?? []
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(session.watchExpressions.enumerated()), id: \.offset) { index, expression in
+                    let result = results.first { $0.expression == expression }?.result
+                    let opened = "(" + expression + ")"
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        opener(result?.type == "table" && result?.error == nil ? opened : nil)
+                        Text(expression)
+                            .font(.system(size: 11, design: .monospaced))
+                            .frame(width: 130, alignment: .leading)
+                            .lineLimit(1)
+                        if let result {
+                            Text(result.error ?? result.value)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(result.error == nil ? Self.valueColor : Self.warning)
+                                .lineLimit(2)
+                                .textSelection(.enabled)
+                        } else {
+                            Text("—").foregroundStyle(Theme.textDim)
+                        }
+                        Spacer(minLength: 8)
+                        if let type = result?.type, result?.error == nil { Text(type).foregroundStyle(Theme.textDim) }
+                        Button { session.removeWatch(at: index) } label: {
+                            Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.textDim)
+                        .help("Stop watching this")
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 2)
+                    if let fields = session.debugOpened[opened] {
+                        rows(fields, inside: opened, depth: 1)
+                    }
+                }
+                if session.watchExpressions.isEmpty {
+                    Text("Nothing watched: add an expression below, worked out at every stop")
+                        .foregroundStyle(Theme.textDim)
+                        .padding(.horizontal, 10)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// A disclosure arrow for a table that can open (its expression), or room for one.
+    private func opener(_ expression: String?) -> some View {
+        Group {
+            if let expression {
+                Button { session.toggleOpened(expression) } label: {
+                    Image(systemName: session.debugOpened[expression] == nil ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .frame(width: 10)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.textDim)
+                .help("Show what's in this table")
+            } else {
+                Color.clear.frame(width: 10, height: 1)
+            }
+        }
+    }
+
+    /// Variables (or a table's entries), and inside each table opened, its own.
+    private func rows(_ variables: [LuauInterpreter.DebugVariable], inside parent: String?, depth: Int) -> AnyView {
+        AnyView(ForEach(Array(variables.enumerated()), id: \.offset) { _, variable in
+            let expression: String? = variable.path.isEmpty ? nil : (parent ?? "") + variable.path
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                opener(variable.type == "table" ? expression : nil)
+                Text(variable.name)
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(width: max(60, 118 - CGFloat(depth) * 12), alignment: .leading)
+                    .lineLimit(1)
+                Text(variable.value)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Self.valueColor)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+                Spacer(minLength: 8)
+                Text(variable.kind == "upvalue" ? "\(variable.type) · upvalue" : variable.type)
+                    .foregroundStyle(Theme.textDim)
+            }
+            .padding(.leading, 10 + CGFloat(depth) * 12)
+            .padding(.trailing, 10)
+            .padding(.vertical, 2)
+            if let expression, let fields = session.debugOpened[expression] {
+                if fields.isEmpty {
+                    Text("empty").foregroundStyle(Theme.textDim).padding(.leading, 32 + CGFloat(depth) * 12)
+                } else {
+                    rows(fields, inside: expression, depth: depth + 1)
+                }
+            }
+        })
     }
 
     private struct Mark: Identifiable {
@@ -151,24 +310,7 @@ struct DebuggerPanel: View {
                         .foregroundStyle(Theme.textDim)
                         .padding(.horizontal, 10)
                 }
-                ForEach(Array(shown.enumerated()), id: \.offset) { _, variable in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(variable.name)
-                            .font(.system(size: 11, design: .monospaced))
-                            .frame(width: 130, alignment: .leading)
-                            .lineLimit(1)
-                        Text(variable.value)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.72, green: 0.85, blue: 1))
-                            .lineLimit(2)
-                            .textSelection(.enabled)
-                        Spacer(minLength: 8)
-                        Text(variable.kind == "upvalue" ? "\(variable.type) · upvalue" : variable.type)
-                            .foregroundStyle(Theme.textDim)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 2)
-                }
+                rows(shown, inside: nil, depth: 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
