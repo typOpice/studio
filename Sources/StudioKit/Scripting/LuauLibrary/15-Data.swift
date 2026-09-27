@@ -187,6 +187,8 @@ do
 			return "m:" .. dataKit.moduleIdOf[object]
 		elseif soundKit.idOf[object] then
 			return "s:" .. soundKit.idOf[object]
+		elseif emitterKit.idOf[object] then
+			return "e:" .. emitterKit.idOf[object]
 		elseif attachmentIdOf[object] then
 			return "a:" .. attachmentIdOf[object]
 		elseif constraintIdOf[object] then

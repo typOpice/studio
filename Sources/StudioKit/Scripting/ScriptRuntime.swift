@@ -79,6 +79,9 @@ final class ScriptRuntime {
     var statsSource: (() -> ScriptValue)?
     /// The play session's NPCs, for `npc.*` (ScriptRuntime+NPC).
     var npcSource: (() -> NPCSystem?)?
+    /// ParticleEmitters scripts have made (or cloned, or taken out of a part) and not yet
+    /// put in one.
+    var looseEmitters: [UUID: ParticleEmitter] = [:]
 
     func start() {
         stop()
@@ -355,6 +358,7 @@ final class ScriptRuntime {
         case "path": return pathCall(name, arguments)
         case "stats": return statsSource?() ?? .list([])
         case "npc": return npcCall(name, arguments)
+        case "emitter": return emitterCall(name, arguments)
         case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)

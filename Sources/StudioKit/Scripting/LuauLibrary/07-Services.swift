@@ -55,6 +55,9 @@ Instance = table.freeze({
 		if className == "Sound" then
 			return soundKit.new(parent)
 		end
+		if className == "ParticleEmitter" then
+			return emitterKit.new(parent)
+		end
 		if className == "ClickDetector" then
 			local detector = mouseKit.newDetector()
 			if parent ~= nil then

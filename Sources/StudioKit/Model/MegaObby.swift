@@ -368,8 +368,10 @@ enum MegaObby {
             let gold = MegaObby.rgb(255, 205, 70)
             slab("Victory", top: cursor, Vec3(24, 1, 24), MegaObby.rgb(250, 250, 255), in: end)
             slab("Finish", top: cursor + Vec3(0, 0.3, -4), Vec3(10, 0.3, 6), gold, material: .neon, in: end)
-            part("Trophy", cursor + Vec3(0, 3.4, -9), Vec3(2.4, 2.4, 2.4), gold, shape: .sphere, material: .neon, in: end,
-                 collide: false, light: light(gold, brightness: 2.5, range: 24))
+            let trophy = part("Trophy", cursor + Vec3(0, 3.4, -9), Vec3(2.4, 2.4, 2.4), gold, shape: .sphere,
+                              material: .neon, in: end, collide: false, light: light(gold, brightness: 2.5, range: 24))
+            // Thrown up when someone wins (ObbyScript's Emit).
+            emit([ParticleEmitter.preset(.confetti)], from: trophy)
             part("TrophyBase", cursor + Vec3(0, 1.2, -9), Vec3(2, 2, 2), MegaObby.rgb(120, 110, 100), in: end)
             for x in [Float(-10), 10] {
                 part("Tower", cursor + Vec3(x, 6, -10), Vec3(4, 12, 4), MegaObby.rgb(236, 236, 244), in: end)

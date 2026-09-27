@@ -25,6 +25,8 @@ struct PropertiesView: View {
                 DataObjectInspector(model: model, object: object)
             } else if model.selection.isEmpty, let id = model.selectedSound, let sound = model.sound(id: id) {
                 SoundInspector(model: model, sound: sound)
+            } else if model.selection.isEmpty, let ref = model.selectedEmitter, let emitter = model.emitter(ref) {
+                EmitterInspector(model: model, ref: ref, emitter: emitter)
             } else if model.selection.isEmpty, let id = model.selectedAsset, let asset = model.asset(id: id) {
                 AssetInspector(model: model, session: session, asset: asset)
             } else if model.selection.isEmpty, let id = model.selectedGui, let template = model.guiObject(id: id) {
@@ -295,10 +297,13 @@ struct PropertiesView: View {
 
 struct LabeledRow<Content: View>: View {
     let label: String
+    /// The label's column: wider for panels whose names are long (ParticleEmitter's).
+    var width: CGFloat = 58
     @ViewBuilder var content: Content
 
-    init(_ label: String, @ViewBuilder content: () -> Content) {
+    init(_ label: String, width: CGFloat = 58, @ViewBuilder content: () -> Content) {
         self.label = label
+        self.width = width
         self.content = content()
     }
 
@@ -307,7 +312,7 @@ struct LabeledRow<Content: View>: View {
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.textDim)
-                .frame(width: 58, alignment: .leading)
+                .frame(width: width, alignment: .leading)
             content
         }
     }

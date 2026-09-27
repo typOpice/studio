@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2626 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2666 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -117,7 +117,8 @@ How it's made, script by script:
 - **GameScript** (Script Service): leaderstats, gems, the baker's trade (a
   RemoteFunction), rewards worn again after respawning (a BindableEvent from the obby).
 - **ObbyScript**, **LabScript**, **NPCBrain** and **Ambience**: the obstacles, the lever
-  (it sets `Lighting.Technology`), NPCs turning, and everything that bobs or spins.
+  (it sets `Lighting.Technology`), NPCs turning, and everything that bobs or spins
+  (the fountain's orb, with a ParticleEmitter of magic).
 - **PostRound** (inside Postie Pat, a Rig with a Humanoid): his walk, one
   `Humanoid:MoveTo` and `MoveToFinished:Wait()` per stop. See [NPCs](#npcs-a-model-with-a-humanoid).
 - **Adventure** (a LocalScript in StarterPlayer): the talk prompt and dialogue panel,
@@ -917,6 +918,58 @@ and falls are heard from where they happen; your own orbs, power-ups, hurts and 
 end of a run are heard by you alone. Mega Obby has its music, jump pads that boing,
 tiles that crack as they fade, and your own checkpoint dings, finish fanfare and oofs.
 `swift run StudioApp --write-sounds <folder>` writes every one as a WAV file to listen to.
+
+## Particles: fire, smoke, sparkles
+
+A **ParticleEmitter** in a part sends out little pictures that fly, fade and go: fire,
+smoke, sparkles, magic, confetti. Right-click a part in the Explorer and choose **Add
+ParticleEmitter** to get one of five starting points. **Sparkles** is Roblox's default;
+**Fire**, **Smoke**, **Magic** and **Confetti** are ready-made effects. You see the
+particles in Studio as you edit.
+
+In Properties:
+
+- **Looks:** a built-in picture (Sparkle, Circle, Smoke, Fire, Star, Confetti) or one
+  you've imported. The colour, size and transparency from start to end of a particle's
+  life. **LightEmission** takes it from drawn over what's behind (0) to glowing, added
+  to it (1).
+- **Coming out:** `Rate` (a second), `Lifetime` and `Speed` (each a range the particle
+  picks from), `SpreadAngle`, and the face they come out of (`EmissionDirection`). They
+  start anywhere inside the part.
+- **Moving:** `Acceleration`, `Drag`, `Rotation` and `RotSpeed`, `TimeScale`.
+  `LockedToPart` makes them move with the part.
+
+Scripts use Roblox's names and types: `NumberRange`, `NumberSequence` (with envelopes),
+`ColorSequence`, `Vector2` and `Enum.NormalId`. `emitter:Emit(count)` bursts that many
+at once, even with `Rate` 0, and `emitter:Clear()` takes them all away. A Script's
+emitters and bursts reach every player. A joined player's LocalScript can make effects
+of its own.
+
+```lua
+-- A Script in a part: a burst of confetti when a player touches it.
+local confetti = Instance.new("ParticleEmitter")
+confetti.Texture = "builtin://Confetti"
+confetti.Rate = 0
+confetti.Speed = NumberRange.new(20, 30)
+confetti.SpreadAngle = Vector2.new(35, 35)
+confetti.Acceleration = Vector3.new(0, -12, 0)
+confetti.Drag = 2.5
+confetti.Lifetime = NumberRange.new(2, 3)
+confetti.Color = ColorSequence.new(Color3.fromRGB(255, 80, 120), Color3.fromRGB(80, 200, 255))
+confetti.Parent = script.Parent
+
+script.Parent.Touched:Connect(function(hit)
+	if game:GetService("Players"):GetPlayerFromCharacter(hit.Parent) then
+		confetti:Emit(60)
+	end
+end)
+```
+
+The sample games use them too: the smoke and embers over Nightfall's campfire, the
+magic round Adventure Island's fountain, and Mega Obby's confetti when you win.
+
+Unlike Roblox, emitters go in parts only, not in Attachments, and they aren't lit
+(Roblox's default, `LightInfluence` 0).
 
 ## MeshParts: 3D models
 

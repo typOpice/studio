@@ -77,6 +77,8 @@ struct Part: Identifiable, Equatable, Codable {
     var shaderID: UUID?
     /// A PointLight inside the part, if it has one.
     var light: PointLight?
+    /// ParticleEmitters in the part (ParticleEmitter.swift).
+    var emitters: [ParticleEmitter] = []
     /// A ClickDetector: clicking the part fires its MouseClick. One per part, like a light.
     var clickDetector: ClickDetector?
     /// Makes the part a Seat: a character touching it sits down.
@@ -119,14 +121,14 @@ struct Part: Identifiable, Equatable, Codable {
             && lhs.canCollide == rhs.canCollide && lhs.canTouch == rhs.canTouch
             && lhs.shaderID == rhs.shaderID && lhs.light == rhs.light && lhs.parentID == rhs.parentID
             && lhs.clickDetector == rhs.clickDetector && lhs.seat == rhs.seat && lhs.mesh == rhs.mesh
-            && lhs.storage == rhs.storage
+            && lhs.storage == rhs.storage && lhs.emitters == rhs.emitters
     }
 
     // MARK: - Codable (simd_quatf needs manual handling)
 
     private enum CodingKeys: String, CodingKey {
         case id, name, shape, position, orientation, size, color, transparency, material, anchored, visible, locked, shaderID
-        case canCollide, canTouch, light, parentID, parked, clickDetector, seat, mesh, storage
+        case canCollide, canTouch, light, parentID, parked, clickDetector, seat, mesh, storage, emitters
     }
 
     init() {}
@@ -156,6 +158,7 @@ struct Part: Identifiable, Equatable, Codable {
         seat = try c.decodeIfPresent(SeatSettings.self, forKey: .seat)
         mesh = try c.decodeIfPresent(MeshSettings.self, forKey: .mesh)
         storage = try c.decodeIfPresent(StoragePlace.self, forKey: .storage)
+        emitters = try c.decodeIfPresent([ParticleEmitter].self, forKey: .emitters) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -182,6 +185,7 @@ struct Part: Identifiable, Equatable, Codable {
         try c.encodeIfPresent(seat, forKey: .seat)
         try c.encodeIfPresent(mesh, forKey: .mesh)
         try c.encodeIfPresent(storage, forKey: .storage)
+        if !emitters.isEmpty { try c.encode(emitters, forKey: .emitters) }
     }
 }
 

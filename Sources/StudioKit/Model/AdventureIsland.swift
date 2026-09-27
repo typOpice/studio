@@ -126,8 +126,9 @@ enum AdventureIsland {
                  in: plaza, collide: false, shader: ripple)
             part("FountainColumn", Vec3(0, 3.6, 2), Vec3(1.4, 4, 1.4), stone, shape: .cylinder, in: plaza)
             part("FountainBowl", Vec3(0, 5.8, 2), Vec3(4.4, 0.6, 4.4), stone, shape: .cylinder, in: plaza)
-            part("FountainOrb", Vec3(0, 7, 2), Vec3(1.4, 1.4, 1.4), rgb(120, 230, 255), shape: .sphere, material: .neon,
-                 in: plaza, light: light(rgb(120, 220, 255), brightness: 2, range: 14))
+            let orb = part("FountainOrb", Vec3(0, 7, 2), Vec3(1.4, 1.4, 1.4), rgb(120, 230, 255), shape: .sphere,
+                           material: .neon, in: plaza, light: light(rgb(120, 220, 255), brightness: 2, range: 14))
+            emit([ParticleEmitter.preset(.magic)], from: orb)
             // Benches round the plaza.
             for angle in stride(from: Float(45), to: 360, by: 90) {
                 let radians = angle * .pi / 180

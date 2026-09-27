@@ -285,7 +285,7 @@ enum AvatarSnapshot {
     /// screen effect on, a character standing where the view says.
     private static func renderPlace(_ model: SceneModel, _ setting: (Vec3, Float, Float, Float, String?, Vec3?),
                                     label name: String, to url: URL, technology: LightingTechnology,
-                                    width: Int, height: Int) -> Bool {
+                                    width: Int, height: Int, prepare: ((Renderer) -> Void)? = nil) -> Bool {
         guard let device = MTLCreateSystemDefaultDevice() else { return false }
         model.lighting.technology = technology
         if let effect = setting.4, let shader = model.shaders.first(where: { $0.name == effect }) {
@@ -313,6 +313,9 @@ enum AvatarSnapshot {
               Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
+        // ParticleEmitters' particles two seconds in, rather than just starting.
+        for _ in 0..<120 { renderer.particles.step(dt: 1.0 / 60, model: model) }
+        prepare?(renderer)
         guard let image = renderer.snapshot(width: width, height: height),
               let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
         else { return false }
@@ -320,6 +323,41 @@ enum AvatarSnapshot {
         guard CGImageDestinationFinalize(destination) else { return false }
         print("Wrote \(url.path) (\(name), \(renderer.drewRayTraced ? "ray traced" : "conventional"))")
         return true
+    }
+
+    /// `StudioApp --render-particles out.png [night]`: a pillar for each of Studio's
+    /// ParticleEmitter starting points, their particles two seconds in.
+    static func renderParticles(to url: URL, night: Bool = false, width: Int = 1600, height: Int = 900) -> Bool {
+        let model = SceneModel()
+        model.parts = []
+        model.groups = []
+        var ground = Part()
+        ground.name = "Ground"
+        ground.position = Vec3(0, -0.5, 0)
+        ground.size = Vec3(200, 1, 200)
+        ground.color = Vec3(0.3, 0.42, 0.28)
+        model.parts.append(ground)
+        for (index, preset) in ParticleEmitter.Preset.allCases.enumerated() {
+            var pillar = Part()
+            pillar.name = preset.rawValue
+            pillar.position = Vec3(Float(index - 2) * 9, 1, 0)
+            pillar.size = Vec3(2, 2, 2)
+            pillar.color = Vec3(0.4, 0.4, 0.43)
+            pillar.emitters = [ParticleEmitter.preset(preset)]
+            model.parts.append(pillar)
+        }
+        if night { model.lighting.clockTime = 21 }
+        let setting: (Vec3, Float, Float, Float, String?, Vec3?) = (Vec3(0, 4, 0), .pi / 2, 0.18, 30, nil, nil)
+        return renderPlace(model, setting, label: night ? "particles at night" : "particles", to: url,
+                           technology: .conventional, width: width, height: height) { renderer in
+            for frame in 0..<120 {
+                // The confetti, as a script's Emit(80) would, a second before the picture.
+                if frame == 60, let confetti = model.parts.first(where: { $0.name == "Confetti" }) {
+                    model.update(id: confetti.id) { $0.emitters[0].emitted += 80; $0.emitters[0].lastBurst = 80 }
+                }
+                renderer.particles.step(dt: 1.0 / 60, model: model)
+            }
+        }
     }
 
     /// `StudioApp --render-looks out.png [ray] [back]`: the sample outfits side by side,

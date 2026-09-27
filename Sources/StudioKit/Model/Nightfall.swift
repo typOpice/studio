@@ -167,9 +167,24 @@ enum Nightfall {
                  rotation: Vec3(90, 45, 0), in: camp)
             part("Log", Vec3(0, 0.7, 8), Vec3(0.8, 3.6, 0.8), wood, shape: .cylinder, material: .wood,
                  rotation: Vec3(90, -45, 0), in: camp)
-            part("Flames", Vec3(0, 1.8, 8), Vec3(1.9, 2.8, 1.9), rgb(255, 140, 40), shape: .sphere, material: .neon,
-                 in: camp, collide: false, shader: fire,
-                 light: light(rgb(255, 160, 80), brightness: 3, range: 36, shadows: true))
+            let flames = part("Flames", Vec3(0, 1.8, 8), Vec3(1.9, 2.8, 1.9), rgb(255, 140, 40), shape: .sphere,
+                              material: .neon, in: camp, collide: false, shader: fire,
+                              light: light(rgb(255, 160, 80), brightness: 3, range: 36, shadows: true))
+            // Smoke going up from the fire, and embers.
+            var smoke = ParticleEmitter.preset(.smoke)
+            smoke.size = .from(1.5, to: 6)
+            var embers = ParticleEmitter()
+            embers.name = "Embers"
+            embers.texture = "builtin://Circle"
+            embers.rate = 10
+            embers.lifetime = SIMD2(1.5, 2.5)
+            embers.speed = SIMD2(3, 6)
+            embers.spreadAngle = SIMD2(25, 25)
+            embers.acceleration = Vec3(0, 1, 0)
+            embers.size = .from(0.3, to: 0.1)
+            embers.color = .from(rgb(255, 200, 90), to: rgb(255, 80, 30))
+            embers.lightEmission = 1
+            emit([smoke, embers], from: flames)
             part("Flame", Vec3(0.3, 2.9, 8.2), Vec3(0.9, 1.6, 0.9), rgb(255, 200, 80), shape: .sphere, material: .neon,
                  in: camp, collide: false, shader: fire)
             for (x, z, colour) in [(Float(-13), Float(6), rgb(70, 110, 70)), (13, 6, rgb(170, 110, 50)),

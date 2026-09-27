@@ -192,7 +192,8 @@ extension ScriptRuntime {
         }
     }
 
-    /// Attachments on a part and constraints under a node, as tree tokens ("a:" and "c:").
+    /// Attachments on a part and constraints under a node, as tree tokens ("a:" and "c:"),
+    /// and a part's ParticleEmitters ("e:<part>:<emitter>").
     func extras(of parent: UUID?) -> [(token: String, name: String)] {
         var list: [(String, String)] = []
         if let parent {
@@ -200,6 +201,9 @@ extension ScriptRuntime {
         }
         for c in model.constraints where c.parentID == parent { list.append(("c:" + c.id.uuidString, c.name)) }
         if let parent {
+            for e in model.part(id: parent)?.emitters ?? [] {
+                list.append(("e:" + parent.uuidString + ":" + e.id.uuidString, e.name))
+            }
             for s in model.sounds where s.parentID == parent { list.append(("s:" + s.id.uuidString, s.name)) }
             for m in model.scripts where m.isModule && m.host == .scene && m.parentID == parent {
                 list.append(("m:" + m.id.uuidString, m.name))

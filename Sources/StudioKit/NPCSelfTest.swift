@@ -187,7 +187,16 @@ enum NPCSelfTest {
 
     // MARK: - Pathfinding
 
-    static let pathScript = """
+    /// The README's example as written (this one if it can't be found), and a word when done.
+    static var pathScript: String {
+        guard let readme = try? String(contentsOfFile: "README.md", encoding: .utf8),
+              let start = readme.range(of: "### NPCs: a Model with a Humanoid"),
+              let block = readme[start.upperBound...].components(separatedBy: "```lua\n").dropFirst().first?
+                .components(separatedBy: "```").first else { return fallbackPathScript }
+        return block + "\nprint(\"arrived\")\n"
+    }
+
+    static let fallbackPathScript = """
     -- A Script: the Rig walks round the wall to the Flag.
     local PathfindingService = game:GetService("PathfindingService")
     local rig = workspace.Rig
@@ -228,7 +237,7 @@ enum NPCSelfTest {
             step(session, seconds: 0.5)
             closest = min(closest, flat(root(model, rig)!.position, flag.position))
         }
-        check("with a PathfindingService path, round a wall to the flag", closest < 2 && line(session, "arrived") == "arrived"
+        check("the README's example: with a PathfindingService path, round a wall to the flag", closest < 2 && line(session, "arrived") == "arrived"
               && said(session, .error).isEmpty, "\(closest) \(said(session, .error))")
         session.stop()
     }

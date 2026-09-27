@@ -87,6 +87,17 @@ struct ExplorerView: View {
                     Button("New Tool") { model.addTool() }
                     Button("Insert Rig") { controller.insertRig() }
                     Button("Import Picture, Sound or 3D Model…") { importAssets() }
+                    Menu("New ParticleEmitter (in the selected part)") {
+                        ForEach(ParticleEmitter.Preset.allCases) { preset in
+                            Button(preset.rawValue) {
+                                if let part = model.selection.first.flatMap({ model.part(id: $0)?.id }) {
+                                    expandedParts.insert(part)
+                                    model.addEmitter(preset, to: part)
+                                }
+                            }
+                        }
+                    }
+                    .disabled(model.selection.count != 1 || model.selection.first.flatMap(model.part(id:)) == nil)
                     Button("New Sound") {
                         let part = model.selection.count == 1 ? model.selection.first.flatMap { model.part(id: $0)?.id } : nil
                         if let part { expandedParts.insert(part) } else { soundServiceExpanded = true }
@@ -181,6 +192,18 @@ struct ExplorerView: View {
                             case .sound(let id, let depth):
                                 if let sound = model.sound(id: id) {
                                     soundRow(sound, depth: depth)
+                                }
+                            case .emitter(let ref, let depth):
+                                if let emitter = model.emitter(ref) {
+                                    fixtureRow(id: ref.emitter, depth: depth, name: emitter.name, icon: "sparkles",
+                                               tint: EmitterInspector.tint, selected: model.selectedEmitter == ref,
+                                               detail: emitter.enabled ? "" : "off") {
+                                        model.selection = []
+                                        model.selectedScript = nil
+                                        model.selectedEmitter = ref
+                                    } delete: {
+                                        model.removeEmitter(ref)
+                                    }
                                 }
                             case .data(let id, let depth):
                                 if let object = model.dataObject(id: id) {
@@ -285,8 +308,22 @@ struct ExplorerView: View {
             }
         }
         .background(Theme.panel)
-        .onAppear { reveal(model.selectedDataObject) }
+        .onAppear {
+            reveal(model.selectedDataObject)
+            reveal(model.selectedEmitter)
+        }
         .onChange(of: model.selectedDataObject) { id in reveal(id) }
+        .onChange(of: model.selectedEmitter) { ref in reveal(ref) }
+    }
+
+    /// Opens an emitter's part, and what that's inside.
+    private func reveal(_ ref: EmitterRef?) {
+        var node = ref?.part
+        for _ in 0..<64 {
+            guard let id = node else { break }
+            expandedParts.insert(id)
+            node = model.parentID(of: id)
+        }
     }
 
     /// Opens the Models and parts a data object (a Humanoid in a Rig) is inside, so its
@@ -483,6 +520,14 @@ struct ExplorerView: View {
             Button("Add Sound") {
                 expandedParts.insert(part.id)
                 model.addSound(in: part.id)
+            }
+            Menu("Add ParticleEmitter") {
+                ForEach(ParticleEmitter.Preset.allCases) { preset in
+                    Button(preset.rawValue) {
+                        expandedParts.insert(part.id)
+                        model.addEmitter(preset, to: part.id)
+                    }
+                }
             }
             Button("Add Wren Script") {
                 expandedParts.insert(part.id)
@@ -1096,7 +1141,7 @@ struct ExplorerView: View {
                     if let script = model.script(id: id) { scriptRow(script, indent: 40 + CGFloat(depth) * 14) }
                 case .sound(let id, let depth):
                     if let sound = model.sound(id: id) { soundRow(sound, depth: depth + 1) }
-                case .attachment, .constraint, .data:
+                case .attachment, .constraint, .data, .emitter:
                     EmptyView()
                 }
             }
@@ -1277,6 +1322,8 @@ enum ExplorerTreeRow: Hashable {
     case sound(UUID, depth: Int)
     /// A Humanoid, Value or Folder inside a part or Model.
     case data(UUID, depth: Int)
+    /// A ParticleEmitter in a part.
+    case emitter(EmitterRef, depth: Int)
 }
 
 extension ExplorerView {
@@ -1338,6 +1385,9 @@ extension ExplorerView {
                     for sound in model.sounds(in: child.id) where model.part(id: child.id) != nil {
                         rows.append(.sound(sound.id, depth: depth + 1))
                     }
+                    for emitter in model.part(id: child.id)?.emitters ?? [] {
+                        rows.append(.emitter(EmitterRef(part: child.id, emitter: emitter.id), depth: depth + 1))
+                    }
                     data(in: .node(child.id), depth: depth + 1)
                 }
             }
@@ -1360,6 +1410,7 @@ extension ExplorerView {
                 case .sound(let id, let depth): return .sound(id, depth: depth + 1)
                 case .constraint(let id, let depth): return .constraint(id, depth: depth + 1)
                 case .data(let id, let depth): return .data(id, depth: depth + 1)
+                case .emitter(let ref, let depth): return .emitter(ref, depth: depth + 1)
                 }
             }
             for script in model.scripts where script.host == .scene && script.parentID == tool.id {
@@ -1376,6 +1427,7 @@ extension ExplorerView {
             || model.constraints.contains { $0.parentID == id }
             || model.sounds.contains { $0.parentID == id }
             || !model.dataObjects(in: .node(id)).isEmpty
+            || model.part(id: id)?.emitters.isEmpty == false
     }
 
     /// Adds a Humanoid, Folder or Value inside a Model, and shows it.

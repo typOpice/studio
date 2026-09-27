@@ -343,6 +343,15 @@ enum PanelSnapshot {
             let spawn = model.addDataObject(.vector3Value, in: .serverStorage)
             model.updateDataObject(id: spawn) { $0.name = "SpawnPoint"; _ = $0.setValue(.list([.number(0), .number(5), .number(20)])) }
             model.selectDataObject(round)
+        case "particles":
+            // A campfire: Fire and Smoke in a part, Fire picked.
+            session.showWorld()
+            let pit = model.addPart(shape: .cylinder, at: Vec3(0, 0.5, -4))
+            model.update(id: pit) { $0.name = "Campfire" }
+            let fire = model.addEmitter(.fire, to: pit)
+            model.addEmitter(.smoke, to: pit)
+            model.selection = []
+            model.selectedEmitter = fire
         case "rig":
             // Insert › Rig, its Humanoid picked: the Explorer opens the Rig to show it.
             session.showWorld()

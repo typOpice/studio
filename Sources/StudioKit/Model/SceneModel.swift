@@ -91,6 +91,10 @@ final class SceneModel: ObservableObject {
     @Published var selectedSound: UUID? {
         didSet { if selectedSound != nil { leaveOthers(for: \.selectedSound) } }
     }
+    /// A ParticleEmitter picked in the Explorer.
+    @Published var selectedEmitter: EmitterRef? {
+        didSet { if selectedEmitter != nil { leaveOthers(for: \.selectedEmitter) } }
+    }
     /// The first effect switched on; setting it switches that one on alone.
     var screenShaderID: UUID? {
         get { activeScreenShaders.first?.id }
@@ -143,8 +147,9 @@ final class SceneModel: ObservableObject {
         if picked != \SceneModel.selectedSound, selectedSound != nil { selectedSound = nil }
         if picked != \SceneModel.selectedAsset, selectedAsset != nil { selectedAsset = nil }
         if picked != \SceneModel.selectedDataObject, selectedDataObject != nil { selectedDataObject = nil }
+        if picked != \SceneModel.selectedEmitter, selectedEmitter != nil { selectedEmitter = nil }
         if picked == \SceneModel.selectedGui || picked == \SceneModel.selectedSound || picked == \SceneModel.selectedAsset
-            || picked == \SceneModel.selectedDataObject {
+            || picked == \SceneModel.selectedDataObject || picked == \SceneModel.selectedEmitter {
             if !selection.isEmpty { selection = [] }
             if selectedConstraint != nil { selectedConstraint = nil }
             if selectedAttachment != nil { selectedAttachment = nil }
@@ -166,6 +171,7 @@ final class SceneModel: ObservableObject {
         selectedSound = nil
         selectedAsset = nil
         selectedDataObject = nil
+        selectedEmitter = nil
         selectedScript = nil
         selectedShader = nil
         selectedConstraint = nil
@@ -177,7 +183,7 @@ final class SceneModel: ObservableObject {
     /// Whether anything at all is selected.
     var hasAnySelection: Bool {
         !selection.isEmpty || selectedGui != nil || selectedSound != nil || selectedAsset != nil || selectedDataObject != nil
-            || selectedScript != nil || selectedShader != nil || selectedConstraint != nil || selectedAttachment != nil
+            || selectedEmitter != nil || selectedScript != nil || selectedShader != nil || selectedConstraint != nil || selectedAttachment != nil
             || lightingSelected || starterPlayerSelected || selectedCoreScript != nil || joinTool != nil
     }
 

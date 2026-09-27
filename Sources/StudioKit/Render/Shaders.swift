@@ -95,7 +95,7 @@ struct RasterData {
 
 /// Metal source compiled at runtime, so the app needs no offline `metal` toolchain.
 /// The shared lighting library sits between the structs and the shaders.
-let metalShaderSource = metalStructs + lightingMetalSource + metalShaders
+let metalShaderSource = metalStructs + lightingMetalSource + metalShaders + particleMetalSource
 
 private let metalShaders = #"""
 vertex RasterData scene_vertex(uint vid [[vertex_id]],

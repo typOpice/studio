@@ -52,6 +52,12 @@ extension PlaceBuilding {
         return part.id
     }
 
+    /// Gives a part ParticleEmitters.
+    mutating func emit(_ emitters: [ParticleEmitter], from part: UUID) {
+        guard let index = state.parts.firstIndex(where: { $0.id == part }) else { return }
+        state.parts[index].emitters += emitters
+    }
+
     mutating func group(_ name: String, kind: SceneGroup.Kind = .model, in parent: UUID? = nil) -> UUID {
         let group = SceneGroup(name: name, kind: kind, parentID: parent)
         state.groups.append(group)

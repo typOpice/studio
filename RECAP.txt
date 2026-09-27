@@ -421,6 +421,15 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the joined player sees the NPC walk and die, and their scripts hear Died).
    New files: Play/NPCSystem.swift, Model/NPCRig.swift, Scripting/ScriptRuntime+NPC.swift, NPCSelfTest.swift.
 
+41. Particles (ParticleEmitter), 2026-09-27.
+   Parts can now hold ParticleEmitters: fire, smoke, sparkles and the like. In Studio, right-click a part > Add ParticleEmitter and pick Sparkles, Fire, Smoke, Magic or Confetti. The particles show as you edit.
+   Every setting is in Properties: the picture (six built in, or one you imported), colour, size and transparency over a particle's life, glow (LightEmission), rate, lifetime, speed, spread, direction, acceleration, drag, rotation and more.
+   Scripts use Roblox's names: Instance.new("ParticleEmitter"), NumberRange, NumberSequence, ColorSequence, Enum.NormalId, and emitter:Emit(count) and :Clear().
+   The sample games use them: smoke and embers over Nightfall's campfire, magic round Adventure Island's fountain, and confetti when you win Mega Obby.
+   Tested alone and with a host and a joined player (the host's bursts show for the joined player; a joined player's own LocalScript effects stay theirs).
+   Network games now need both players on this version or later (the version number went up for NPCs and particles).
+   New files: Model/ParticleEmitter.swift, Play/ParticleSystem.swift, Render/Particles.swift, Scripting/ScriptRuntime+Particles.swift, UI/ParticleUI.swift, ParticleSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

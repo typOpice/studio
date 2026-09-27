@@ -752,6 +752,247 @@ function math.moveTowardsAngle(current, target, maxDelta)
 	return current + math.sign(delta) * maxDelta
 end
 
+--------------------------------------------------------------------------------
+-- NumberRange, and ParticleEmitters: in a part (ParticleEmitter.swift), or in nothing
+-- yet. The host names one "<part>:<emitter>" ("-:<emitter>" in nothing); moving it to
+-- another part gives it a new name, which the object here takes on. How it looks is
+-- the part's data; the particles are each machine's (ParticleSystem.swift). Emit and
+-- Clear go up as counters that every machine acts on.
+
+do
+	local RangeMeta = {}
+	local function range(min, max)
+		local value = setmetatable({ min, max }, RangeMeta)
+		typeTags[value] = "NumberRange"
+		return value
+	end
+	RangeMeta.__index = function(value, key)
+		if key == "Min" then
+			return rawget(value, 1)
+		elseif key == "Max" then
+			return rawget(value, 2)
+		end
+		raise(string.format("%s is not a valid member of NumberRange", tostring(key)), 2)
+	end
+	RangeMeta.__newindex = readOnly("NumberRange")
+	RangeMeta.__eq = function(a, b)
+		return rawget(a, 1) == rawget(b, 1) and rawget(a, 2) == rawget(b, 2)
+	end
+	RangeMeta.__tostring = function(value)
+		return string.format("%g %g", rawget(value, 1), rawget(value, 2))
+	end
+	RangeMeta.__metatable = LOCKED
+
+	NumberRange = table.freeze({
+		new = function(min, max)
+			checkNumber(min, 1, "NumberRange.new")
+			if max == nil then
+				max = min
+			end
+			checkNumber(max, 2, "NumberRange.new")
+			if max < min then
+				raise("NumberRange.new: the minimum is more than the maximum", 2)
+			end
+			return range(min, max)
+		end,
+	})
+
+	emitterKit.byId = setmetatable({}, { __mode = "v" })
+	emitterKit.idOf = setmetatable({}, { __mode = "k" })
+	-- Each property: its host name and type.
+	emitterKit.properties = {
+		Enabled = { "enabled", "boolean" },
+		LockedToPart = { "lockedtopart", "boolean" },
+		Rate = { "rate", "number" },
+		Drag = { "drag", "number" },
+		LightEmission = { "lightemission", "number" },
+		Brightness = { "brightness", "number" },
+		TimeScale = { "timescale", "number" },
+		Lifetime = { "lifetime", "NumberRange" },
+		Speed = { "speed", "NumberRange" },
+		Rotation = { "rotation", "NumberRange" },
+		RotSpeed = { "rotspeed", "NumberRange" },
+		SpreadAngle = { "spreadangle", "Vector2" },
+		Acceleration = { "acceleration", "Vector3" },
+		Size = { "size", "NumberSequence" },
+		Transparency = { "transparency", "NumberSequence" },
+		Color = { "color", "ColorSequence" },
+		EmissionDirection = { "emissiondirection", "NormalId" },
+		Texture = { "texture", "string" },
+	}
+
+	-- A property's value as the host holds it, and back.
+	function emitterKit.read(kind, raw)
+		if raw == nil then
+			return nil
+		elseif kind == "NumberRange" then
+			return range(raw[1], raw[2])
+		elseif kind == "NumberSequence" then
+			local points = {}
+			for index = 1, #raw, 3 do
+				table.insert(points, gui.numberKey(raw[index], raw[index + 1], raw[index + 2]))
+			end
+			return gui.sequence(points, gui.NumberSequenceMeta, "NumberSequence")
+		elseif kind == "NormalId" then
+			return Enum.NormalId[raw]
+		end
+		return gui.read(kind, raw)
+	end
+
+	function emitterKit.write(kind, value)
+		if kind == "NumberRange" then
+			return if typeof(value) == "NumberRange" then { rawget(value, 1), rawget(value, 2) } else nil
+		elseif kind == "NumberSequence" then
+			if typeof(value) ~= "NumberSequence" then
+				return nil
+			end
+			local list = {}
+			for _, point in rawget(value, "points") do
+				table.insert(list, rawget(point, 1))
+				table.insert(list, rawget(point, 2))
+				table.insert(list, rawget(point, 3))
+			end
+			return list
+		elseif kind == "NormalId" then
+			return if typeof(value) == "EnumItem" and value.EnumType == "NormalId" then value.Name else nil
+		elseif kind == "boolean" or kind == "number" or kind == "string" then
+			return if type(value) == kind then value else nil
+		end
+		return gui.write(kind, value)
+	end
+
+	-- Moved to another part (or out of one): the host's new name for it.
+	local function rename(object, id)
+		if id == nil then
+			return
+		end
+		emitterKit.byId[emitterKit.idOf[object]] = nil
+		emitterKit.byId[id] = object
+		emitterKit.idOf[object] = id
+	end
+
+	function emitterKit.setParent(object, value)
+		local part = nil
+		if value ~= nil then
+			part = partIdOf[value]
+			if part == nil then
+				raise("A ParticleEmitter goes in a part, not " .. typeof(value), 3)
+			end
+		end
+		rename(object, invoke("emitter.parent", emitterKit.idOf[object], part))
+	end
+
+	emitterKit.methods = {
+		Emit = function(self, count)
+			if count ~= nil then
+				checkNumber(count, 1, "Emit")
+			end
+			invoke("emitter.emit", emitterKit.idOf[self], math.floor(count or 16))
+		end,
+		Clear = function(self)
+			invoke("emitter.clear", emitterKit.idOf[self])
+		end,
+		Destroy = function(self)
+			invoke("emitter.destroy", emitterKit.idOf[self])
+		end,
+		Clone = function(self)
+			return emitterKit.wrap(invoke("emitter.clone", emitterKit.idOf[self]))
+		end,
+		GetChildren = function()
+			return {}
+		end,
+		GetDescendants = function()
+			return {}
+		end,
+		FindFirstChild = function()
+			return nil
+		end,
+		IsA = function(_, className)
+			return className == "ParticleEmitter" or className == "Instance"
+		end,
+		IsDescendantOf = function(self, ancestor)
+			local parent = self.Parent
+			return parent ~= nil and (parent == ancestor or parent:IsDescendantOf(ancestor))
+		end,
+	}
+
+	emitterKit.Meta = {
+		__index = function(object, key)
+			local id = emitterKit.idOf[object]
+			if key == "Name" then
+				return invoke("emitter.get", id, "name")
+			elseif key == "ClassName" then
+				return "ParticleEmitter"
+			elseif key == "Parent" then
+				return wrapToken(invoke("emitter.get", id, "parent"))
+			end
+			local property = emitterKit.properties[key]
+			if property ~= nil then
+				return emitterKit.read(property[2], invoke("emitter.get", id, property[1]))
+			end
+			local method = emitterKit.methods[key]
+			if method ~= nil then
+				return method
+			end
+			raise(string.format("%s is not a valid member of ParticleEmitter", tostring(key)), 2)
+		end,
+		__newindex = function(object, key, value)
+			local id = emitterKit.idOf[object]
+			if key == "Parent" then
+				emitterKit.setParent(object, value)
+				return
+			elseif key == "Name" then
+				if type(value) ~= "string" then
+					raise("Unable to assign property Name. string expected, got " .. typeof(value), 2)
+				end
+				invoke("emitter.set", id, "name", value)
+				return
+			end
+			local property = emitterKit.properties[key]
+			if property == nil then
+				raise(string.format("%s is not a valid member of ParticleEmitter", tostring(key)), 2)
+			end
+			local raw = emitterKit.write(property[2], value)
+			if raw == nil then
+				raise(string.format("Unable to assign property %s. %s expected, got %s", key, property[2], typeof(value)), 2)
+			end
+			if not invoke("emitter.set", id, property[1], raw) then
+				raise(string.format("Unable to assign property %s: %s is out of range", key, tostring(value)), 2)
+			end
+		end,
+		__tostring = function(object)
+			return invoke("emitter.get", emitterKit.idOf[object], "name") or "ParticleEmitter"
+		end,
+		__metatable = LOCKED,
+	}
+
+	function emitterKit.wrap(id)
+		if id == nil then
+			return nil
+		end
+		local existing = emitterKit.byId[id]
+		if existing ~= nil then
+			return existing
+		end
+		local object = setmetatable({}, emitterKit.Meta)
+		typeTags[object] = "Instance"
+		emitterKit.byId[id] = object
+		emitterKit.idOf[object] = id
+		return object
+	end
+
+	function emitterKit.new(parent)
+		local part = nil
+		if parent ~= nil then
+			part = partIdOf[parent]
+			if part == nil then
+				raise("A ParticleEmitter goes in a part, not " .. typeof(parent), 3)
+			end
+		end
+		return emitterKit.wrap(invoke("emitter.create", part))
+	end
+end
+
 -- Several octaves of math.noise stacked: large shapes plus fine detail.
 function math.fbm(x, y, z, octaves)
 	octaves = octaves or 4

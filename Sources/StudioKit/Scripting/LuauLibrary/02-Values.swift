@@ -431,6 +431,7 @@ Enum = table.freeze({
 	EasingDirection = makeEnum("EasingDirection", { "In", "Out", "InOut" }),
 	AnimationPriority = makeEnum("AnimationPriority", { "Core", "Idle", "Movement", "Action" }),
 	Technology = makeEnum("Technology", { "Conventional", "RayTraced" }),
+	NormalId = makeEnum("NormalId", { "Right", "Top", "Back", "Left", "Bottom", "Front" }),
 	ActuatorType = makeEnum("ActuatorType", { "None", "Motor", "Servo" }),
 	KeyCode = makeEnum("KeyCode", { __KEYCODE_NAMES__ }),
 	UserInputType = makeEnum("UserInputType", { "Keyboard", "MouseButton1", "MouseButton2" }),

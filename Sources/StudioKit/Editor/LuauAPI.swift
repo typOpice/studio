@@ -39,7 +39,8 @@ enum LuauAPI {
         "ColorSequenceKeypoint": [method("new", "time, color", "ColorSequenceKeypoint")],
         "NumberSequence": [method("new", "value0, value1", "NumberSequence")],
         "RaycastParams": [method("new", "", "RaycastParams")],
-        "NumberSequenceKeypoint": [method("new", "time, value", "NumberSequenceKeypoint")],
+        "NumberSequenceKeypoint": [method("new", "time, value, envelope", "NumberSequenceKeypoint")],
+        "NumberRange": [method("new", "min, max", "NumberRange")],
         "Random": [method("new", "seed", "Random")],
         "TweenInfo": [method("new", "time, easingStyle, easingDirection, repeatCount, reverses, delayTime", "TweenInfo")],
         "Enum": [
@@ -51,7 +52,7 @@ enum LuauAPI {
             property("AnimationPriority", "Enum.AnimationPriority"),
             property("Technology", "Enum.Technology"), property("ActuatorType", "Enum.ActuatorType"),
             property("TextXAlignment", "Enum.TextXAlignment"), property("PlaybackState", "Enum.PlaybackState"),
-            property("MouseBehavior", "Enum.MouseBehavior")
+            property("MouseBehavior", "Enum.MouseBehavior"), property("NormalId", "Enum.NormalId")
         ],
         "Enum.Material": enumItems(["Plastic", "SmoothPlastic", "Metal", "Neon", "Wood", "Water"]),
         "Enum.PartType": enumItems(["Block", "Ball", "Cylinder", "Wedge"]),
@@ -70,6 +71,7 @@ enum LuauAPI {
         "Enum.TextXAlignment": enumItems(["Left", "Right", "Center"]),
         "Enum.PlaybackState": enumItems(["Begin", "Delayed", "Playing", "Paused", "Completed", "Cancelled"]),
         "Enum.MouseBehavior": enumItems(["Default", "LockCenter", "LockCurrentPosition"]),
+        "Enum.NormalId": enumItems(["Right", "Top", "Back", "Left", "Bottom", "Front"]),
         "task": [
             method("wait", "seconds", "number"), method("spawn", "callback, ...", "thread"),
             method("delay", "seconds, callback, ...", "thread"), method("defer", "callback, ...", "thread"),
@@ -217,6 +219,7 @@ enum LuauAPI {
         "UISizeConstraint": guiInstance + [property("MinSize", "Vector2"), property("MaxSize", "Vector2")],
         "UITextSizeConstraint": guiInstance + [property("MinTextSize", "number"), property("MaxTextSize", "number")],
         "ColorSequence": [property("Keypoints", "table")],
+        "NumberRange": [property("Min", "number"), property("Max", "number")],
         "NumberSequence": [property("Keypoints", "table")],
         "ColorSequenceKeypoint": [property("Time", "number"), property("Value", "Color3")],
         "NumberSequenceKeypoint": [property("Time", "number"), property("Value", "number"), property("Envelope", "number")],
@@ -542,6 +545,18 @@ enum LuauAPI {
             method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name", "Instance"),
             method("GetChildren", "", "table"), method("Clone", "", "Tool"), method("Destroy", "", "()"),
             method("IsA", "className", "boolean")
+        ],
+        "ParticleEmitter": [
+            property("Name", "string"), property("Parent", "Part"), property("Enabled", "boolean"),
+            property("Rate", "number"), property("Lifetime", "NumberRange"), property("Speed", "NumberRange"),
+            property("SpreadAngle", "Vector2"), property("EmissionDirection", "EnumItem"),
+            property("Acceleration", "Vector3"), property("Drag", "number"), property("Size", "NumberSequence"),
+            property("Transparency", "NumberSequence"), property("Color", "ColorSequence"),
+            property("LightEmission", "number"), property("Brightness", "number"), property("Texture", "string"),
+            property("Rotation", "NumberRange"), property("RotSpeed", "NumberRange"),
+            property("LockedToPart", "boolean"), property("TimeScale", "number"),
+            method("Emit", "count", "()"), method("Clear", "", "()"), method("Clone", "", "ParticleEmitter"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
         ],
         "Sound": [
             property("Name", "string"), property("SoundId", "string"), property("Volume", "number"),

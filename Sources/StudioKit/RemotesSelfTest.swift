@@ -670,9 +670,10 @@ enum RemotesSelfTest {
         }
         let section = String(readme[start.upperBound..<end.lowerBound])
         var blocks = section.components(separatedBy: "```lua\n").dropFirst().map { $0.components(separatedBy: "```")[0] }
-        // The seventh (DataStores) is DataStoreSelfTest's, the eighth (pathfinding) PathfindingSelfTest's.
-        guard blocks.count == 8 else {
-            check("the README has its eight examples", false, "\(blocks.count)")
+        // The seventh (DataStores) is DataStoreSelfTest's, the eighth (pathfinding) PathfindingSelfTest's,
+        // the ninth (an NPC) NPCSelfTest's.
+        guard blocks.count == 9 else {
+            check("the README has its nine examples", false, "\(blocks.count)")
             return
         }
         let model = world()

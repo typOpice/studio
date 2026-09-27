@@ -30,6 +30,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var skyPipeline: MTLRenderPipelineState!
     private var shadowPipeline: MTLRenderPipelineState!
     private var depthSky: MTLDepthStencilState!
+    /// The particles of the world's ParticleEmitters, this view's own, and what draws them.
+    let particles = ParticleSystem()
+    private var particleDrawer: ParticleRenderer?
 
     // Lighting.
     static let shadowMapSize = 2048
@@ -219,6 +222,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         flatPipeline = try makePipeline(vertex: "scene_vertex", fragment: "flat_fragment", blending: false)
         flatBlendPipeline = try makePipeline(vertex: "scene_vertex", fragment: "flat_fragment", blending: true)
         skyPipeline = try makePipeline(vertex: "sky_vertex", fragment: "sky_fragment", blending: false)
+        particleDrawer = ParticleRenderer(device: device, library: library, color: view.colorPixelFormat,
+                                          depth: view.depthStencilPixelFormat, samples: view.sampleCount)
 
         // Depth only, from the sun, into the shadow map.
         let shadow = MTLRenderPipelineDescriptor()
@@ -324,6 +329,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let now = CACurrentMediaTime()
         let delta = Float(min(max(now - lastFrameTime, 0), 0.25))
         lastFrameTime = now
+        particles.step(dt: delta, model: model)
 
         var frame = FrameUniforms()
         frame.viewProjection = camera.viewProjection(aspect: aspect)
@@ -479,6 +485,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         for avatar in source.avatars where !avatar.hidden {
             drawAvatar(encoder, avatar: avatar)
         }
+
+        particleDrawer?.draw(encoder, system: particles, model: model, camera: camera, frame: &frame,
+                             depth: depthNoWrite) { texture(named: $0, model: model) }
     }
 
     /// Selection boxes and the manipulation gizmo, always drawn last and never

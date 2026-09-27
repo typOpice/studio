@@ -240,6 +240,8 @@ local pointLightOf
 local mouseKit = {}
 -- Sounds, filled in with the services in part 14.
 local soundKit = {}
+-- ParticleEmitters, filled in beside the Sounds in part 14.
+local emitterKit = {}
 -- LogService's signal, filled in with the service (part 14).
 local logKit = {}
 
@@ -281,6 +283,8 @@ local function wrapToken(token)
 		return wrapConstraint(id)
 	elseif kind == "s" then
 		return soundKit.wrap(id)
+	elseif kind == "e" then
+		return emitterKit.wrap(id)
 	elseif kind == "v" then
 		return dataKit.wrap(id)
 	elseif kind == "m" then

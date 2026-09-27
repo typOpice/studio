@@ -257,6 +257,7 @@ enum MegaObbyScripts {
     \tlocal took = Utils.formatTime(time() - startedAt[player])
     \tNotify:FireClient(player, "You beat all " .. last .. " stages in " .. took .. "!")
     \tNotify:FireAllClients(player.Name .. " finished the Mega Obby!")
+    \tworkspace:FindFirstChild("Finish Line").Trophy.Confetti:Emit(80)
     \tstartedAt[player] = time()
     end)
 
