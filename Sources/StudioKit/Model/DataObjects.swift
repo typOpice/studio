@@ -197,7 +197,7 @@ struct DataObject: Codable, Equatable, Identifiable {
 // MARK: - Editing
 
 extension SceneModel {
-    func dataObject(id: UUID) -> DataObject? { dataObjects.first { $0.id == id } }
+    func dataObject(id: UUID) -> DataObject? { index.dataSlot(id, in: dataObjects).map { dataObjects[$0] } }
 
     /// The data objects directly in a place, in the order they were made.
     func dataObjects(in parent: DataParent) -> [DataObject] {
@@ -229,7 +229,7 @@ extension SceneModel {
     }
 
     func updateDataObject(id: UUID, _ change: (inout DataObject) -> Void) {
-        guard let index = dataObjects.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = self.index.dataSlot(id, in: dataObjects) else { return }
         var object = dataObjects[index]
         change(&object)
         if object != dataObjects[index] { dataObjects[index] = object }

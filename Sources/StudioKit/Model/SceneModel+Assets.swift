@@ -159,7 +159,7 @@ extension SceneModel {
 
     // MARK: - Sounds
 
-    func sound(id: UUID) -> SceneSound? { sounds.first { $0.id == id } }
+    func sound(id: UUID) -> SceneSound? { index.soundSlot(id, in: sounds).map { sounds[$0] } }
 
     func sounds(in parent: UUID?) -> [SceneSound] { sounds.filter { $0.parentID == parent } }
 
@@ -176,8 +176,11 @@ extension SceneModel {
     }
 
     func updateSound(id: UUID, _ body: (inout SceneSound) -> Void) {
-        guard let index = sounds.firstIndex(where: { $0.id == id }) else { return }
-        body(&sounds[index])
+        guard let index = self.index.soundSlot(id, in: sounds) else { return }
+        // A copy changed and put back, so `body` may read the scene (see update(id:)).
+        var sound = sounds[index]
+        body(&sound)
+        if let slot = self.index.soundSlot(id, in: sounds) { sounds[slot] = sound }
     }
 
     func deleteSound(_ id: UUID) {

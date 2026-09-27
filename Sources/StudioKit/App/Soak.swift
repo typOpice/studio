@@ -169,3 +169,47 @@ enum Soak {
         return result == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : 0
     }
 }
+
+/// `StudioApp --bench`: what the scene's everyday operations cost as places grow —
+/// finding a part, changing one, a Model's pivot and moving it, a folder's children.
+enum SceneBench {
+    static func run() -> Bool {
+        print("parts   find part   change part   model pivot   move model   children    (µs per call)")
+        for count in [500, 2000, 8000] {
+            let model = SceneModel()
+            model.parts = []
+            model.groups = []
+            var ids: [UUID] = []
+            var models: [UUID] = []
+            for index in 0..<count {
+                if index % 10 == 0 {
+                    let group = SceneGroup(name: "Model\(index)", kind: .model)
+                    model.groups.append(group)
+                    models.append(group.id)
+                }
+                var part = Part()
+                part.position = Vec3(Float(index % 100), 1, Float(index / 100))
+                part.parentID = models.last
+                model.parts.append(part)
+                ids.append(part.id)
+            }
+            func time(_ runs: Int, _ body: (Int) -> Void) -> Double {
+                let started = Date()
+                for run in 0..<runs { body(run) }
+                return Date().timeIntervalSince(started) / Double(runs) * 1_000_000
+            }
+            var sink = 0.0
+            let find = time(2000) { run in sink += Double(model.part(id: ids[(run * 7919) % count])?.position.x ?? 0) }
+            let change = time(2000) { run in model.update(id: ids[(run * 7919) % count]) { $0.position.y += 0.001 } }
+            let pivot = time(500) { run in sink += Double(model.pivot(of: models[run % models.count])?.position.x ?? 0) }
+            let move = time(200) { run in
+                let id = models[run % models.count]
+                if let pose = model.pivot(of: id) { model.movePivot(of: id, to: pose) }
+            }
+            let children = time(200) { run in sink += Double(model.children(of: models[run % models.count]).count) }
+            print(String(format: "%5d %11.2f %13.2f %13.2f %12.2f %10.2f", count, find, change, pivot, move, children))
+            if sink.isNaN { print(sink) }
+        }
+        return true
+    }
+}

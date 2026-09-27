@@ -388,6 +388,13 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    New tools: swift run StudioApp --soak nightfall 300 (plays a game for minutes and prints memory and object counts; add render, audio or window), and --make-place (writes a sample game as a file).
    New files: App/Soak.swift, EngineSelfTest.swift.
 
+36. Faster scenes, 2026-09-27.
+   Finding a part, a group, a value or a sound no longer searches the whole place: an index remembers where everything is, and checks itself so it can never be out of date. Changing a part no longer copies every part in the place.
+   What that does, in a place of 8000 parts: finding a part went from 121 to 1.4 microseconds, changing one from 230 to 2, a Model's pivot from 2.7 milliseconds to 4 microseconds, moving a Model from 8.3 milliseconds to 30 microseconds. Nightfall's scripts now take about half the time each frame.
+   To see the numbers: swift run StudioApp --bench
+   Checked by a new self test that makes 3000 random changes of every kind and compares every answer with a plain search, and checks that the costs stay the same in a scene 16 times bigger.
+   New files: Model/SceneIndex.swift, SceneIndexSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

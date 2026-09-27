@@ -629,6 +629,9 @@ public enum StudioEditor {
                 exit(1)
             }
         }
+        if CommandLine.arguments.contains("--bench") {
+            exit(MainActor.assumeIsolated { SceneBench.run() } ? 0 : 1)
+        }
         if let flag = CommandLine.arguments.firstIndex(of: "--soak") {
             // Plays a sample game headlessly for a while, reporting what grows.
             let arguments = Array(CommandLine.arguments[(flag + 1)...])

@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2570 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2572 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -150,6 +150,7 @@ listed in §9.
 | `PathfindingSelfTest.swift` | PathfindingService: the grid round a wall (start to goal, round the end and never through, evenly spaced and walkable, on the ground), none into a closed box, a step walked, a platform jumped onto (marked on the landing), none without jumping or too high, a gap one agent fits and a bigger doesn't, a Neon strip crossed or avoided by cost, a wall put down blocking an old path from where it meets it, a start inside the agent's own body; from Luau (CreatePath, ComputeAsync, Status, PathWaypoints, Blocked firing and CheckOcclusionAsync when a crate lands on the path, FindPathAsync, a bad start refused, PathWaypoint.new, completion); the README's example walking a character round a wall to a flag; a Nightfall zombie behind a pen's back wall going round and in to bite; the same for a joined player, seen from their game |
 | `DebuggerSelfTest.swift` | The Luau debugger: a breakpoint stopping each time its line runs, in the function and called from the script's line, with locals, upvalues and the caller's (a table shown by its entries, no compiler temporaries), the script carrying on after; a breakpoint on a line with no code landing on the next; values described (a long string cut short, an Instance by class and name, an empty table, nil); Step Over (to the next line, out to the caller, on to the breakpoint again), Step Into (into the called function), Step Out (back to the caller), Stop (no more stops, the session asked to end); a breakpoint put on and taken off while running; a LocalScript's and a ModuleScript's called from it; a character script's for the first character and the next; the world waiting while stopped and the watchdog not counting the wait; breakpoints saved (and not written when there are none), toggling not an undoable edit, kept through Stop in Studio, and moving with added or removed lines; a host stopped in a RemoteEvent handler with a joined player's message, the reply reaching them after |
 | `EngineSelfTest.swift` | The engine over a long game, through the real audio engine rendered offline: nightfall's sounds (music stopped and started, a gong, then the first sound in a part, which once crashed the game), none knocking another off the mix, sound coming out; 200 sounds started and stopped, flat and in parts, all heard; a change of audio device (the engine started again, the music carrying on, new sounds in parts starting); Nightfall played into the night and its fighting through it, with no errors and nothing growing (parts, Sounds, Models, GUI, Luau's memory) |
+| `SceneIndexSelfTest.swift` | The scene index: 3000 random changes of every kind (parts and groups made, deleted, reparented through the array and through update(id:), moved, sent to storage and back, the parts replaced whole with the same count, shuffled, data objects and Sounds made and deleted, reparenting undone) with parts, groups, parents, children, data objects and Sounds all found as a search finds them; finding a part, a Model's pivot, moving a Model and a folder's children no dearer with 16 times the parts |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
@@ -263,7 +264,10 @@ Sources/StudioKit/
   Play/Audio.swift               AudioOutput (SpeakerOutput: AVAudioEngine; RecordingOutput for
                                  the tests) and SoundSystem, which makes the scene's Sounds heard
   App/Soak.swift                 `--soak`: a sample game played for minutes, headless or in a
-                                 window, reporting memory and object counts as it goes
+                                 window, reporting memory and object counts as it goes; and
+                                 `--bench`, what the scene's everyday operations cost
+  Model/SceneIndex.swift         finding parts, groups, data objects and Sounds by id, and each
+                                 node's children, without searching
   Play/BuiltinSounds.swift       "builtin://Name" sounds: the catalog, a small synthesizer
                                  (`Synth`) and sequencer (`Song`); made on first use, kept;
                                  `--write-sounds <folder>` writes them as WAV files
@@ -1409,6 +1413,30 @@ Roughly ordered by how much time they will cost you.
     for its players.
     `swift run StudioApp --soak <game> <seconds> [render|audio|window]` is the tool
     for checking a long game.
+
+113. **The scene finds things through `SceneIndex`, and its arrays change in place.**
+    - `parts`, `groups`, `dataObjects` and `sounds` are computed properties over private
+      stores. Their `_modify` accessor changes an element without copying the array
+      (a `@Published` array was copied whole by every change: 230 µs a change at 8000
+      parts).
+    - Every change counts in `index.changes` / `otherChanges`.
+    - A slot is trusted only if the thing there has the id asked for. The children map,
+      and a miss meaning "not there", are trusted only while a fingerprint of ids,
+      parents and storage is unchanged, and that is taken only after a change. So no
+      change, whichever way it's made, can leave it wrong. `SceneIndexSelfTest` checks
+      3000 random changes against a plain search, and that costs stay flat as scenes
+      grow.
+    - `update(id:)` doesn't count a change that leaves the tree as it was (a move), so
+      moving Models never makes the index look again.
+    - **Swift's exclusivity rule now applies.** Nothing may read the scene while one of
+      its elements is being changed in place, or the app aborts ("Simultaneous
+      accesses"). So `update(id:)`, `updateGroup`, `updateSound` and
+      `updateDataObject` change a copy of the one element and put it back, since their
+      closures read the scene (unique names, say). Never write
+      `model.parts[i].x += f(model)`: compute first, then assign.
+    - Use `part(id:)`, `index(of:)`, `group(id:)`, `groupIndex(of:)`,
+      `dataObject(id:)` and `sound(id:)`, never `first(where: { $0.id == … })`.
+    - `swift run StudioApp --bench` prints the costs.
 
 ## 8. Recipes
 

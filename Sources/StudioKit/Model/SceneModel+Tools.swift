@@ -26,7 +26,7 @@ extension SceneModel {
     /// when it returns. Out of the Workspace a tool hangs from nothing in the tree: its
     /// Backpack or holder is where the tool says it is. No undo; callers commit.
     func setToolPlace(_ id: UUID, _ place: ToolPlace) {
-        guard let index = groups.firstIndex(where: { $0.id == id }), groups[index].kind == .tool else { return }
+        guard let index = self.index.groupSlot(id, in: self), groups[index].kind == .tool else { return }
         if groups[index].tool == nil { groups[index].tool = ToolSettings() }
         groups[index].tool?.place = place
         if place != .workspace { groups[index].parentID = nil }
@@ -97,7 +97,7 @@ extension SceneModel {
     }
 
     func updateTool(id: UUID, _ body: (inout ToolSettings) -> Void) {
-        guard let index = groups.firstIndex(where: { $0.id == id }), groups[index].kind == .tool else { return }
+        guard let index = self.index.groupSlot(id, in: self), groups[index].kind == .tool else { return }
         var settings = groups[index].tool ?? ToolSettings()
         body(&settings)
         groups[index].tool = settings

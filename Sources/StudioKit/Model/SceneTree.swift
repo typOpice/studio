@@ -169,11 +169,13 @@ extension SceneModel {
 
     // MARK: - Finding things
 
-    func group(id: UUID) -> SceneGroup? { groups.first { $0.id == id } }
+    func group(id: UUID) -> SceneGroup? { index.groupSlot(id, in: self).map { groups[$0] } }
+
+    func groupIndex(of id: UUID) -> Int? { index.groupSlot(id, in: self) }
 
     func node(_ id: UUID) -> TreeNode? {
-        if parts.contains(where: { $0.id == id }) { return .part(id) }
-        if groups.contains(where: { $0.id == id }) { return .group(id) }
+        if index.partSlot(id, in: self) != nil { return .part(id) }
+        if index.groupSlot(id, in: self) != nil { return .group(id) }
         return nil
     }
 
@@ -181,7 +183,8 @@ extension SceneModel {
 
     /// The parent of a part or group: nil for the Workspace (or for nothing).
     func parentID(of id: UUID) -> UUID? {
-        parts.first { $0.id == id }?.parentID ?? groups.first { $0.id == id }?.parentID
+        if let slot = index.partSlot(id, in: self) { return parts[slot].parentID }
+        return index.groupSlot(id, in: self).flatMap { groups[$0].parentID }
     }
 
     func name(of id: UUID) -> String? {
@@ -191,8 +194,7 @@ extension SceneModel {
     /// Direct children, groups first, each in the order they were made. A Tool in
     /// StarterPack, a Backpack or a hand isn't among the Workspace's.
     func children(of parent: UUID?) -> [TreeNode] {
-        groups.filter { $0.parentID == parent && (parent != nil || isInWorkspace($0)) }.map { .group($0.id) }
-            + parts.filter { $0.parentID == parent && (parent != nil || $0.storage == nil) }.map { .part($0.id) }
+        index.children(of: parent, in: self)
     }
 
     /// Everything below, depth first.
@@ -212,7 +214,7 @@ extension SceneModel {
     /// The parts in a subtree: the node itself if it is a part, plus every part below.
     func partIDs(inSubtree id: UUID) -> [UUID] {
         var ids: [UUID] = []
-        if parts.contains(where: { $0.id == id }) { ids.append(id) }
+        if index.partSlot(id, in: self) != nil { ids.append(id) }
         for case .part(let child) in descendants(of: id) { ids.append(child) }
         return ids
     }
@@ -260,17 +262,20 @@ extension SceneModel {
     @discardableResult
     func setParent(_ id: UUID, _ parent: UUID?) -> Bool {
         guard canReparent(id, to: parent) else { return false }
-        if let index = parts.firstIndex(where: { $0.id == id }) {
+        if let index = self.index.partSlot(id, in: self) {
             parts[index].parentID = parent
-        } else if let index = groups.firstIndex(where: { $0.id == id }) {
+        } else if let index = self.index.groupSlot(id, in: self) {
             groups[index].parentID = parent
         }
         return true
     }
 
     func updateGroup(id: UUID, _ body: (inout SceneGroup) -> Void) {
-        guard let index = groups.firstIndex(where: { $0.id == id }) else { return }
-        body(&groups[index])
+        guard let index = self.index.groupSlot(id, in: self) else { return }
+        // A copy changed and put back, so `body` may read the scene (see update(id:)).
+        var group = groups[index]
+        body(&group)
+        if let slot = self.index.groupSlot(id, in: self) { groups[slot] = group }
     }
 
     /// Removes nodes and everything under them, and the scripts inside.

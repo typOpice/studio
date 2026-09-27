@@ -42,10 +42,10 @@ extension SceneModel {
     /// back into the Workspace (nil). It goes to the top of the tree either way. Its
     /// parts are parked while stored. No undo; callers commit.
     func setStorage(_ id: UUID, _ place: StoragePlace?) {
-        if let index = groups.firstIndex(where: { $0.id == id }) {
+        if let index = self.index.groupSlot(id, in: self) {
             groups[index].storage = place
             if place != nil { groups[index].parentID = nil }
-        } else if let index = parts.firstIndex(where: { $0.id == id }) {
+        } else if let index = self.index.partSlot(id, in: self) {
             parts[index].storage = place
             if place != nil { parts[index].parentID = nil }
         } else {

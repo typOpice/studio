@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2570 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2572 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1608,6 +1608,8 @@ Two tools for checking the engine over a long game:
   Sounds, GUI objects and so on there are, so anything that keeps growing shows up.
   Add `render` to draw every frame too, `audio` to play through the real audio engine,
   or `window` to draw into a real window in real time.
+- `swift run StudioApp --bench` prints what finding, changing and moving parts and
+  Models costs in scenes of 500, 2000 and 8000 parts.
 - `swift run StudioApp --make-place nightfall Nightfall.json` writes a sample game as
   a place file, to open in Studio or play straight away with
   `StudioClient.app/Contents/MacOS/Client Nightfall.json`.

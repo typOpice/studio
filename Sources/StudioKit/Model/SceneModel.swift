@@ -18,9 +18,25 @@ enum GizmoMode: String, CaseIterable, Identifiable {
 }
 
 final class SceneModel: ObservableObject {
-    @Published var parts: [Part] = []
+    /// Finds things without searching (SceneIndex.swift). Counts every change to the
+    /// arrays below, which keep their contents in stores of their own with a `_modify`
+    /// accessor: changing one part changes it in place, where a `@Published` array is
+    /// copied whole by every change.
+    let index = SceneIndex()
+
+    var parts: [Part] {
+        get { partStore }
+        set { objectWillChange.send(); index.changes &+= 1; partStore = newValue }
+        _modify { objectWillChange.send(); index.changes &+= 1; yield &partStore }
+    }
+    private var partStore: [Part] = []
     /// Models and Folders. The tree lives in `parentID`s; see `SceneTree.swift`.
-    @Published var groups: [SceneGroup] = []
+    var groups: [SceneGroup] {
+        get { groupStore }
+        set { objectWillChange.send(); index.changes &+= 1; groupStore = newValue }
+        _modify { objectWillChange.send(); index.changes &+= 1; yield &groupStore }
+    }
+    private var groupStore: [SceneGroup] = []
     /// Points on parts, and the welds and joints between them.
     @Published var attachments: [SceneAttachment] = []
     @Published var constraints: [SceneConstraint] = []
@@ -49,9 +65,19 @@ final class SceneModel: ObservableObject {
     @Published var assets: [SceneAsset] = [] {
         didSet { MeshLibrary.shared.register(assets) }
     }
-    @Published var sounds: [SceneSound] = []
+    var sounds: [SceneSound] {
+        get { soundStore }
+        set { objectWillChange.send(); index.otherChanges &+= 1; soundStore = newValue }
+        _modify { objectWillChange.send(); index.otherChanges &+= 1; yield &soundStore }
+    }
+    private var soundStore: [SceneSound] = []
     /// Folders, Value objects and remotes (see DataObjects.swift), and the one selected.
-    @Published var dataObjects: [DataObject] = []
+    var dataObjects: [DataObject] {
+        get { dataStore }
+        set { objectWillChange.send(); index.otherChanges &+= 1; dataStore = newValue }
+        _modify { objectWillChange.send(); index.otherChanges &+= 1; yield &dataStore }
+    }
+    private var dataStore: [DataObject] = []
     /// Which place this is, for DataStores (SceneState.placeID).
     @Published var placeID: UUID?
     @Published var selectedDataObject: UUID? {
@@ -266,16 +292,16 @@ final class SceneModel: ObservableObject {
     }
 
     var effectiveSelection: Set<UUID> {
-        var ids = selection.filter { id in parts.contains { $0.id == id } }
-        for id in selection where groups.contains(where: { $0.id == id && $0.kind == .model }) {
+        var ids = selection.filter { id in index.partSlot(id, in: self) != nil }
+        for id in selection where group(id: id)?.kind == .model {
             ids.formUnion(partIDs(inSubtree: id))
         }
         return ids
     }
 
-    func part(id: UUID) -> Part? { parts.first { $0.id == id } }
+    func part(id: UUID) -> Part? { index.partSlot(id, in: self).map { parts[$0] } }
 
-    func index(of id: UUID) -> Int? { parts.firstIndex { $0.id == id } }
+    func index(of id: UUID) -> Int? { index.partSlot(id, in: self) }
 
     var selectionCenter: Vec3? {
         let selected = selectedParts
@@ -380,14 +406,23 @@ final class SceneModel: ObservableObject {
 
     func update(id: UUID, _ body: (inout Part) -> Void) {
         guard let i = index(of: id) else { return }
-        body(&parts[i])
+        // One part copied, changed and put back: `body` may read the scene while it
+        // runs, which it couldn't while the part was being changed in place. And straight
+        // into the store: a part moved or recoloured leaves the tree as it was, so the
+        // index needn't look again unless its place in the tree changed.
+        var part = partStore[i]
+        let before = (part.id, part.parentID, part.storage)
+        body(&part)
+        objectWillChange.send()
+        // Where it is now, if `body` changed the scene round it.
+        guard let slot = i < partStore.count && partStore[i].id == id ? i : index.partSlot(id, in: self) else { return }
+        partStore[slot] = part
+        if before != (part.id, part.parentID, part.storage) { index.changes &+= 1 }
     }
 
     func updateSelected(_ body: (inout Part) -> Void) {
         let ids = effectiveSelection
-        for i in parts.indices where ids.contains(parts[i].id) {
-            body(&parts[i])
-        }
+        for id in ids { update(id: id, body) }
     }
 
     /// `base`, or `base1`, `base2`… — the first not already taken, as Roblox Studio names
