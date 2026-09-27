@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2572 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2580 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1602,6 +1602,8 @@ changes, and known limitations. Read it before changing anything.
 
 Two tools for checking the engine over a long game:
 
+- The self-tests include a soak of their own: every sample game played for a
+  minute, and a host with a joined player, failing if anything keeps growing.
 - `swift run StudioApp --soak nightfall 300` plays a sample game (adventure,
   nightfall or obby) headlessly for 300 seconds of game time, a player running about
   and fighting. Every ten seconds it prints the memory used and how many parts,

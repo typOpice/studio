@@ -395,6 +395,12 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Checked by a new self test that makes 3000 random changes of every kind and compares every answer with a plain search, and checks that the costs stay the same in a scene 16 times bigger.
    New files: Model/SceneIndex.swift, SceneIndexSelfTest.swift.
 
+37. A soak test in the self tests, 2026-09-27.
+   The self tests now play every sample game for a while, with a player running about, jumping, fighting and falling (the same moves every time): Adventure Island and Mega Obby for 40 seconds, Nightfall for 60 so the night comes. They fail on any script error, or if parts, models, sounds, values, screen GUI or script memory keep growing.
+   They also play Nightfall with a host and a joined player for 50 seconds, and check the joined player's copy of the world keeps pace with the host's without piling up leftovers.
+   This adds about a minute and a half to the self tests.
+   New file: SoakSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

@@ -11,54 +11,60 @@ import simd
 /// With `render`, every frame is drawn too, off screen, waiting for the GPU each time —
 /// a GPU that stops finishing its work stops the soak on that frame.
 enum Soak {
-    static func run(game: String, seconds: Double, render: Bool = false, audio: Bool = false) -> Bool {
-        let template: PlaceTemplate
-        switch game.lowercased() {
-        case "adventure": template = .adventure
-        case "nightfall": template = .nightfall
-        case "obby", "megaobby": template = .megaObby
-        case "starter": template = .starter
-        default:
-            print("No game called \(game): adventure, nightfall, obby or starter")
-            return false
-        }
-        if !audio { SoundSystem.makeOutput = { RecordingOutput() } }
-        DataStoreFiles.shared.directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("StudioSoak-\(UUID().uuidString)")
-        let model = SceneModel()
-        model.loadTemplate(template)
-        let session = PlayController(model: model, console: ScriptConsole())
-        session.start()
-        var renderer: Renderer?
-        var worst = 0.0
-        if render, let device = MTLCreateSystemDefaultDevice() {
-            let view = MTKView(frame: CGRect(x: 0, y: 0, width: 640, height: 400), device: device)
-            renderer = Renderer(device: device, view: view, source: session)
-            for shader in model.shaders { renderer?.shaderLibrary.compileNow(shader) }
-            print("rendering: \(model.lighting.technology), ray tracing \(renderer?.rayTracingSupported == true ? "supported" : "not supported")")
-        }
+    /// What a game holds at a moment of a soak.
+    struct Sample {
+        var time: Double
+        var footprint: Double
+        var luau: Int
+        var parts: Int
+        var groups: Int
+        var sounds: Int
+        var data: Int
+        var gui: Int
+        var voices: Int
+        var navigation: Int
+        var console: Int
+        /// Milliseconds a frame took, on average and at worst, since the last sample.
+        var average: Double
+        var worst: Double
+    }
+
+    static func template(named game: String) -> PlaceTemplate? {
+        ["adventure": .adventure, "nightfall": .nightfall, "obby": .megaObby, "megaobby": .megaObby,
+         "starter": .starter][game.lowercased()]
+    }
+
+    /// Plays a running game for `seconds` of game time with a player running about,
+    /// jumping, swinging (Nightfall's sword is on 1) and now and then falling, sampling
+    /// every `every` seconds. The same moves every time, from a seeded generator.
+    /// Returns the samples and every error the scripts reported.
+    static func play(_ session: PlayController, seconds: Double, every: Double = 10, renderer: Renderer? = nil,
+                     report: (Sample) -> Void = { _ in }) -> (samples: [Sample], errors: [String]) {
+        let model = session.model
         let frame: Float = 1.0 / 60
-        var random = SystemRandomNumberGenerator()
+        var seed: UInt32 = 20_260_927
+        func roll(_ count: Int) -> Int {
+            seed = seed &* 1_664_525 &+ 1_013_904_223
+            return Int(seed >> 16) % count
+        }
         let keys = ["W", "A", "S", "D"]
         var held: String?
-        print("time   footprint  luau    parts groups sounds data  gui   voices nav   console  ms/frame")
-        var elapsed = 0.0, lastReport = -10.0
-        var busy = 0.0, frames = 0
+        var samples: [Sample] = []
+        var elapsed = 0.0, lastReport = 0.0
+        var busy = 0.0, worst = 0.0, frames = 0, total = 0
         while elapsed < seconds {
-            // A player: a new direction every second or so, now and then a jump, a swing
-            // (Nightfall's sword is on 1), and a fall.
-            if frames % 70 == 0 {
+            if total % 70 == 0 {
                 if let held { session.key(held, pressed: false) }
-                held = keys.randomElement(using: &random)
+                held = keys[roll(keys.count)]
                 session.key(held!, pressed: true)
             }
-            if frames % 150 == 0 { session.key("Space", pressed: true) }
-            if frames % 150 == 5 { session.key("Space", pressed: false) }
-            if frames == 30 { session.key("One", pressed: true) }
-            if frames == 32 { session.key("One", pressed: false) }
-            if frames % 40 == 0 { session.mouseButton(1, pressed: true) }
-            if frames % 40 == 3 { session.mouseButton(1, pressed: false) }
-            if frames % 3600 == 1800 { session.humanoid.takeDamage(1000) }
+            if total % 150 == 0 { session.key("Space", pressed: true) }
+            if total % 150 == 5 { session.key("Space", pressed: false) }
+            if total == 30 { session.key("One", pressed: true) }
+            if total == 32 { session.key("One", pressed: false) }
+            if total % 40 == 0 { session.mouseButton(1, pressed: true) }
+            if total % 40 == 3 { session.mouseButton(1, pressed: false) }
+            if total % 3600 == 1800 { session.humanoid.takeDamage(1000) }
             // Wander no further than the game's own ground.
             if simd_length(SIMD2(session.character.position.x, session.character.position.z)) > 150 {
                 session.character.position = Vec3(0, 5, 0)
@@ -72,23 +78,55 @@ enum Soak {
             let took = Date().timeIntervalSince(started)
             busy += took
             worst = max(worst, took)
-            if took > 0.25 { print(String(format: "  slow frame at %.1fs: %.0fms", elapsed, took * 1000)) }
             frames += 1
+            total += 1
             elapsed += Double(frame)
-            if elapsed - lastReport >= 10 {
+            if elapsed - lastReport >= every {
                 lastReport = elapsed
                 RunLoop.current.run(until: Date().addingTimeInterval(0.001))
-                print(String(format: "%5.0fs %8.1fMB %6.1fMB %5d %6d %6d %5d %5d %6d %5d %7d %8.2f",
-                             elapsed, footprintMB(), Double(session.scripts.luauMemory) / 1_048_576,
-                             model.parts.count, model.groups.count, model.sounds.count, model.dataObjects.count,
-                             session.gui.objects.count, session.sounds.voiceCount, session.scripts.navigation.partsDrawn,
-                             session.console.lines.count, busy / Double(frames) * 1000) + String(format: "  worst %.0fms", worst * 1000))
+                let sample = Sample(time: elapsed, footprint: footprintMB(), luau: session.scripts.luauMemory,
+                                    parts: model.parts.count, groups: model.groups.count, sounds: model.sounds.count,
+                                    data: model.dataObjects.count, gui: session.gui.objects.count,
+                                    voices: session.sounds.voiceCount, navigation: session.scripts.navigation.partsDrawn,
+                                    console: session.console.lines.count, average: busy / Double(frames) * 1000,
+                                    worst: worst * 1000)
+                samples.append(sample)
+                report(sample)
                 busy = 0
                 worst = 0
                 frames = 0
             }
         }
-        let errors = session.console.lines.filter { $0.kind == .error }.map(\.text)
+        if let held { session.key(held, pressed: false) }
+        return (samples, session.console.lines.filter { $0.kind == .error }.map(\.text))
+    }
+
+    static func run(game: String, seconds: Double, render: Bool = false, audio: Bool = false) -> Bool {
+        guard let template = template(named: game) else {
+            print("No game called \(game): adventure, nightfall, obby or starter")
+            return false
+        }
+        if !audio { SoundSystem.makeOutput = { RecordingOutput() } }
+        DataStoreFiles.shared.directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("StudioSoak-\(UUID().uuidString)")
+        let model = SceneModel()
+        model.loadTemplate(template)
+        let session = PlayController(model: model, console: ScriptConsole())
+        session.start()
+        var renderer: Renderer?
+        if render, let device = MTLCreateSystemDefaultDevice() {
+            let view = MTKView(frame: CGRect(x: 0, y: 0, width: 640, height: 400), device: device)
+            renderer = Renderer(device: device, view: view, source: session)
+            for shader in model.shaders { renderer?.shaderLibrary.compileNow(shader) }
+            print("rendering: \(model.lighting.technology), ray tracing \(renderer?.rayTracingSupported == true ? "supported" : "not supported")")
+        }
+        print("time   footprint  luau    parts groups sounds data  gui   voices nav   console  ms/frame")
+        let (_, errors) = play(session, seconds: seconds, renderer: renderer) { sample in
+            print(String(format: "%5.0fs %8.1fMB %6.1fMB %5d %6d %6d %5d %5d %6d %5d %7d %8.2f  worst %.0fms",
+                         sample.time, sample.footprint, Double(sample.luau) / 1_048_576, sample.parts, sample.groups,
+                         sample.sounds, sample.data, sample.gui, sample.voices, sample.navigation, sample.console,
+                         sample.average, sample.worst))
+        }
         print("errors: \(errors.count)")
         for error in Set(errors).prefix(10) { print("  \(error)") }
         session.stop()
