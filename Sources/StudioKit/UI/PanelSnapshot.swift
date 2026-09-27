@@ -436,6 +436,13 @@ enum PanelSnapshot {
             // The picker, its pictures drawn.
             session.showGames()
             session.games.refresh(recentURLs: session.recentPlaces, drawNow: true)
+        case "nightfall":
+            // Nightfall by day: its title top middle, the game bar clear of it.
+            session.loadNightfall()
+            session.play()
+            if let player = session.player {
+                for _ in 0..<120 { player.step(dt: 1.0 / 60) }
+            }
         case "talk":
             // Adventure Island, talking to Guide Pip with a gem found.
             session.loadAdventureIsland()

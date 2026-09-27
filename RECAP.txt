@@ -408,6 +408,10 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (each sees their own machine's numbers).
    New files: Play/FrameStats.swift, FrameStatsSelfTest.swift.
 
+39. Menu button moved, banners wrap, 2026-09-27.
+   In the client, the Menu button (and the hosting or joined badge) is now in the bottom-right corner while playing, so it no longer covers a game's title at the top of the screen (Nightfall's "NIGHT 1" line).
+   The big news banner in Adventure Island, Nightfall and Mega Obby now wraps onto a second line instead of cutting long messages off (Nightfall's welcome was cut short).
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

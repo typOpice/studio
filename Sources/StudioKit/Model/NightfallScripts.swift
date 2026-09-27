@@ -1421,8 +1421,9 @@ enum NightfallScripts {
 
     local banner = make("TextLabel", {
     \tName = "Banner", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 250),
-    \tSize = UDim2.fromOffset(640, 40), BackgroundTransparency = 1, TextColor3 = WHITE,
+    \tSize = UDim2.fromOffset(820, 76), BackgroundTransparency = 1, TextColor3 = WHITE,
     \tTextSize = 26, Font = Enum.Font.GothamBold, TextStrokeTransparency = 0.4, TextTransparency = 1,
+    \tTextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top,
     }, screen)
 
     screen.Parent = player.PlayerGui

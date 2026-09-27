@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2594 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2597 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -598,8 +598,9 @@ Choosing a game goes on to the **main menu**: Play, Host on your network, Join a
 Choose another game, Character and Quit (a scene sent from Studio with "Open in Client"
 is played straight away). **Character** sets your name, a colour for each body part, and what you wear —
 a face, shirt, pants and accessories (see *What characters wear*), on a 3D preview; it
-is saved and used in every scene you play — scripts see the name as `player.Name`. **Main Menu** (⌘L)
-leaves a game.
+is saved and used in every scene you play — scripts see the name as `player.Name`. **Main Menu** (⌘L),
+or the Menu button in the bottom-right corner while playing, leaves a game. The
+top middle of the screen is left to the game's own titles.
 
 **Local network play.** Host on your network advertises the game over Bonjour, so
 another Mac on the same network sees it under Join a game with no address to type.

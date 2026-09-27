@@ -42,6 +42,9 @@ enum SoakSelfTest {
             let grew = growth(from: samples[2], to: last)
             check("nothing growing that should stay about the same size", grew.isEmpty, "\(grew)")
         }
+        // Long news (Nightfall's welcome) wraps onto a second line rather than being cut off.
+        let banner = session.gui.objects.values.first { $0.name == "Banner" }
+        check("its banner wraps long news", banner?.textWrapped == true)
         session.stop()
         DataStoreFiles.shared.clear(place: model.placeID ?? UUID())
     }

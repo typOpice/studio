@@ -9,7 +9,9 @@ struct ClientRootView: View {
             switch session.screen {
             case .playing:
                 if let player = session.player {
-                    ZStack(alignment: .top) {
+                    // The game bar bottom right: the top middle is where games put their
+                    // titles, and the other corners are the HUD's (chat, the numbers, the controls).
+                    ZStack(alignment: .bottomTrailing) {
                         ClientView(player: player)
                         GuiLayer(store: player.gui)
                         if session.host != nil || session.membership != nil {
@@ -78,7 +80,8 @@ struct GameBar: View {
             .foregroundStyle(.white)
             .help("Back to the main menu (⌘L)")
         }
-        .padding(.top, 10)
+        .padding(.trailing, 14)
+        .padding(.bottom, 14)
     }
 }
 
