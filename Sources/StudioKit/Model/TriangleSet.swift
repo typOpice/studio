@@ -118,11 +118,22 @@ struct TriangleSet {
         return best
     }
 
+    /// Where the ray enters a box, if it does. An axis the ray runs parallel to limits
+    /// nothing if the ray lies within the box's extent on it (0 × ∞ would be NaN, and a
+    /// ray straight down a face — a vertical ray at a whole-stud x — would miss).
     private static func slab(_ origin: Vec3, _ inverse: Vec3, _ lower: Vec3, _ upper: Vec3) -> Float? {
-        let t1 = (lower - origin) * inverse, t2 = (upper - origin) * inverse
-        let near = simd_reduce_max(simd_min(t1, t2)), far = simd_reduce_min(simd_max(t1, t2))
-        guard far >= max(near, 0), !far.isNaN else { return nil }
-        return max(near, 0)
+        var near: Float = 0, far = Float.greatestFiniteMagnitude
+        for axis in 0..<3 {
+            if inverse[axis].isInfinite {
+                guard origin[axis] >= lower[axis], origin[axis] <= upper[axis] else { return nil }
+                continue
+            }
+            let t1 = (lower[axis] - origin[axis]) * inverse[axis], t2 = (upper[axis] - origin[axis]) * inverse[axis]
+            near = max(near, min(t1, t2))
+            far = min(far, max(t1, t2))
+            if far < near { return nil }
+        }
+        return near
     }
 
     /// Möller–Trumbore, both faces.
@@ -133,11 +144,13 @@ struct TriangleSet {
         guard abs(determinant) > 1e-12 else { return nil }
         let inverse = 1 / determinant
         let s = origin - a
+        // A hair of slack, so a ray down the edge two triangles share hits one of them.
+        let slack: Float = 1e-5
         let u = dot(s, p) * inverse
-        guard u >= 0, u <= 1 else { return nil }
+        guard u >= -slack, u <= 1 + slack else { return nil }
         let q = cross(s, e1)
         let v = dot(direction, q) * inverse
-        guard v >= 0, u + v <= 1 else { return nil }
+        guard v >= -slack, u + v <= 1 + slack else { return nil }
         let t = dot(e2, q) * inverse
         return t >= 0 ? t : nil
     }

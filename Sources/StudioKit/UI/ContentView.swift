@@ -305,6 +305,9 @@ struct RibbonView: View {
             }
             RibbonMeshButton(model: model, session: session)
             RibbonButton(title: "Rig", icon: "figure.stand") { controller.insertRig() }
+            RibbonButton(title: "Terrain", icon: "mountain.2", active: session.dockTab == .terrain && session.dockVisible) {
+                session.showDock(.terrain)
+            }
         }
 
         divider

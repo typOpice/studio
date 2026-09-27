@@ -365,6 +365,7 @@ final class ScriptRuntime {
         case "ribbon": return ribbonCall(name, arguments)
         case "sky": return skyCall(name, arguments)
         case "force": return forceCall(name, arguments)
+        case "terrain": return terrainCall(name, arguments)
         case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)

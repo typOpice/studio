@@ -6,7 +6,7 @@ import simd
 /// Each opens as a new, untitled place (`SceneModel.loadTemplate`), and every one but
 /// Adventure Island has what a new place has: the default HUD and the Utils module.
 enum PlaceTemplate: String, CaseIterable, Identifiable {
-    case baseplate, obby, starter, empty, adventure, nightfall, megaObby
+    case baseplate, obby, starter, terrain, empty, adventure, nightfall, megaObby
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         case .baseplate: return "Baseplate"
         case .obby: return "Obby"
         case .starter: return "Starter Scene"
+        case .terrain: return "Hills and Lake"
         case .empty: return "Empty"
         case .adventure: return AdventureIsland.name
         case .nightfall: return Nightfall.name
@@ -27,6 +28,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         case .baseplate: return "A big grey baseplate and a spawn pad, ready to build on."
         case .obby: return "Jumps, kill bricks, checkpoints and a finish, with the script that runs them."
         case .starter: return "A few parts, a script, shaders and an animation to learn from."
+        case .terrain: return "Rolling terrain with a river and lakes, to shape with the Terrain Editor."
         case .empty: return "Nothing but the HUD and Utils. Start from scratch."
         case .adventure:
             return "An open world to explore: NPCs to talk to, an obby tower, a ray-traced mirror lab, "
@@ -56,6 +58,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         case .baseplate: return "square.grid.3x3.fill"
         case .obby: return "figure.run"
         case .starter: return "cube.transparent"
+        case .terrain: return "mountain.2.fill"
         case .empty: return "doc"
         case .adventure: return "map.fill"
         case .nightfall: return "moon.stars.fill"
@@ -64,7 +67,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
     }
 
     /// The ones listed under New; the sample games have a section of their own.
-    static var starters: [PlaceTemplate] { [.baseplate, .obby, .starter, .empty] }
+    static var starters: [PlaceTemplate] { [.baseplate, .obby, .starter, .terrain, .empty] }
     static var samples: [PlaceTemplate] { [.adventure, .nightfall, .megaObby] }
 
     /// The place, built fresh.
@@ -73,6 +76,7 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         case .baseplate: return Self.baseplateState()
         case .obby: return Self.obbyState()
         case .starter: return SceneModel().state
+        case .terrain: return Self.terrainState()
         case .empty: return Self.emptyState()
         case .adventure: return AdventureIsland.state()
         case .nightfall: return Nightfall.state()
@@ -100,6 +104,11 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
             camera.distance = 250
             camera.yaw = .pi / 2 + 0.35
             camera.pitch = 0.72
+        case .terrain:
+            camera.target = Vec3(0, 10, 0)
+            camera.distance = 330
+            camera.yaw = .pi / 2 + 0.6
+            camera.pitch = 0.5
         case .megaObby:
             // From beside the lobby, down the first world's stages.
             camera.target = Vec3(0, 18, -30)
@@ -159,6 +168,17 @@ enum PlaceTemplate: String, CaseIterable, Identifiable {
         pad.color = Vec3(0.30, 0.62, 0.95)
         pad.anchored = true
         return pad
+    }
+
+    /// Generate's hills, a river and lakes, 512 studs across; players drop onto the land.
+    private static func terrainState() -> SceneState {
+        var state = emptyState()
+        state.terrain.generate(centre: Vec3(0, -8, 0), size: 512, height: 90, waterLevel: 10, seed: 7)
+        var clouds = CloudSettings()
+        clouds.cover = 0.4
+        state.lighting.clouds = clouds
+        state.lighting.fogEnd = 100_000
+        return state
     }
 
     private static func baseplateState() -> SceneState {

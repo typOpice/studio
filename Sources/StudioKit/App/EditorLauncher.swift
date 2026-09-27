@@ -696,6 +696,11 @@ public enum StudioEditor {
                 ? .rayTraced : .conventional
             exit(AvatarSnapshot.renderAdventure(to: URL(fileURLWithPath: path), view: view, technology: technology) ? 0 : 1)
         }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-terrain") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            exit(AvatarSnapshot.renderTerrain(to: URL(fileURLWithPath: arguments.first ?? "terrain.png"),
+                                              seed: arguments.count > 1 ? UInt32(arguments[1]) ?? 7 : 7) ? 0 : 1)
+        }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-sky") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])
             exit(AvatarSnapshot.renderSky(to: URL(fileURLWithPath: arguments.first ?? "sky.png"),

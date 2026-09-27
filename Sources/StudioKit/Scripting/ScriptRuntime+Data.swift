@@ -216,15 +216,63 @@ extension ScriptRuntime {
             guard let t = Picking.intersect(ray: ray, part: part, exact: true), t <= reach else { continue }
             if best == nil || t < best!.distance { best = (part, t) }
         }
+        // The terrain ("terrain" in the filter stands for it): its ground, and its water unless
+        // IgnoreWater.
+        var terrainHit: (distance: Float, water: Bool)?
+        if include == filter.contains("terrain"), !model.terrain.isEmpty {
+            for part in model.terrainParts {
+                guard let t = Picking.intersect(ray: ray, part: part, exact: true), t <= reach,
+                      t < (best?.distance ?? .infinity), t < (terrainHit?.distance ?? .infinity) else { continue }
+                terrainHit = (t, false)
+            }
+            if !ignoreWater {
+                // Stepping along it for water's surface (or into water it starts in).
+                let far = min(terrainHit?.distance ?? reach, best?.distance ?? reach)
+                var t: Float = 0
+                while t <= far {
+                    let p = origin + ray.direction * t
+                    if let surface = model.terrain.waterSurface(at: p) {
+                        // Exactly where it crosses the surface, coming down onto it.
+                        var exact = t
+                        if ray.direction.y < -1e-4, origin.y > surface {
+                            exact = min(max((origin.y - surface) / -ray.direction.y, t - 0.5), t)
+                        }
+                        terrainHit = (exact, true)
+                        break
+                    }
+                    t += 0.5
+                }
+            }
+            if let hit = terrainHit, best.map({ hit.distance < $0.distance }) ?? true { best = nil } else { terrainHit = nil }
+        }
         // Characters: the play session knows where their bodies are.
         let characters = filter.filter { $0.hasPrefix("ch:") }
         if let player, let hit = player.playerInvoke("character.raycast", [
             .triple(ox, oy, oz), .triple(dx / reach, dy / reach, dz / reach), .number(Double(best?.distance ?? reach)),
             .list(characters.map { .string($0) }), .bool(include)]).asList, hit.count >= 4,
+           (hit[2].asFloat ?? .infinity) < (terrainHit?.distance ?? .infinity),
            let distance = hit[2].asFloat, let (nx, ny, nz) = hit[3].asTriple {
             let point = origin + direction / reach * distance
             return .list([hit[0], .triple(point.x, point.y, point.z), .triple(nx, ny, nz), .number(Double(distance)),
                           .string("plastic"), hit[1]])
+        }
+        if let hit = terrainHit {
+            let point = origin + ray.direction * hit.distance
+            // Water's surface faces up; ground's normal is the gradient of how solid it is.
+            var normal = Vec3(0, 1, 0)
+            if !hit.water {
+                let v = TerrainData.voxel(at: point)
+                var gradient = Vec3.zero
+                for axis in 0..<3 {
+                    var step = SIMD3<Int32>.zero
+                    step[axis] = 1
+                    gradient[axis] = model.terrain.solidity(v &+ step) - model.terrain.solidity(v &- step)
+                }
+                normal = simd_length(gradient) > 1e-4 ? -simd_normalize(gradient) : Vec3(0, 1, 0)
+            }
+            let material = hit.water ? TerrainMaterial.water : model.terrain.materialNear(point)
+            return .list([.string("terrain"), .triple(point.x, point.y, point.z), .triple(normal.x, normal.y, normal.z),
+                          .number(Double(hit.distance)), .string(material.name)])
         }
         guard let best else { return .nothing }
         let point = origin + direction / reach * best.distance

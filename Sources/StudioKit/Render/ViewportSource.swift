@@ -8,6 +8,8 @@ struct EditorOverlay {
     var activeHandle: GizmoHandle?
     /// The part held as the first end of a weld or joint, outlined in its own colour.
     var joinPending: UUID?
+    /// The Terrain Editor's brush where the pointer is: its middle and radius.
+    var brush: (centre: Vec3, radius: Float)?
 }
 
 /// A classic six-part Roblox avatar to draw, posed by `AvatarAnimator`.

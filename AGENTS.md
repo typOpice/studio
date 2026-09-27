@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2756 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # 2810 checks — THE test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -153,6 +153,7 @@ listed in §9.
 | `SceneIndexSelfTest.swift` | The scene index: 3000 random changes of every kind (parts and groups made, deleted, reparented through the array and through update(id:), moved, sent to storage and back, the parts replaced whole with the same count, shuffled, data objects and Sounds made and deleted, reparenting undone) with parts, groups, parents, children, data objects and Sounds all found as a search finds them; finding a part, a Model's pivot, moving a Model and a folder's children no dearer with 16 times the parts |
 | `SoakSelfTest.swift` | Each sample game played by `Soak.play`'s player (running, jumping, swinging, falling; the same moves every time) — Adventure Island and Mega Obby for 40 seconds, Nightfall for 60, night included: no script errors, and no parts, Models, Sounds, values, GUI objects, voices or Luau memory growing from the settled sample to the last; a host and a joined player in Nightfall for 50 seconds, both moving and fighting: no errors, and the joined player's parts and Sounds keeping the same distance from the host's (nothing the host has done with piling up) |
 | `NPCSelfTest.swift` | NPCs: Insert › Rig (the seven parts, a Humanoid, one undo step, standing on the spot, saved and reopened); MoveTo at the WalkSpeed, facing the way it goes with legs swinging, MoveDirection, WalkToPoint and the Running state, MoveToFinished(true) within a stud and standing on the ground; a wall stopping it and MoveToFinished(false) after eight seconds; a kerb stepped up, moved by a script (PivotTo) then walking off a ledge, Jump up and down; the README's PathfindingService example round a wall to a flag; TakeDamage and HealthChanged, MaxHealth lowering Health, Died once at no health, falling apart; Instance.new("Humanoid") in a script's Model walking at its own WalkSpeed, FindFirstChildOfClass, a wrong type refused; the player bumping into an NPC; Adventure Island's Postie Pat round, every stop reached; a host's NPC walking and dying in a joined player's game, their script hearing Died, the parts let go there too |
+| `TerrainSelfTest.swift` | Terrain: FillBall (full, part-full, empty), Air carving, a turned FillBlock, FillCylinder, FillWedge's slope, FillRegion, ReplaceMaterial, the seven brushes, Generate (materials, the same from a seed), saved small and read back, a place without it saving as before; meshes (a flat top at its height, whole across chunks, Precise collision parts, water at its level, only the changed chunk remade, the chunks round a corner edit); played on (standing on it and a hill, swimming with no floor at 0, a block landing, Raycast hitting it as workspace.Terrain with its material and normal, its water unless IgnoreWater, filtered out, a path round a hill); from Luau (workspace.Terrain found by name and class, every Fill, Region3, ReplaceMaterial, Read/WriteVoxels, material colours, water, cells, Clouds in it, five wrong values refused); drawn; painted with a brush in Studio (a stroke one undo step, the preview, a join tool putting it down); the Hills and Lake template (a player lands on it); the README's island as written; a host's terrain and a script's edits in a joined player's game |
 | `ForceSelfTest.swift` | AlignPosition, VectorForce and NoCollisionConstraint: a Force of the block's weight holding it up (none, it falls; twice, it rises), RelativeTo Attachment0 turning with the part, off the middle turning it unless ApplyAtCenterOfMass; pulled to Attachment1 and held against gravity, not with too little MaxForce, no faster than MaxVelocity, at once with RigidityEnabled and slower at Responsiveness 5, OneAttachment to Position, following a moving target; falling through a shelf it mustn't collide with and resting on it when disabled; Studio (the Align Position and No Collision tools, Add VectorForce's hover, undo, saved with MaxVelocity's no-limit, a hinge saving as before); from Luau (all three, their enums, five wrong values refused, math.huge); the README's lift as written; a host's AlignPosition lifting a crate in a joined player's game |
 | `SkySelfTest.swift` | Lighting's Sky, Atmosphere and Clouds: none in a new place (a default sun, moon and stars) and it saving as before, added with undo, saved and reopened, what the shaders get; drawn — stars at night and none at StarCount 0, the sun's disc and not with CelestialBodiesShown off, clouds whitening the sky and going when disabled, a far wall fading into the Atmosphere's colour, a skybox's sides where they belong and the right way up, the day's sky again without all six; from Luau (made loose then put in Lighting, found by name and class, children, the Roblox types, Offset kept in range, five wrong values refused, Clone, out and back, Destroy); the README's dusk fog as written; a host's Atmosphere and Clouds in a joined player's sky and scripts |
 | `RibbonSelfTest.swift` | Beams: the curve (Segments, its ends, CurveSize bending it), Width0 to Width1, Color and Transparency along it, flat across the attachments, Stretch and Wrap, TextureSpeed scrolling, FaceCamera, Enabled; Trails: a point each MinLength, as wide as the attachments are apart, gone after Lifetime, drawn from now back, WidthScale, MaxLength, Clear, Enabled off, forgotten in storage; a Beam not holding a part up; Studio (the Beam tool middle to middle facing the camera, Add Trail top to bottom, undo, neither a join tool, saved, a joint saving as before); from Luau (Beam and Trail made and read in their types, not Constraints, wrong values refused, a Beam has no Clear, Clear and Enabled); drawn, and not when off; the README's laser as written; a host's Beam and moving Trail in a joined player's game |
@@ -321,6 +322,12 @@ Sources/StudioKit/
                                    `UUID(stableFrom:)`, `ensurePlaceID`
   Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them; a
                                    Humanoid's numbers
+  Model/Terrain.swift            TerrainData: voxels in 16³ chunks (material, occupancy, stamps),
+                                 fills, brushes, Generate, packing; TerrainPatch for joined players
+  Play/TerrainMesher.swift       surface nets per chunk (and water), TerrainGeometry: meshes and the
+                                 chunks as Precise MeshParts for collision, remade as they change
+  Scripting/ScriptRuntime+Terrain.swift  `terrain.*`: fills, regions, voxels, water, colours
+  UI/TerrainUI.swift             the dock's Terrain Editor
   Scripting/ScriptRuntime+Forces.swift  `force.*`: an AlignPosition's or VectorForce's own properties
   Model/SkyObjects.swift         Lighting's Sky, Atmosphere and Clouds (SkySettings and the rest)
   Scripting/ScriptRuntime+Sky.swift  `sky.*`: making, reading, moving them; SkyObject; loose ones
@@ -1492,6 +1499,25 @@ Roughly ordered by how much time they will cost you.
       that when changing `place`.
     - A body skips putting its parts while nothing moved (`lastPut`), since each change
       is sent to every joined player.
+
+121. **Terrain is voxels, meshed per chunk, and collides as MeshParts nobody else sees.**
+    `SceneState.terrain` (TerrainData) holds 16³-voxel chunks. Each chunk's `stamp`
+    changes with any edit, and its `edgeStamp` only when a voxel on its outside layer
+    changes. That keeps equality, undo and replication cheap, and limits remeshing.
+    `SceneModel.terrainGeometry` meshes changed chunks: its signature is the chunk's own
+    stamp plus its neighbours' edge stamps. It also makes each chunk a Precise MeshPart
+    (triangles in `MeshLibrary.register(_:as:)`).
+    - Those parts go wherever parts are collided with: the character, NPCs, every
+      `physics.sync`, navigation, raycasts, spawning (`model.terrainParts`). They never
+      enter `model.parts`, so scripts, saving, the Explorer and touches don't see them.
+      A new place that collides with parts must add them.
+    - With terrain there's no invisible floor at 0 (`character.solidBaseplate`).
+    - Water voxels aren't solid. Their surface sits at the top water voxel's bottom plus
+      its occupancy (`waterSurface`). Swimming (`CharacterController.terrainWater`) and
+      raycasts read it.
+    - Joined players get `TerrainPatch`es: changed chunks whole, removed ones, settings.
+    - `TriangleSet.raycast` handles rays parallel to an axis. A vertical ray at a whole
+      stud once hit NaN in the box test and missed.
 
 120. **AlignPosition and VectorForce are pushes; NoCollisionConstraint is a pair filter.**
     They're `SceneConstraint` kinds, like the joints, but only `kind.isJoint` ones become

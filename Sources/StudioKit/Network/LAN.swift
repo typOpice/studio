@@ -63,10 +63,13 @@ struct SceneDelta: Codable, Equatable {
     var sounds: [SceneSound]?
     /// Folders, Value objects (leaderstats among them) and remotes, when any changes.
     var dataObjects: [DataObject]?
+    /// The terrain's changed chunks, when any changes.
+    var terrain: TerrainPatch?
 
     var isEmpty: Bool {
         parts.isEmpty && removed.isEmpty && groups == nil && lighting == nil && shaders == nil
             && attachments == nil && constraints == nil && screenShaders == nil && sounds == nil && dataObjects == nil
+            && terrain == nil
     }
 
     /// From what was last sent to how things are now. Applying it is idempotent, so a
@@ -85,6 +88,7 @@ struct SceneDelta: Codable, Equatable {
         if now.screenShaderIDs != sent.screenShaderIDs { delta.screenShaders = now.screenShaderIDs }
         if now.sounds != sent.sounds { delta.sounds = now.sounds }
         if now.dataObjects != sent.dataObjects { delta.dataObjects = now.dataObjects }
+        delta.terrain = TerrainPatch.between(sent.terrain, now.terrain)
         return delta
     }
 
@@ -114,6 +118,11 @@ struct SceneDelta: Codable, Equatable {
         if let sounds { model.sounds = sounds + model.sounds.filter(\.local) }
         // The same for data objects: a joined player's LocalScripts' own stay.
         if let dataObjects { model.dataObjects = dataObjects + model.dataObjects.filter(\.local) }
+        if let terrain {
+            var copy = model.terrain
+            terrain.apply(to: &copy)
+            model.terrain = copy
+        }
     }
 }
 

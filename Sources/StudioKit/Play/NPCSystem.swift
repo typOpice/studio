@@ -179,7 +179,8 @@ final class NPCSystem {
         // It meets everything solid but itself.
         let own = Set(body.rest.map(\.part))
         body.controller.solidBaseplate = solidGround
-        body.controller.step(dt: dt, intent: intent, parts: model.parts.filter { !own.contains($0.id) })
+        body.controller.terrainWater = model.terrain.isEmpty ? nil : { [terrain = model.terrain] in terrain.waterSurface(at: $0) }
+        body.controller.step(dt: dt, intent: intent, parts: model.parts.filter { !own.contains($0.id) } + model.terrainParts)
         if body.controller.position.y < CharacterController.voidHeight {
             model.updateDataObject(id: body.humanoid) { $0.health = 0 }
             return

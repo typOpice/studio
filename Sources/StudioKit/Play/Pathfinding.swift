@@ -50,6 +50,8 @@ final class NavigationGrid {
 
     private struct Signature: Equatable {
         let position: Vec3, size: Vec3, orientation: simd_quatf, shape: PartShape, material: PartMaterial
+        /// A MeshPart's mesh: a terrain chunk made again keeps its place but not its triangles.
+        let mesh: UUID?
     }
 
     private(set) var origin = SIMD2<Float>(0, 0)
@@ -72,7 +74,7 @@ final class NavigationGrid {
         for part in solid {
             seen.insert(part.id)
             let signature = Signature(position: part.position, size: part.size, orientation: part.orientation,
-                                      shape: part.shape, material: part.material)
+                                      shape: part.shape, material: part.material, mesh: part.mesh?.asset)
             if let known = footprints[part.id], known.signature == signature { continue }
             erase(part.id)
             draw(part, signature)

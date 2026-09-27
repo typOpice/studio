@@ -104,6 +104,10 @@ final class SceneModel: ObservableObject {
     @Published var starterPlayer = StarterPlayerSettings()
     /// How the scene is lit.
     @Published var lighting = LightingSettings()
+    /// The Workspace's Terrain.
+    @Published var terrain = TerrainData()
+    /// Its meshes and collision (TerrainMesher.swift), made as needed.
+    let terrainGeometry = TerrainGeometry()
     /// Lighting is selected in the Explorer, so the inspector shows it.
     @Published var lightingSelected = false
     /// Custom animations, edited in the Animation Editor.
@@ -221,8 +225,19 @@ final class SceneModel: ObservableObject {
     /// parts clicked in the viewport are joined, and it stays armed for the pair after
     /// that; nil leaves the ordinary select and transform tools in charge.
     @Published var joinTool: SceneConstraint.Kind? {
-        didSet { if joinTool == nil { joinPending = nil } }
+        didSet {
+            if joinTool == nil { joinPending = nil }
+            if joinTool != nil, terrainBrush != nil { terrainBrush = nil }
+        }
     }
+    /// The Terrain Editor's brush, while one is picked: the viewport paints terrain with it.
+    @Published var terrainBrush: TerrainData.Brush? {
+        didSet { if terrainBrush != nil, joinTool != nil { joinTool = nil } }
+    }
+    /// Its size across (studs), how hard it works (0–1), and what it adds or paints.
+    @Published var terrainBrushSize: Float = 16
+    @Published var terrainBrushStrength: Float = 0.5
+    @Published var terrainMaterial = TerrainMaterial.grass
     /// The first part clicked with a join tool armed, waiting for its partner.
     @Published var joinPending: UUID?
     /// Picking a join tool while two or more parts are selected joins that whole
@@ -258,7 +273,7 @@ final class SceneModel: ObservableObject {
                          animations: animations, lighting: lighting, groups: groups,
                          attachments: attachments, constraints: constraints, starterGui: starterGui,
                          assets: assets, sounds: sounds, dataObjects: dataObjects, defaultGui: defaultGui,
-                         placeID: placeID) }
+                         placeID: placeID, terrain: terrain) }
         set {
             parts = newValue.parts
             groups = newValue.groups
@@ -277,6 +292,7 @@ final class SceneModel: ObservableObject {
             starterPlayer = newValue.starterPlayer
             animations = newValue.animations
             lighting = newValue.lighting
+            if terrain != newValue.terrain { terrain = newValue.terrain }
             if let id = selectedAnimation, !animations.contains(where: { $0.id == id }) {
                 selectedAnimation = nil
             }

@@ -79,6 +79,8 @@ struct CharacterController {
     private(set) var climbing = false
     /// Deep enough in water to swim.
     private(set) var swimming = false
+    /// The terrain's water: its surface above a point in it, if it's in any.
+    var terrainWater: ((Vec3) -> Float?)?
 
     /// Full-height collision volume.
     var capsule: Capsule {
@@ -209,6 +211,7 @@ struct CharacterController {
             let top = part.position.y + abs(part.orientation.act(Vec3(0, h.y, 0)).y)
             surface = max(surface ?? top, top)
         }
+        if let terrainWater, let top = terrainWater(middle) { surface = max(surface ?? top, top) }
         return surface
     }
 
@@ -453,7 +456,8 @@ struct CharacterController {
         let ray = Ray(origin: Vec3(0, 400, 18), direction: Vec3(0, -1, 0))
         var highest: Float?
         for part in parts where part.isSolid {
-            if let t = Picking.intersect(ray: ray, part: part) {
+            // A MeshPart (the terrain's chunks among them) by its real surface, not its box.
+            if let t = Picking.intersect(ray: ray, part: part, exact: part.mesh != nil) {
                 let y = ray.point(at: t).y
                 if highest == nil || y > highest! { highest = y }
             }

@@ -74,7 +74,8 @@ struct MeshGeometry {
     static let largestTriangleCount = 500_000
     static let hullCorners = 128
 
-    init?(positions raw: [Vec3], normals rawNormals: [Vec3], uvs: [SIMD2<Float>], indices: [UInt32]) {
+    /// `hull` false skips the convex hull (terrain, which only ever collides as its triangles).
+    init?(positions raw: [Vec3], normals rawNormals: [Vec3], uvs: [SIMD2<Float>], indices: [UInt32], hull wantsHull: Bool = true) {
         var raw = raw, rawNormals = rawNormals, uvs = uvs, indices = indices
         if rawNormals.count != raw.count, indices.count % 3 == 0, indices.allSatisfy({ Int($0) < raw.count }) {
             (raw, rawNormals, uvs, indices) = Self.creasedNormals(positions: raw, uvs: uvs, indices: indices)
@@ -98,8 +99,13 @@ struct MeshGeometry {
             SIMD3<Int32>(Int32(indices[$0]), Int32(indices[$0 + 1]), Int32(indices[$0 + 2]))
         }
         triangles = TriangleSet(vertices: positions, triangles: triangleList)
-        hull = Self.convexHull(of: positions)
-        hullVolume = Self.volume(of: hull)
+        if wantsHull {
+            hull = Self.convexHull(of: positions)
+            hullVolume = Self.volume(of: hull)
+        } else {
+            hull = triangles
+            hullVolume = 0
+        }
     }
 
     /// Normals for a file that has none, as modelling apps make them: a corner is smooth
@@ -295,6 +301,11 @@ final class MeshLibrary {
 
     private var files: [UUID: (data: Data, fileExtension: String)] = [:]
     private var decoded: [UUID: MeshGeometry?] = [:]
+    /// Meshes made here rather than read from files: the terrain's chunks.
+    private var made: [UUID: MeshGeometry] = [:]
+
+    func register(_ geometry: MeshGeometry, as id: UUID) { made[id] = geometry }
+    func forget(_ id: UUID) { made[id] = nil }
 
     /// Takes note of a scene's mesh assets (it keeps any it already has: an undone
     /// delete brings one straight back).
@@ -307,6 +318,7 @@ final class MeshLibrary {
     }
 
     func geometry(_ asset: UUID?) -> MeshGeometry? {
+        if let asset, let known = made[asset] { return known }
         guard let asset, let file = files[asset] else { return nil }
         if let known = decoded[asset] { return known }
         let made = MeshGeometry.decode(file.data, fileExtension: file.fileExtension)

@@ -19,6 +19,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         /// A body part in a shirt or pants.
         let clothed: MTLRenderPipelineState
         let clothedBlend: MTLRenderPipelineState
+        /// The Workspace's Terrain.
+        let terrain: MTLRenderPipelineState
     }
     private var litPipelines: [Bool: LitPipelines] = [:]
     /// This frame's variant.
@@ -64,6 +66,22 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// Imported meshes on the GPU, and MeshParts' pictures, by asset.
     private var assetMeshes: [UUID: Mesh] = [:]
     private var assetTextures: [UUID: (size: Int, texture: MTLTexture?)] = [:]
+    /// Terrain chunks on the GPU: a mesh per material, and its water; made again when the
+    /// chunk's mesh is.
+    private var terrainMeshes: [TerrainData.Key: TerrainGPU] = [:]
+    /// A chunk on the GPU: coloured vertices to draw, plain ones for the shadow map, its water.
+    private struct TerrainGPU {
+        let signature: Int
+        let colored: Mesh?
+        let plain: Mesh?
+        let water: Mesh?
+    }
+    /// Mirrors `TerrainVertexData` (48 bytes).
+    private struct TerrainVertex {
+        var position: Vec3
+        var normal: Vec3
+        var color: Vec4
+    }
     private var groundMesh: Mesh!
     private var outlineMesh: Mesh!
     private var coneMesh: Mesh!
@@ -221,7 +239,9 @@ final class Renderer: NSObject, MTKViewDelegate {
                 clothed: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_clothed",
                                           blending: false, rayTraced: rayTraced),
                 clothedBlend: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_clothed",
-                                               blending: true, rayTraced: rayTraced))
+                                               blending: true, rayTraced: rayTraced),
+                terrain: try makePipeline(vertex: "terrain_vertex", fragment: "terrain_fragment", blending: false,
+                                          rayTraced: rayTraced))
         }
         lit = litPipelines[false]
         flatPipeline = try makePipeline(vertex: "scene_vertex", fragment: "flat_fragment", blending: false)
@@ -481,6 +501,34 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         encoder.setDepthStencilState(depthDefault)
         for part in opaque { drawPart(encoder, part: part, model: model, fallback: lit.opaque, cull: .back) }
+        let terrain = terrainChunks(model: model)
+        if !terrain.isEmpty {
+            encoder.setRenderPipelineState(lit.terrain)
+            encoder.setCullMode(.none)
+            var ground = DrawUniforms()
+            ground.model = matrix_identity_float4x4
+            ground.normalMatrix = matrix_identity_float3x3
+            ground.color = Vec4(1, 1, 1, 1)
+            ground.shading = Vec4(0.06, 8, 0, 0)
+            for chunk in terrain {
+                guard let mesh = chunk.colored else { continue }
+                submit(encoder, mesh: mesh, uniforms: &ground)
+            }
+            // Its water, over the ground and under anything see-through.
+            encoder.setRenderPipelineState(lit.blend)
+            encoder.setDepthStencilState(depthNoWrite)
+            for chunk in terrain {
+                guard let water = chunk.water else { continue }
+                var draw = DrawUniforms()
+                draw.model = matrix_identity_float4x4
+                draw.normalMatrix = matrix_identity_float3x3
+                draw.color = Vec4(model.terrain.waterColor, 1 - min(max(model.terrain.waterTransparency, 0), 0.95))
+                draw.shading = Vec4(PartMaterial.water.shading, 0)
+                submit(encoder, mesh: water, uniforms: &draw)
+            }
+            encoder.setDepthStencilState(depthDefault)
+            encoder.setCullMode(.back)
+        }
 
         if !transparent.isEmpty {
             encoder.setDepthStencilState(depthNoWrite)
@@ -527,6 +575,20 @@ final class Renderer: NSObject, MTKViewDelegate {
                 draw.shading = Vec4(0, 1, 0, 0)
                 submit(encoder, mesh: outlineMesh, uniforms: &draw)
             }
+        }
+
+        // The Terrain Editor's brush: a see-through ball where it would paint.
+        if let brush = overlay.brush, let ball = shapeMeshes[.sphere] {
+            encoder.setRenderPipelineState(flatBlendPipeline)
+            encoder.setDepthStencilState(depthNoWrite)
+            encoder.setCullMode(.none)
+            var draw = DrawUniforms()
+            draw.model = Mat.translation(brush.centre) * Mat.scale(Vec3(repeating: brush.radius * 2))
+            draw.normalMatrix = Mat.normalMatrix(draw.model)
+            draw.color = Vec4(0.35, 0.75, 1.0, 0.28)
+            draw.shading = Vec4(0, 1, 0, 0)
+            submit(encoder, mesh: ball, uniforms: &draw)
+            encoder.setCullMode(.back)
         }
 
         // The part held as the first end of a weld or joint: green, so it reads
@@ -754,6 +816,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         for part in model.parts where part.inWorld && part.transparency < 0.5 {
             if let mesh = meshOf(part) { casters.append((mesh, part.modelMatrix)) }
         }
+        for chunk in terrainChunks(model: model) {
+            if let mesh = chunk.plain { casters.append((mesh, matrix_identity_float4x4)) }
+        }
         for avatar in avatars {
             for (name, matrix) in avatar.partTransforms()
             where (avatar.transparency[name] ?? 0) < 0.5 {
@@ -862,6 +927,37 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         skyboxCube = (key, sizes, texture)
         return texture
+    }
+
+    /// The terrain's chunks on the GPU, made from their meshes as those change.
+    private func terrainChunks(model: SceneModel) -> [TerrainGPU] {
+        guard !model.terrain.isEmpty || !terrainMeshes.isEmpty else { return [] }
+        let geometry = model.terrainGeometry
+        geometry.update(model.terrain)
+        for key in terrainMeshes.keys where geometry.entries[key] == nil { terrainMeshes[key] = nil }
+        var chunks: [TerrainGPU] = []
+        for (key, entry) in geometry.entries {
+            if let known = terrainMeshes[key], known.signature == entry.signature {
+                chunks.append(known)
+                continue
+            }
+            let mesh = entry.mesh
+            var colored: Mesh?, plain: Mesh?
+            if !mesh.indices.isEmpty {
+                let vertices = zip(mesh.positions, mesh.normals).map { Vertex(position: $0, normal: $1) }
+                plain = Mesh(device: device, vertices: vertices, indices: mesh.indices, uvs: [])
+                let rich = mesh.positions.indices.map {
+                    TerrainVertex(position: mesh.positions[$0], normal: mesh.normals[$0], color: Vec4(mesh.colors[$0], 1))
+                }
+                colored = Mesh(device: device, bytes: rich, indices: mesh.indices)
+            }
+            let waterVertices = zip(mesh.water.positions, mesh.water.normals).map { Vertex(position: $0, normal: $1) }
+            let water = Mesh(device: device, vertices: waterVertices, indices: mesh.water.indices, uvs: [])
+            let gpu = TerrainGPU(signature: entry.signature, colored: colored, plain: plain, water: water)
+            terrainMeshes[key] = gpu
+            chunks.append(gpu)
+        }
+        return chunks
     }
 
     /// The technology this frame was actually drawn with, for the status bar.

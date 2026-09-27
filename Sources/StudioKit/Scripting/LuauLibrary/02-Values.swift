@@ -422,7 +422,9 @@ local function makeEnum(typeName, names)
 end
 
 Enum = table.freeze({
-	Material = makeEnum("Material", { "Plastic", "SmoothPlastic", "Metal", "Neon", "Wood", "Water" }),
+	-- The parts' materials, then the terrain's (Terrain.swift).
+	Material = makeEnum("Material", { "Plastic", "SmoothPlastic", "Metal", "Neon", "Wood", "Water", "Air", "Grass",
+		"LeafyGrass", "Sand", "Ground", "Mud", "Rock", "Slate", "Basalt", "Sandstone", "Snow", "Ice", "Asphalt" }),
 	PartType = makeEnum("PartType", { "Block", "Ball", "Cylinder", "Wedge" }),
 	EasingStyle = makeEnum("EasingStyle", {
 		"Linear", "Sine", "Quad", "Cubic", "Quart", "Quint",

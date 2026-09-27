@@ -35,9 +35,10 @@ final class ViewportController: ViewportSource {
 
     var editorOverlay: EditorOverlay? {
         // A join tool takes the viewport over: no gizmo to get in the way of the clicks.
-        EditorOverlay(gizmoMode: model.joinTool == nil ? model.gizmoMode : .select,
+        EditorOverlay(gizmoMode: model.joinTool == nil && model.terrainBrush == nil ? model.gizmoMode : .select,
                       selection: model.effectiveSelection, activeHandle: activeHandle,
-                      joinPending: model.joinPending)
+                      joinPending: model.joinPending,
+                      brush: model.terrainBrush == nil ? nil : brushPoint.map { ($0, model.terrainBrushSize / 2) })
     }
 
     var avatars: [AvatarPose] {
@@ -90,6 +91,15 @@ final class ViewportController: ViewportSource {
             return true
         }
 
+        // A terrain brush: the press paints, and so does dragging, as one step to undo.
+        if model.terrainBrush != nil {
+            guard let centre = brushTarget(r) else { return false }
+            model.beginStroke()
+            brushing = true
+            dab(at: centre)
+            return true
+        }
+
         // A weld or joint tool is armed: clicks name the two parts to join, and
         // nothing else — no dragging, no changing the selection.
         if model.joinTool != nil {
@@ -135,6 +145,14 @@ final class ViewportController: ViewportSource {
     }
 
     func mouseDragged(to point: SIMD2<Float>) {
+        if brushing {
+            if let centre = brushTarget(ray(at: point)) {
+                brushPoint = centre
+                // A dab each quarter of the brush it moves, so strokes are even.
+                if lastDab.map({ simd_distance(centre, $0) >= model.terrainBrushSize / 8 }) ?? true { dab(at: centre) }
+            }
+            return
+        }
         if animationEditor.isPosing {
             animationEditor.dragPose(to: point)
             return
@@ -144,6 +162,11 @@ final class ViewportController: ViewportSource {
     }
 
     func mouseUp() {
+        if brushing {
+            brushing = false
+            lastDab = nil
+            model.endStroke()
+        }
         animationEditor.endPose()
         if drag != nil {
             model.endStroke()
@@ -153,7 +176,8 @@ final class ViewportController: ViewportSource {
     }
 
     func updateHover(at point: SIMD2<Float>) {
-        guard drag == nil, model.joinTool == nil else { return }
+        brushPoint = model.terrainBrush == nil ? nil : brushTarget(ray(at: point))
+        guard drag == nil, model.joinTool == nil, model.terrainBrush == nil else { return }
         guard model.gizmoMode != .select, let pivot = model.selectionCenter else {
             activeHandle = nil
             return
@@ -163,7 +187,31 @@ final class ViewportController: ViewportSource {
         activeHandle = Gizmo.hitTest(ray: ray(at: point), mode: model.gizmoMode, pivot: pivot, basis: basis, scale: s)
     }
 
-    var isDragging: Bool { drag != nil }
+    var isDragging: Bool { drag != nil || brushing }
+
+    // MARK: - Terrain brush
+
+    /// Painting with the terrain brush now, and where it last dabbed.
+    private(set) var brushing = false
+    private var lastDab: Vec3?
+    /// Where the brush is, under the pointer.
+    private(set) var brushPoint: Vec3?
+
+    /// Where a ray meets the terrain — or, where there's none, the ground.
+    func brushTarget(_ ray: Ray) -> Vec3? {
+        if let hit = Picking.pick(ray: ray, in: model.terrainParts) { return ray.origin + ray.direction * hit.distance }
+        return Picking.groundPoint(ray: ray)
+    }
+
+    /// One dab of the brush at a point.
+    func dab(at centre: Vec3) {
+        guard let brush = model.terrainBrush else { return }
+        lastDab = centre
+        var terrain = model.terrain
+        terrain.brush(brush, centre: centre, radius: model.terrainBrushSize / 2, strength: model.terrainBrushStrength,
+                      material: model.terrainMaterial)
+        model.terrain = terrain
+    }
 
     // MARK: - Camera
 

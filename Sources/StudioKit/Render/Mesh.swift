@@ -45,6 +45,20 @@ final class Mesh {
             : nil
     }
 
+    /// Vertices of any layout (terrain's, with colours), 32-bit indices.
+    init?<V>(device: MTLDevice, bytes vertices: [V], indices: [UInt32]) {
+        guard !vertices.isEmpty, !indices.isEmpty,
+              let vb = device.makeBuffer(bytes: vertices, length: MemoryLayout<V>.stride * vertices.count, options: .storageModeShared),
+              let ib = device.makeBuffer(bytes: indices, length: MemoryLayout<UInt32>.stride * indices.count, options: .storageModeShared)
+        else { return nil }
+        vertexBuffer = vb
+        indexBuffer = ib
+        indexCount = indices.count
+        indexType = .uint32
+        primitiveType = .triangle
+        uvBuffer = nil
+    }
+
     func draw(_ encoder: MTLRenderCommandEncoder) {
         encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
         if let uvBuffer { encoder.setVertexBuffer(uvBuffer, offset: 0, index: 3) }

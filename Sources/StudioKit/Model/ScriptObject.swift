@@ -154,10 +154,12 @@ struct SceneState: Equatable, Codable {
     /// its file. The sample games have fixed ones, so their players' progress carries
     /// from one session to the next. Nil in a file from before (see `ensurePlaceID`).
     var placeID: UUID?
+    /// The Workspace's Terrain (Terrain.swift).
+    var terrain = TerrainData()
 
     private enum CodingKeys: String, CodingKey {
         case parts, scripts, shaders, screenShaderID, screenShaderIDs, starterPlayer, animations, lighting, groups
-        case attachments, constraints, starterGui, assets, sounds, dataObjects, defaultGui, placeID
+        case attachments, constraints, starterGui, assets, sounds, dataObjects, defaultGui, placeID, terrain
     }
 
     init(parts: [Part] = [], scripts: [ScriptObject] = [], shaders: [ShaderObject] = [],
@@ -167,7 +169,8 @@ struct SceneState: Equatable, Codable {
          groups: [SceneGroup] = [], attachments: [SceneAttachment] = [],
          constraints: [SceneConstraint] = [], starterGui: [StarterGuiObject] = [],
          assets: [SceneAsset] = [], sounds: [SceneSound] = [], dataObjects: [DataObject] = [],
-         defaultGui: Int = 0, placeID: UUID? = nil) {
+         defaultGui: Int = 0, placeID: UUID? = nil, terrain: TerrainData = TerrainData()) {
+        self.terrain = terrain
         self.defaultGui = defaultGui
         self.placeID = placeID
         self.dataObjects = dataObjects
@@ -207,6 +210,7 @@ struct SceneState: Equatable, Codable {
         dataObjects = try c.decodeIfPresent([DataObject].self, forKey: .dataObjects) ?? []
         defaultGui = try c.decodeIfPresent(Int.self, forKey: .defaultGui) ?? 0
         placeID = try c.decodeIfPresent(UUID.self, forKey: .placeID)
+        terrain = try c.decodeIfPresent(TerrainData.self, forKey: .terrain) ?? TerrainData()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -229,6 +233,7 @@ struct SceneState: Equatable, Codable {
         if !dataObjects.isEmpty { try c.encode(dataObjects, forKey: .dataObjects) }
         if defaultGui > 0 { try c.encode(defaultGui, forKey: .defaultGui) }
         try c.encodeIfPresent(placeID, forKey: .placeID)
+        if terrain != TerrainData() { try c.encode(terrain, forKey: .terrain) }
     }
 }
 

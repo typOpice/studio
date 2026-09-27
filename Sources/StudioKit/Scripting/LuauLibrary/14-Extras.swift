@@ -1063,7 +1063,11 @@ do
 			if key == "Name" or key == "ClassName" then
 				return className
 			elseif key == "Parent" then
-				return if invoke("sky.get", id, "parent") then Lighting else nil
+				-- Clouds are the Terrain's, as in Roblox; kept with Lighting's sky here.
+				if not invoke("sky.get", id, "parent") then
+					return nil
+				end
+				return if className == "Clouds" then terrainKit.object else Lighting
 			end
 			local kind = skyKit.properties[className][key]
 			if kind ~= nil then
@@ -1079,10 +1083,10 @@ do
 			local className = classOf(object)
 			local id = skyKit.idOf[object]
 			if key == "Parent" then
-				if value ~= nil and value ~= Lighting then
+				if value ~= nil and value ~= Lighting and not (className == "Clouds" and value == terrainKit.object) then
 					raise(string.format("A %s goes in Lighting, not %s", className, typeof(value)), 2)
 				end
-				rename(object, invoke("sky.parent", id, value == Lighting))
+				rename(object, invoke("sky.parent", id, value ~= nil))
 				return
 			end
 			local kind = skyKit.properties[className][key]
@@ -1116,10 +1120,10 @@ do
 	end
 
 	function skyKit.new(className, parent)
-		if parent ~= nil and parent ~= Lighting then
+		if parent ~= nil and parent ~= Lighting and not (className == "Clouds" and parent == terrainKit.object) then
 			raise(string.format("A %s goes in Lighting, not %s", className, typeof(parent)), 3)
 		end
-		return skyKit.wrap(invoke("sky.create", className, parent == Lighting))
+		return skyKit.wrap(invoke("sky.create", className, parent ~= nil))
 	end
 
 	-- Lighting's, by class (its name).
@@ -1136,6 +1140,266 @@ do
 			table.insert(list, skyKit.wrap(id))
 		end
 		return list
+	end
+end
+
+--------------------------------------------------------------------------------
+-- Region3, and workspace.Terrain (Terrain.swift): voxels 4 studs across, filled by shapes.
+
+do
+	local RegionMeta = {}
+	local function region(low, high)
+		local value = setmetatable({ low, high }, RegionMeta)
+		typeTags[value] = "Region3"
+		return value
+	end
+	RegionMeta.__index = function(value, key)
+		local low, high = rawget(value, 1), rawget(value, 2)
+		if key == "CFrame" then
+			return CFrame.new((low + high) / 2)
+		elseif key == "Size" then
+			return high - low
+		elseif key == "ExpandToGrid" then
+			return function(self, resolution)
+				checkNumber(resolution, 1, "ExpandToGrid")
+				local lo, hi = rawget(self, 1), rawget(self, 2)
+				local function down(n) return math.floor(n / resolution) * resolution end
+				local function up(n) return math.ceil(n / resolution) * resolution end
+				return region(Vector3.new(down(lo.X), down(lo.Y), down(lo.Z)), Vector3.new(up(hi.X), up(hi.Y), up(hi.Z)))
+			end
+		end
+		raise(string.format("%s is not a valid member of Region3", tostring(key)), 2)
+	end
+	RegionMeta.__newindex = readOnly("Region3")
+	RegionMeta.__tostring = function(value)
+		return tostring((rawget(value, 1) + rawget(value, 2)) / 2) .. "; " .. tostring(rawget(value, 2) - rawget(value, 1))
+	end
+	RegionMeta.__metatable = LOCKED
+
+	Region3 = table.freeze({
+		new = function(low, high)
+			checkOther(low, "Vector3", "Region3.new")
+			checkOther(high, "Vector3", "Region3.new")
+			return region(Vector3.new(math.min(low.X, high.X), math.min(low.Y, high.Y), math.min(low.Z, high.Z)),
+				Vector3.new(math.max(low.X, high.X), math.max(low.Y, high.Y), math.max(low.Z, high.Z)))
+		end,
+	})
+
+	local function list(v)
+		return { v[1], v[2], v[3] }
+	end
+	local function materialName(value, method)
+		if typeof(value) ~= "EnumItem" or value.EnumType ~= "Material" then
+			raise(method .. " expects an Enum.Material, got " .. typeof(value), 3)
+		end
+		return value.Name
+	end
+	local function terrainMaterial(value, method)
+		local name = materialName(value, method)
+		if name == "Plastic" or name == "SmoothPlastic" or name == "Metal" or name == "Neon" or name == "Wood" then
+			raise(method .. ": " .. name .. " is a part's material, not terrain's", 3)
+		end
+		return name
+	end
+	local function corners(value, resolution, method)
+		if typeof(value) ~= "Region3" then
+			raise(method .. " expects a Region3, got " .. typeof(value), 3)
+		end
+		if resolution ~= 4 then
+			raise(method .. ": the resolution must be 4", 3)
+		end
+		return list(rawget(value, 1)), list(rawget(value, 2))
+	end
+	local function number(value, index, method)
+		checkNumber(value, index, method)
+		return value
+	end
+
+	-- A 3-D array of voxels, [x][y][z], with a Size, as ReadVoxels gives them.
+	local function grid(size, values, convert)
+		local out = { Size = Vector3.new(size[1], size[2], size[3]) }
+		local i = 1
+		for x = 1, size[1] do
+			out[x] = {}
+			for y = 1, size[2] do
+				out[x][y] = {}
+			end
+		end
+		for z = 1, size[3] do
+			for y = 1, size[2] do
+				for x = 1, size[1] do
+					out[x][y][z] = convert(values[i])
+					i += 1
+				end
+			end
+		end
+		return out
+	end
+
+	terrainKit.methods = {
+		FillBlock = function(_, cframe, size, material)
+			checkOther(cframe, "CFrame", "FillBlock")
+			checkOther(size, "Vector3", "FillBlock")
+			invoke("terrain.fill", "block", cframeMath.cframeList(cframe), list(size), terrainMaterial(material, "FillBlock"))
+		end,
+		FillBall = function(_, centre, radius, material)
+			checkOther(centre, "Vector3", "FillBall")
+			invoke("terrain.fill", "ball", list(centre), number(radius, 2, "FillBall"), terrainMaterial(material, "FillBall"))
+		end,
+		FillCylinder = function(_, cframe, height, radius, material)
+			checkOther(cframe, "CFrame", "FillCylinder")
+			invoke("terrain.fill", "cylinder", cframeMath.cframeList(cframe), number(height, 2, "FillCylinder"),
+				number(radius, 3, "FillCylinder"), terrainMaterial(material, "FillCylinder"))
+		end,
+		FillWedge = function(_, cframe, size, material)
+			checkOther(cframe, "CFrame", "FillWedge")
+			checkOther(size, "Vector3", "FillWedge")
+			invoke("terrain.fill", "wedge", cframeMath.cframeList(cframe), list(size), terrainMaterial(material, "FillWedge"))
+		end,
+		FillRegion = function(_, region3, resolution, material)
+			local low, high = corners(region3, resolution, "FillRegion")
+			invoke("terrain.fill", "region", low, high, terrainMaterial(material, "FillRegion"))
+		end,
+		ReplaceMaterial = function(_, region3, resolution, source, target)
+			local low, high = corners(region3, resolution, "ReplaceMaterial")
+			invoke("terrain.replace", low, high, terrainMaterial(source, "ReplaceMaterial"),
+				terrainMaterial(target, "ReplaceMaterial"))
+		end,
+		Clear = function()
+			invoke("terrain.clear")
+		end,
+		GetMaterialColor = function(_, material)
+			return toColor(invoke("terrain.color", terrainMaterial(material, "GetMaterialColor")))
+		end,
+		SetMaterialColor = function(_, material, colour)
+			if not isColor(colour) then
+				raise("SetMaterialColor expects a Color3, got " .. typeof(colour), 2)
+			end
+			invoke("terrain.color", terrainMaterial(material, "SetMaterialColor"), { colour[1], colour[2], colour[3] })
+		end,
+		ReadVoxels = function(_, region3, resolution)
+			local low, high = corners(region3, resolution, "ReadVoxels")
+			local read = invoke("terrain.read", low, high)
+			if read == nil then
+				raise("ReadVoxels: that region is too big", 2)
+			end
+			local size = { read[1], read[2], read[3] }
+			return grid(size, read[4], function(name) return Enum.Material[name] end),
+				grid(size, read[5], function(n) return n end)
+		end,
+		WriteVoxels = function(_, region3, resolution, materials, occupancies)
+			local low, high = corners(region3, resolution, "WriteVoxels")
+			local names, fills = {}, {}
+			local ok = pcall(function()
+				local nx, ny, nz = #materials, #materials[1], #materials[1][1]
+				for z = 1, nz do
+					for y = 1, ny do
+						for x = 1, nx do
+							table.insert(names, terrainMaterial(materials[x][y][z], "WriteVoxels"))
+							table.insert(fills, occupancies[x][y][z])
+						end
+					end
+				end
+			end)
+			if not ok or not invoke("terrain.write", low, high, names, fills) then
+				raise("WriteVoxels: the arrays must be [x][y][z] of the region's size, of materials and numbers", 2)
+			end
+		end,
+		WorldToCell = function(_, position)
+			checkOther(position, "Vector3", "WorldToCell")
+			return Vector3.new(math.floor(position.X / 4), math.floor(position.Y / 4), math.floor(position.Z / 4))
+		end,
+		CellCenterToWorld = function(_, x, y, z)
+			return Vector3.new((math.floor(x) + 0.5) * 4, (math.floor(y) + 0.5) * 4, (math.floor(z) + 0.5) * 4)
+		end,
+		IsA = function(_, className)
+			return className == "Terrain" or className == "BasePart" or className == "Instance"
+		end,
+		GetFullName = function()
+			return "Workspace.Terrain"
+		end,
+		-- Its Clouds.
+		GetChildren = function()
+			local clouds = skyKit.child("Clouds")
+			return if clouds then { clouds } else {}
+		end,
+		FindFirstChild = function(_, name)
+			return if name == "Clouds" then skyKit.child("Clouds") else nil
+		end,
+		FindFirstChildOfClass = function(_, className)
+			return if className == "Clouds" then skyKit.child("Clouds") else nil
+		end,
+		WaitForChild = function(_, name)
+			return if name == "Clouds" then skyKit.child("Clouds") else nil
+		end,
+		__child = function(key)
+			return if key == "Clouds" then skyKit.child("Clouds") else nil
+		end,
+	}
+
+	local waterNumbers = { WaterTransparency = "watertransparency", WaterWaveSize = "waterwavesize",
+		WaterWaveSpeed = "waterwavespeed" }
+	local members = {
+		WaterColor = function()
+			return toColor(invoke("terrain.get", "watercolor"))
+		end,
+		Parent = function()
+			return workspace_
+		end,
+	}
+	for name, host in waterNumbers do
+		members[name] = function()
+			return invoke("terrain.get", host)
+		end
+	end
+	terrainKit.object = service("Terrain", members, terrainKit.methods, function(key, value)
+		if key == "WaterColor" then
+			if not isColor(value) then
+				raise("Unable to assign property WaterColor. Color3 expected, got " .. typeof(value), 3)
+			end
+			invoke("terrain.set", "watercolor", { value[1], value[2], value[3] })
+		elseif waterNumbers[key] then
+			if type(value) ~= "number" then
+				raise(string.format("Unable to assign property %s. number expected, got %s", key, typeof(value)), 3)
+			end
+			invoke("terrain.set", waterNumbers[key], value)
+		else
+			return false
+		end
+		return true
+	end)
+
+	-- workspace.Terrain, and finding it by name or class.
+	local find, findOfClass, wait = workspaceMethods.FindFirstChild, workspaceMethods.FindFirstChildOfClass,
+		workspaceMethods.WaitForChild
+	local child = workspaceMethods.__child
+	function workspaceMethods.__child(key)
+		if key == "Terrain" then
+			return terrainKit.object
+		end
+		return child(key)
+	end
+	function workspaceMethods.FindFirstChild(self, name, ...)
+		if name == "Terrain" then
+			return terrainKit.object
+		end
+		return find(self, name, ...)
+	end
+	if findOfClass then
+		function workspaceMethods.FindFirstChildOfClass(self, className, ...)
+			if className == "Terrain" then
+				return terrainKit.object
+			end
+			return findOfClass(self, className, ...)
+		end
+	end
+	if wait then
+		function workspaceMethods.WaitForChild(self, name, ...)
+			if name == "Terrain" then
+				return terrainKit.object
+			end
+			return wait(self, name, ...)
+		end
 	end
 end
 

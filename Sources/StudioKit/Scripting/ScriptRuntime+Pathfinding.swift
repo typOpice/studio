@@ -44,7 +44,7 @@ extension ScriptRuntime {
         // The ground at 0 is solid in play (CharacterController.solidBaseplate), always
         // but for tests that take it away.
         navigation.ground = (player as? PlayController)?.character.solidBaseplate ?? true
-        navigation.update(model.parts)
+        navigation.update(model.parts + model.terrainParts)
     }
 
     private static func agent(_ value: ScriptValue) -> NavigationGrid.Agent {

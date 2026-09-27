@@ -459,6 +459,14 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the joined player sees a crate the host's AlignPosition lifts).
    New files: Scripting/ScriptRuntime+Forces.swift, ForceSelfTest.swift.
 
+45. Terrain, 2026-09-27.
+   Places can now have Roblox-style terrain: smooth ground made of 4-stud voxels in 13 materials (grass, sand, rock, snow, water and more). Characters walk and swim on it, parts land on it, and raycasts and pathfinding see it.
+   In Studio: Home > Terrain (or the dock's Terrain tab) opens the Terrain Editor. Pick a brush (Add, Subtract, Grow, Erode, Smooth, Flatten, Paint), a size, a strength and a material, and drag in the world; each stroke is one undo. Generate makes rolling land with water from a seed. There's also a new "Hills and Lake" template on the home page.
+   Scripts use Roblox's names: workspace.Terrain:FillBlock, FillBall, FillCylinder, FillWedge, FillRegion (with Region3), ReplaceMaterial, ReadVoxels/WriteVoxels, Clear, SetMaterialColor, WaterColor.
+   Tested alone and with a host and a joined player (the joined player gets the terrain and every change the host's scripts make to it).
+   Also fixed: a raycast straight down at a whole-number position could slip through MeshParts.
+   New files: Model/Terrain.swift, Play/TerrainMesher.swift, Scripting/ScriptRuntime+Terrain.swift, UI/TerrainUI.swift, TerrainSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

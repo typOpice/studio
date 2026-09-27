@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2756 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2810 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -72,7 +72,8 @@ with a button to go back to the place you were in.
 - **New place**: start from a template. **Baseplate** (a big grey baseplate and a spawn
   pad), **Obby** (jumps, kill bricks, checkpoints and a finish, with the script that runs
   them and a Wins leaderboard), **Starter Scene** (parts, a script, shaders and an
-  animation to learn from) or **Empty**. Each opens as a new, untitled place with the
+  animation to learn from), **Hills and Lake** (terrain with a river and lakes) or
+  **Empty**. Each opens as a new, untitled place with the
   default HUD and the Utils module.
 - **Sample games**: Adventure Island, Nightfall and Mega Obby, to play or take apart.
 - **Recent**: the places you've opened or saved, newest first, with a picture of each.
@@ -1096,6 +1097,55 @@ end
 Joined players get the host's Beams and Trails like any other part of the world. Each
 player's own game draws the trail behind a part as they see it move. Unlike Roblox,
 attachments go on parts only, so characters don't have them.
+
+## Terrain
+
+The Workspace's **Terrain** is ground made of voxels (4-stud cubes), each filled with a
+material by some amount, so its surfaces are smooth: hills, cliffs, caves and beaches.
+There are 13 materials: Grass, LeafyGrass, Sand, Ground, Mud, Rock, Slate, Basalt,
+Sandstone, Snow, Ice, Asphalt and Water. Characters walk and climb on it, swim in its
+water, and parts land on it. Raycasts and PathfindingService see it. A place with
+terrain has no invisible floor at 0, as in Roblox.
+
+**Home › Terrain** (or the dock's Terrain tab) opens the Terrain Editor:
+
+- **Brushes**: pick one and drag in the world.
+  - **Add** and **Subtract** fill or dig a ball.
+  - **Grow** and **Erode** build or wear the surface a little at a time.
+  - **Smooth** evens it out.
+  - **Flatten** levels it to where the stroke starts.
+  - **Paint** changes what it's made of.
+
+  Each stroke is one step to undo. **Size** and **Strength** set the brush; the
+  palette sets its material.
+- **Generate**: rolling land from a seed, with grass, rock, snow on the peaks, sand by
+  the water, and water up to a level you choose.
+- **Water**: its colour and how clear it is. **Clear** empties the terrain.
+
+The **Hills and Lake** template starts from generated land.
+
+Scripts use Roblox's methods:
+- The fills: `FillBlock`, `FillBall`, `FillCylinder`, `FillWedge`, `FillRegion` (a
+  `Region3`). Filling with `Enum.Material.Air` digs.
+- `ReplaceMaterial`, `ReadVoxels` and `WriteVoxels`, `Clear`.
+- `GetMaterialColor` and `SetMaterialColor`; `WaterColor` and `WaterTransparency`.
+- `WorldToCell` and `CellCenterToWorld`.
+
+`workspace:Raycast` hits it as `workspace.Terrain`, with the material it hit.
+
+```lua
+-- A Script: an island in a lake, with a tunnel through its hill.
+local Terrain = workspace.Terrain
+Terrain:FillBlock(CFrame.new(0, -10, 0), Vector3.new(200, 4, 200), Enum.Material.Sand)
+Terrain:FillBlock(CFrame.new(0, -4, 0), Vector3.new(200, 8, 200), Enum.Material.Water)
+Terrain:FillBall(Vector3.new(0, -4, 0), 30, Enum.Material.Grass)
+Terrain:FillCylinder(CFrame.new(0, 4, 0) * CFrame.Angles(0, 0, math.rad(90)), 80, 5, Enum.Material.Air)
+```
+
+A host's terrain, and every change its scripts make to it, reach joined players chunk by
+chunk. Unlike Roblox, a voxel holds one material (Water and the ground at a shore don't
+share one), water doesn't wave, and ray-traced lighting doesn't cast the terrain's
+shadows (the conventional shadow map does).
 
 ## MeshParts: 3D models
 

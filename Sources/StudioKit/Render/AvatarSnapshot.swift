@@ -342,6 +342,27 @@ enum AvatarSnapshot {
         return true
     }
 
+    /// `StudioApp --render-terrain out.png [seed]`: Generate's hills and a lake, from above
+    /// one side.
+    static func renderTerrain(to url: URL, seed: UInt32 = 7, width: Int = 1600, height: Int = 900) -> Bool {
+        let model = SceneModel()
+        model.parts = []
+        model.groups = []
+        model.showGrid = false
+        model.lighting.clockTime = 15
+        model.lighting.fogEnd = 100_000
+        let started = Date()
+        model.terrain.generate(centre: Vec3(0, -8, 0), size: 512, height: 90, waterLevel: 10, seed: seed)
+        let made = Date()
+        model.terrainGeometry.update(model.terrain)
+        let meshed = Date()
+        print(String(format: "Terrain: %d chunks, generated in %.2fs, meshed in %.2fs, %d collision parts",
+                     model.terrain.chunks.count, made.timeIntervalSince(started), meshed.timeIntervalSince(made),
+                     model.terrainParts.count))
+        let setting: (Vec3, Float, Float, Float, String?, Vec3?) = (Vec3(0, 10, 0), .pi / 2 + 0.6, 0.5, 330, nil, nil)
+        return renderPlace(model, setting, label: "terrain", to: url, technology: .conventional, width: width, height: height)
+    }
+
     static let skyViews = ["clouds", "atmosphere", "night", "skybox"]
 
     /// `StudioApp --render-sky out.png [clouds|atmosphere|night|skybox]`: Lighting's Sky,

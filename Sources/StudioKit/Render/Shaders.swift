@@ -162,6 +162,46 @@ fragment float4 scene_fragment(RasterData in [[stage_in]],
                               STUDIO_LIGHTING_ARGS);
 }
 
+// Terrain: coloured per vertex (its materials blended where they meet), lit as a part,
+// its colour varying a little across the world so a hillside isn't one flat shade.
+struct TerrainVertexData {
+    float3 position;
+    float3 normal;
+    float4 color;
+};
+
+struct RasterTerrain {
+    float4 clipPosition [[position]];
+    float3 worldPosition;
+    float3 normal;
+    float3 color;
+};
+
+vertex RasterTerrain terrain_vertex(uint vid [[vertex_id]],
+                                    device const TerrainVertexData *vertices [[buffer(0)]],
+                                    constant FrameUniforms &frame [[buffer(1)]])
+{
+    TerrainVertexData v = vertices[vid];
+    RasterTerrain out;
+    out.clipPosition = frame.viewProjection * float4(v.position, 1.0);
+    out.worldPosition = v.position;
+    out.normal = v.normal;
+    out.color = v.color.rgb;
+    return out;
+}
+
+fragment float4 terrain_fragment(RasterTerrain in [[stage_in]],
+                                 constant FrameUniforms &frame [[buffer(1)]],
+                                 constant DrawUniforms &draw [[buffer(2)]]
+                                 STUDIO_LIGHTING_PARAMS)
+{
+    float2 p = in.worldPosition.xz;
+    float vary = studio_value_noise(p * 0.07) * 0.6 + studio_value_noise(p * 0.45 + 13.0) * 0.4;
+    float3 base = in.color * (0.86 + 0.26 * vary);
+    return studio_scene_color(in.worldPosition, in.normal, in.clipPosition.xy, base, frame, draw,
+                              STUDIO_LIGHTING_ARGS);
+}
+
 // A MeshPart with a TextureID: its picture, tinted by the part's colour, lit as any part.
 struct RasterTextured {
     float4 clipPosition [[position]];

@@ -148,6 +148,23 @@ struct ExplorerView: View {
                     .dropDestination(for: String.self) { items, _ in drop(items, onto: nil) }
 
                     if workspaceExpanded {
+                        if !model.terrain.isEmpty {
+                            // The Workspace's Terrain: the Terrain Editor edits it.
+                            HStack(spacing: 6) {
+                                Image(systemName: "mountain.2.fill").font(.system(size: 10))
+                                    .foregroundStyle(Color(red: 0.55, green: 0.75, blue: 0.4)).frame(width: 14)
+                                Text("Terrain").font(.system(size: 12)).foregroundStyle(Theme.text)
+                                Spacer()
+                                Text("\(model.terrain.chunks.count)").font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(Theme.textDim)
+                            }
+                            .padding(.vertical, 3)
+                            .padding(.leading, 28)
+                            .padding(.trailing, 6)
+                            .contentShape(Rectangle())
+                            .onTapGesture { session.showDock(.terrain) }
+                            .help("Edit it in the Terrain Editor (the dock's Terrain tab)")
+                        }
                         let rows = treeRows
                         ForEach(rows, id: \.self) { row in
                             switch row {
@@ -220,7 +237,7 @@ struct ExplorerView: View {
                                 }
                             }
                         }
-                        if rows.isEmpty {
+                        if rows.isEmpty && (model.terrain.isEmpty || !filter.isEmpty) {
                             emptyNote(model.parts.isEmpty && model.groups.isEmpty ? "Workspace is empty" : "No matches")
                         }
                     }

@@ -5,7 +5,7 @@ import AppKit
 /// What the bottom panel shows: the console, or the Animation Editor's timeline.
 /// Scripts and shaders are not here — they open in tabs beside the world.
 enum DockTab: String, CaseIterable, Identifiable {
-    case output, animation, debugger
+    case output, animation, debugger, terrain
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum DockTab: String, CaseIterable, Identifiable {
         case .output: return "Output"
         case .animation: return "Animation"
         case .debugger: return "Debugger"
+        case .terrain: return "Terrain"
         }
     }
 
@@ -22,6 +23,7 @@ enum DockTab: String, CaseIterable, Identifiable {
         case .output: return "text.alignleft"
         case .animation: return "figure.walk"
         case .debugger: return "ladybug"
+        case .terrain: return "mountain.2"
         }
     }
 }
@@ -328,7 +330,9 @@ final class EditorSession: ObservableObject {
     func showDock(_ tab: DockTab) {
         dockTab = tab
         dockVisible = true
-        if tab == .animation { showWorld() }
+        if tab == .animation || tab == .terrain { showWorld() }
+        // Away from the Terrain Editor, clicks in the world select again.
+        if tab != .terrain, viewport.model.terrainBrush != nil { viewport.model.terrainBrush = nil }
     }
 
     func togglePlay() {

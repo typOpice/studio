@@ -198,6 +198,9 @@ local partProperties = {
 			local name = enumName(value, "Material")
 			local host = name and materialToHost[name]
 			if host == nil then
+				if name ~= nil then
+					return nil, name .. " is a terrain material; a part can be Plastic, SmoothPlastic, Metal, Neon, Wood or Water"
+				end
 				return nil, "EnumItem expected, got " .. typeof(value)
 			end
 			return host
@@ -244,6 +247,8 @@ local soundKit = {}
 local emitterKit = {}
 -- Lighting's Sky, Atmosphere and Clouds, filled in there too.
 local skyKit = {}
+-- workspace.Terrain, and Region3, filled in there as well.
+local terrainKit = {}
 -- LogService's signal, filled in with the service (part 14).
 local logKit = {}
 
@@ -274,6 +279,8 @@ local function wrapToken(token)
 		return dataKit.ReplicatedStorage
 	elseif token == "ss" then
 		return dataKit.ServerStorage
+	elseif token == "terrain" then
+		return terrainKit.object
 	end
 	local id = string.sub(token, 3)
 	local kind = string.sub(token, 1, 1)

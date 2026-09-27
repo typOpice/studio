@@ -41,6 +41,7 @@ enum LuauAPI {
         "RaycastParams": [method("new", "", "RaycastParams")],
         "NumberSequenceKeypoint": [method("new", "time, value, envelope", "NumberSequenceKeypoint")],
         "NumberRange": [method("new", "min, max", "NumberRange")],
+        "Region3": [method("new", "min, max", "Region3")],
         "Random": [method("new", "seed", "Random")],
         "TweenInfo": [method("new", "time, easingStyle, easingDirection, repeatCount, reverses, delayTime", "TweenInfo")],
         "Enum": [
@@ -57,7 +58,9 @@ enum LuauAPI {
             property("PositionAlignmentMode", "Enum.PositionAlignmentMode"),
             property("ActuatorRelativeTo", "Enum.ActuatorRelativeTo")
         ],
-        "Enum.Material": enumItems(["Plastic", "SmoothPlastic", "Metal", "Neon", "Wood", "Water"]),
+        "Enum.Material": enumItems(["Plastic", "SmoothPlastic", "Metal", "Neon", "Wood", "Water", "Air", "Grass",
+                                    "LeafyGrass", "Sand", "Ground", "Mud", "Rock", "Slate", "Basalt", "Sandstone", "Snow",
+                                    "Ice", "Asphalt"]),
         "Enum.PartType": enumItems(["Block", "Ball", "Cylinder", "Wedge"]),
         "Enum.EasingStyle": enumItems(["Linear", "Sine", "Quad", "Cubic", "Quart", "Quint",
                                        "Exponential", "Circular", "Back", "Elastic", "Bounce"]),
@@ -226,6 +229,22 @@ enum LuauAPI {
         "UITextSizeConstraint": guiInstance + [property("MinTextSize", "number"), property("MaxTextSize", "number")],
         "ColorSequence": [property("Keypoints", "table")],
         "NumberRange": [property("Min", "number"), property("Max", "number")],
+        "Region3": [property("CFrame", "CFrame"), property("Size", "Vector3"), method("ExpandToGrid", "resolution", "Region3")],
+        "Terrain": [
+            property("Name", "string"), property("Parent", "Workspace"), property("WaterColor", "Color3"),
+            property("WaterTransparency", "number"), property("WaterWaveSize", "number"), property("WaterWaveSpeed", "number"),
+            property("Clouds", "Clouds"),
+            method("FillBlock", "cframe, size, material", "()"), method("FillBall", "center, radius, material", "()"),
+            method("FillCylinder", "cframe, height, radius, material", "()"),
+            method("FillWedge", "cframe, size, material", "()"),
+            method("FillRegion", "region, resolution, material", "()"),
+            method("ReplaceMaterial", "region, resolution, sourceMaterial, targetMaterial", "()"),
+            method("Clear", "", "()"), method("ReadVoxels", "region, resolution", "table"),
+            method("WriteVoxels", "region, resolution, materials, occupancy", "()"),
+            method("GetMaterialColor", "material", "Color3"), method("SetMaterialColor", "material, color", "()"),
+            method("WorldToCell", "position", "Vector3"), method("CellCenterToWorld", "x, y, z", "Vector3"),
+            method("IsA", "className", "boolean")
+        ],
         "NumberSequence": [property("Keypoints", "table")],
         "ColorSequenceKeypoint": [property("Time", "number"), property("Value", "Color3")],
         "NumberSequenceKeypoint": [property("Time", "number"), property("Value", "number"), property("Envelope", "number")],
@@ -260,7 +279,7 @@ enum LuauAPI {
             property("CollisionFidelity", "EnumItem"), property("MeshSize", "Vector3")
         ],
         "Workspace": [
-            property("Name", "string"), property("Gravity", "number"),
+            property("Name", "string"), property("Gravity", "number"), property("Terrain", "Terrain"),
             method("FindFirstChild", "name", "Part"), method("WaitForChild", "name", "Part"),
             method("GetChildren", "", "table"), method("GetDescendants", "", "table"),
             method("IsA", "className", "boolean"),

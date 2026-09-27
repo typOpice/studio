@@ -232,7 +232,7 @@ enum ScriptSelfTest {
             "Enum.Material.Neon.Name == 'Neon'",
             "Enum.PartType.Ball.EnumType == 'PartType'",
             "typeof(Enum.Material.Wood) == 'EnumItem'",
-            "#Enum.Material:GetEnumItems() == 6",
+            "#Enum.Material:GetEnumItems() == 19",
             "#Enum.EasingStyle:GetEnumItems() == 11",
             "Enum.Material.Neon == Enum.Material.Neon"
         ])

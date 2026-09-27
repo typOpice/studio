@@ -350,6 +350,15 @@ enum PanelSnapshot {
             let spawn = model.addDataObject(.vector3Value, in: .serverStorage)
             model.updateDataObject(id: spawn) { $0.name = "SpawnPoint"; _ = $0.setValue(.list([.number(0), .number(5), .number(20)])) }
             model.selectDataObject(round)
+        case "terrain":
+            // Hills and Lake, the Terrain Editor open with a brush picked, over the land.
+            model.loadTemplate(.terrain)
+            session.showDock(.terrain)
+            model.terrainBrush = .add
+            model.terrainMaterial = .rock
+            session.viewport.camera.target = Vec3(0, 10, 0)
+            session.viewport.camera.distance = 220
+            session.viewport.camera.pitch = 0.5
         case "beam":
             // Two posts and a Beam between them, made with the Beam tool, picked.
             session.showWorld()

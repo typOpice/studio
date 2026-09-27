@@ -464,6 +464,9 @@ final class PlayController: ViewportSource, PlayerBridge {
     }
 
     private func simulate(dt: Float) {
+        // A place with terrain stands on it: no invisible floor at 0 (as in Roblox). Only
+        // ever taken away: what else turned it off (a test, say) is left alone.
+        if !model.terrain.isEmpty, character.solidBaseplate { character.solidBaseplate = false }
         // MoveTo walks straight at its target, overriding Move, until it arrives or
         // gives up — both reported through MoveToFinished.
         if let target = humanoid.moveToTarget, !humanoid.isDead {
@@ -503,7 +506,8 @@ final class PlayController: ViewportSource, PlayerBridge {
         intent.gravity = gravity
         intent.autoRotate = humanoid.autoRotate
 
-        let jumped = character.step(dt: dt, intent: intent, parts: partsOutOfHands + otherPlayersInTheWay)
+        character.terrainWater = model.terrain.isEmpty ? nil : { [terrain = model.terrain] in terrain.waterSurface(at: $0) }
+        let jumped = character.step(dt: dt, intent: intent, parts: partsOutOfHands + model.terrainParts + otherPlayersInTheWay)
         if jumped {
             humanoid.jump = false
             humanoid.enter(.jumping)
@@ -533,7 +537,7 @@ final class PlayController: ViewportSource, PlayerBridge {
         guard !worldFromHost else { return }
         physics.gravity = gravity
         physics.groundPlane = character.solidBaseplate
-        physics.sync(partsOutOfHands, constraints: model.constraints, attachments: model.attachments)
+        physics.sync(partsOutOfHands + model.terrainParts, constraints: model.constraints, attachments: model.attachments)
         // The capsule stands in for a living character; a dead one lies on the ground.
         if humanoid.isDead || !hasPlayer {
             physics.removeCharacter()
@@ -659,7 +663,7 @@ final class PlayController: ViewportSource, PlayerBridge {
         look = settings.look.worn(by: playerLook, playersWearOwn: settings.playersWearOwnLook)
         bodyTransparency = [:]
         lastReportedRunSpeed = 0
-        character.chooseSpawn(in: model.parts)
+        character.chooseSpawn(in: model.parts + model.terrainParts)
         character.respawn()
         // The first character is there before any script starts, so nothing connected
         // could have missed it: announcing it would reach scripts that already had it

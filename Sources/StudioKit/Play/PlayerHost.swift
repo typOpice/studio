@@ -340,7 +340,7 @@ extension PlayController {
             guard arguments.count >= 3, let id = arguments[0].asString.flatMap(UUID.init(uuidString:)),
                   let (x, y, z) = arguments[2].asTriple else { return .nothing }
             // Settle the scene first, so a part made this frame has a body to move.
-            physics.sync(model.parts, constraints: model.constraints, attachments: model.attachments)
+            physics.sync(model.parts + model.terrainParts, constraints: model.constraints, attachments: model.attachments)
             switch (arguments[1].asString ?? "").lowercased() {
             case "velocity": physics.setVelocity(id, Vec3(x, y, z))
             case "angularvelocity": physics.setAngularVelocity(id, Vec3(x, y, z))
@@ -357,7 +357,7 @@ extension PlayController {
         case "physics.impulse", "physics.angularimpulse":
             guard arguments.count >= 2, let id = arguments[0].asString.flatMap(UUID.init(uuidString:)),
                   let (x, y, z) = arguments[1].asTriple else { return .nothing }
-            physics.sync(model.parts, constraints: model.constraints, attachments: model.attachments)
+            physics.sync(model.parts + model.terrainParts, constraints: model.constraints, attachments: model.attachments)
             if name == "physics.impulse" {
                 physics.applyImpulse(id, Vec3(x, y, z))
             } else {

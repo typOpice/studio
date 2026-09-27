@@ -185,6 +185,8 @@ do
 			return "g:" .. groupIdOf[object]
 		elseif dataKit.moduleIdOf[object] then
 			return "m:" .. dataKit.moduleIdOf[object]
+		elseif object == terrainKit.object then
+			return "terrain"
 		elseif soundKit.idOf[object] then
 			return "s:" .. soundKit.idOf[object]
 		elseif emitterKit.idOf[object] then
@@ -1498,7 +1500,8 @@ do
 		result.Position = toVector(hit[2])
 		result.Normal = toVector(hit[3])
 		result.Distance = hit[4]
-		result.Material = Enum.Material[materialFromHost[hit[5]] or "Plastic"]
+		-- A part's material by the host's name; the terrain's by its Enum name already.
+		result.Material = Enum.Material[materialFromHost[hit[5]] or hit[5] or "Plastic"]
 		typeTags[result] = "RaycastResult"
 		return table.freeze(result)
 	end
@@ -1526,7 +1529,9 @@ do
 					return nil
 				end
 				local id = partIdOf[item] or groupIdOf[item]
-				if id ~= nil then
+				if item == terrainKit.object then
+					table.insert(filter, "terrain")
+				elseif id ~= nil then
 					table.insert(filter, id)
 				elseif isCharacterModel[item] ~= nil then
 					table.insert(filter, "ch:" .. isCharacterModel[item])

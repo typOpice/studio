@@ -17,6 +17,7 @@ struct DockView: View {
                 case .animation: AnimationEditorView(model: model, session: session,
                                                      editor: session.viewport.animationEditor)
                 case .debugger: DebuggerPanel(model: model, session: session)
+                case .terrain: TerrainEditorView(model: model)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -37,6 +37,7 @@ enum SelfTest {
                 "Ribbons": RibbonSelfTest.run,
                 "Sky": SkySelfTest.run,
                 "Forces": ForceSelfTest.run,
+                "Terrain": TerrainSelfTest.run,
             ]
             guard let suite = suites[CommandLine.arguments[flag + 1]] else {
                 print("No suite called \(CommandLine.arguments[flag + 1]): \(suites.keys.sorted().joined(separator: ", "))")
@@ -110,6 +111,7 @@ enum SelfTest {
         RibbonSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         SkySelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         ForceSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        TerrainSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LANSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
 
         if failures == 0 {
