@@ -137,6 +137,21 @@ enum MegaObby {
                  collide: collide)
         }
 
+        /// A Trail off each end of a spinning bar: a fading sweep behind its tips.
+        private mutating func sweep(_ bar: UUID, length: Float, colour: Vec3) {
+            var look = RibbonLook()
+            look.color = .from(colour, to: colour)
+            look.transparency = .from(0.15, to: 1)
+            look.lightEmission = 0.2
+            look.lifetime = 0.5
+            look.minLength = 0.3
+            for end: Float in [1, -1] {
+                let outer = attachment(on: bar, at: Vec3(end * length / 2, 0, 0), name: "TipOuter")
+                let inner = attachment(on: bar, at: Vec3(end * (length / 2 - 2.5), 0, 0), name: "TipInner")
+                ribbon(.trail, outer, inner, in: bar, name: "Sweep", look)
+            }
+        }
+
         private mutating func number(_ name: String, _ value: Double, in part: UUID) {
             var object = DataObject(name: name, className: .numberValue, parent: .node(part))
             object.number = value
@@ -305,10 +320,12 @@ enum MegaObby {
                 let bar = part("Spinner", Vec3(x, y + 1.4, centre), Vec3(disc - 1, 0.8, 0.8), world.kill,
                                material: .neon, in: parent, collide: false)
                 number("Speed", Double(mix(70, 160)), in: bar)
+                sweep(bar, length: disc - 1, colour: world.kill)
                 if t > 0.5 {
                     let cross = part("Spinner", Vec3(x, y + 1.4, centre), Vec3(disc - 1, 0.8, 0.8), world.kill,
                                      material: .neon, rotation: Vec3(0, 90, 0), in: parent, collide: false)
                     number("Speed", Double(mix(70, 160)), in: cross)
+                    sweep(cross, length: disc - 1, colour: world.kill)
                 }
                 part("Hub", Vec3(x, y + 1.4, centre), Vec3(1.4, 2.4, 1.4), world.accent, shape: .cylinder, in: parent)
                 return Vec3(x, y, centre - disc / 2 - 2)

@@ -472,7 +472,9 @@ struct ConstraintInspector: View {
                 .toggleStyle(.checkbox)
 
                 let ends = constraint.parts(in: model)
-                Text("Joins \(model.name(of: ends.0 ?? UUID()) ?? "?") and \(model.name(of: ends.1 ?? UUID()) ?? "?")")
+                let first = model.name(of: ends.0 ?? UUID()) ?? "?", second = model.name(of: ends.1 ?? UUID()) ?? "?"
+                Text(constraint.kind == .trail ? "Left behind \(first) as it moves"
+                     : constraint.kind == .beam ? "From \(first) to \(second)" : "Joins \(first) and \(second)")
                     .font(.system(size: 10))
                     .foregroundStyle(Theme.textDim)
 
@@ -508,6 +510,8 @@ struct ConstraintInspector: View {
                     Text("Turns freely about the attachment point.")
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.textDim)
+                case .beam, .trail:
+                    RibbonSection(model: model, constraint: constraint)
                 }
 
                 SmallButton("Delete", icon: "trash") { model.deleteConstraint(id: constraint.id) }

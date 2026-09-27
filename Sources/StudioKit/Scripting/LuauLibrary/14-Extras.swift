@@ -821,7 +821,10 @@ do
 		Texture = { "texture", "string" },
 	}
 
-	-- A property's value as the host holds it, and back.
+	-- The enums properties here (and Beams' and Trails') take.
+	emitterKit.enums = { NormalId = true, TextureMode = true }
+
+	-- A property's value as the host holds it, and back. Beams and Trails use these too.
 	function emitterKit.read(kind, raw)
 		if raw == nil then
 			return nil
@@ -833,8 +836,8 @@ do
 				table.insert(points, gui.numberKey(raw[index], raw[index + 1], raw[index + 2]))
 			end
 			return gui.sequence(points, gui.NumberSequenceMeta, "NumberSequence")
-		elseif kind == "NormalId" then
-			return Enum.NormalId[raw]
+		elseif emitterKit.enums[kind] then
+			return Enum[kind][raw]
 		end
 		return gui.read(kind, raw)
 	end
@@ -853,8 +856,8 @@ do
 				table.insert(list, rawget(point, 3))
 			end
 			return list
-		elseif kind == "NormalId" then
-			return if typeof(value) == "EnumItem" and value.EnumType == "NormalId" then value.Name else nil
+		elseif emitterKit.enums[kind] then
+			return if typeof(value) == "EnumItem" and value.EnumType == kind then value.Name else nil
 		elseif kind == "boolean" or kind == "number" or kind == "string" then
 			return if type(value) == kind then value else nil
 		end

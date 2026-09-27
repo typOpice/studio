@@ -52,6 +52,26 @@ extension PlaceBuilding {
         return part.id
     }
 
+    /// An attachment on a part, at a point (and axis) in the part's own space.
+    @discardableResult
+    mutating func attachment(on part: UUID, at local: Vec3, axis: Vec3 = Vec3(1, 0, 0), name: String = "Attachment") -> UUID {
+        var attachment = SceneAttachment(parentID: part, position: local, axis: axis)
+        attachment.name = name
+        state.attachments.append(attachment)
+        return attachment.id
+    }
+
+    /// A Beam or Trail between two attachments.
+    mutating func ribbon(_ kind: SceneConstraint.Kind, _ a0: UUID, _ a1: UUID, in parent: UUID, name: String? = nil,
+                         _ look: RibbonLook) {
+        var ribbon = SceneConstraint(kind: kind, name: name)
+        ribbon.parentID = parent
+        ribbon.attachment0 = a0
+        ribbon.attachment1 = a1
+        ribbon.look = look
+        state.constraints.append(ribbon)
+    }
+
     /// Gives a part ParticleEmitters.
     mutating func emit(_ emitters: [ParticleEmitter], from part: UUID) {
         guard let index = state.parts.firstIndex(where: { $0.id == part }) else { return }

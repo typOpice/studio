@@ -365,11 +365,24 @@ struct RibbonView: View {
 
     @ViewBuilder private var physicsGroups: some View {
         group("Join tools") {
-            ForEach(SceneConstraint.Kind.allCases) { kind in
+            ForEach(SceneConstraint.Kind.allCases.filter { !$0.isEffect }) { kind in
                 RibbonButton(title: kind.displayName, icon: kind.symbolName,
                              active: model.joinTool == kind) {
                     toggleTool(kind)
                 }
+            }
+        }
+
+        divider
+
+        // Not joints: a Beam is picked like one (click two parts); a Trail goes on a part.
+        group("Effects") {
+            RibbonButton(title: "Beam", icon: SceneConstraint.Kind.beam.symbolName, active: model.joinTool == .beam) {
+                toggleTool(.beam)
+            }
+            RibbonButton(title: "Trail", icon: SceneConstraint.Kind.trail.symbolName,
+                         enabled: model.selectedParts.count == 1) {
+                if let part = model.selectedParts.first { model.addTrail(to: part.id) }
             }
         }
 

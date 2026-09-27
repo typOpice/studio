@@ -251,7 +251,7 @@ enum AvatarSnapshot {
 
     /// Mega Obby's views: along the course, a world at a time. The views are found from
     /// the checkpoints, so they follow the course if it changes.
-    static let megaObbyViews = ["start", "world2", "world3", "world4", "world5", "world6", "finish"]
+    static let megaObbyViews = ["start", "world2", "world3", "world4", "world5", "world6", "finish", "spinner"]
 
     /// `StudioApp --render-obby out.png [view] [ray]`.
     static func renderMegaObby(to url: URL, view name: String, technology: LightingTechnology,
@@ -273,6 +273,23 @@ enum AvatarSnapshot {
         case "finish":
             let end = model.parts.first { $0.name == "Victory" }?.position ?? .zero
             setting = (end + Vec3(0, 3, -4), -.pi / 2 + 0.5, 0.3, 40, nil, end + Vec3(-3, 0.5, 2))
+        case "spinner":
+            // Played for a moment, so the bar turns and its tips leave trails.
+            let bar = model.parts.first { $0.name == "Spinner" }?.position ?? .zero
+            setting = (bar, .pi / 2 + 0.4, 0.55, 26, nil, nil)
+            var play: PlayController?
+            defer { play?.stop() }
+            return renderPlace(model, setting, label: name, to: url, technology: technology, width: width,
+                               height: height) { renderer in
+                let session = PlayController(model: model, console: ScriptConsole())
+                session.start()
+                session.character.position = Vec3(0, 200, 0)
+                for _ in 0..<90 {
+                    session.step(dt: 1.0 / 60)
+                    renderer.trails.step(dt: 1.0 / 60, model: model)
+                }
+                play = session
+            }
         default:
             let world = name == "start" ? 1 : Int(name.dropFirst(5)) ?? 1
             let pad = checkpoint((world - 1) * 10 + 1) ?? Vec3(0, 20, 6)
@@ -323,6 +340,111 @@ enum AvatarSnapshot {
         guard CGImageDestinationFinalize(destination) else { return false }
         print("Wrote \(url.path) (\(name), \(renderer.drewRayTraced ? "ray traced" : "conventional"))")
         return true
+    }
+
+    /// `StudioApp --render-ribbons out.png [night]`: Beams (a laser, an arrow path on the
+    /// ground, a chain hanging between posts) and a Trail behind a block going round.
+    static func renderRibbons(to url: URL, night: Bool = false, width: Int = 1600, height: Int = 900) -> Bool {
+        let model = SceneModel()
+        model.parts = []
+        model.groups = []
+        model.attachments = []
+        model.constraints = []
+        var ground = Part()
+        ground.name = "Ground"
+        // Its top just above Studio's grid, so they don't fight.
+        ground.position = Vec3(0, -0.45, 0)
+        ground.size = Vec3(200, 1, 200)
+        ground.color = Vec3(0.3, 0.42, 0.28)
+        model.parts.append(ground)
+        func post(_ name: String, _ at: Vec3, height: Float = 6) -> UUID {
+            var part = Part()
+            part.name = name
+            part.position = at + Vec3(0, height / 2, 0)
+            part.size = Vec3(1, height, 1)
+            part.color = Vec3(0.45, 0.45, 0.5)
+            model.parts.append(part)
+            return part.id
+        }
+        func beam(_ a: UUID, _ b: UUID, from pointA: Vec3, to pointB: Vec3, _ set: (inout RibbonLook) -> Void) {
+            var beam = SceneConstraint(kind: .beam)
+            let axis = simd_normalize(pointB - pointA)
+            beam.attachment0 = model.addAttachment(on: a, world: pointA, axis: axis)
+            beam.attachment1 = model.addAttachment(on: b, world: pointB, axis: axis)
+            set(&beam.look)
+            model.constraints.append(beam)
+        }
+        // A laser between two posts.
+        let l0 = post("LaserL", Vec3(-12, 0, -4)), l1 = post("LaserR", Vec3(-2, 0, -4))
+        beam(l0, l1, from: Vec3(-12, 5, -4), to: Vec3(-2, 5, -4)) { look in
+            look.texture = "builtin://Glow"
+            look.color = .from(Vec3(1, 0.2, 0.2), to: Vec3(1, 0.5, 0.2))
+            look.transparency = .from(0, to: 0)
+            look.lightEmission = 1
+            look.faceCamera = true
+            look.width0 = 0.8
+            look.width1 = 0.8
+        }
+        // Arrows along the ground, curving round: out towards the camera, then off to the right.
+        let g0 = model.parts[0].id
+        var path = SceneConstraint(kind: .beam)
+        path.attachment0 = model.addAttachment(on: g0, world: Vec3(-10, 0.1, 2), axis: Vec3(0, 0, 1))
+        path.attachment1 = model.addAttachment(on: g0, world: Vec3(9, 0.1, 5), axis: Vec3(1, 0, 0))
+        do {
+            var look = RibbonLook()
+            look.texture = "builtin://Arrows"
+            look.textureMode = .wrap
+            look.textureLength = 2
+            look.color = .from(Vec3(1, 0.85, 0.2), to: Vec3(1, 0.85, 0.2))
+            look.transparency = .from(0, to: 0)
+            look.width0 = 1.5
+            look.width1 = 1.5
+            look.curveSize0 = 8
+            look.curveSize1 = 8
+            look.segments = 30
+            path.look = look
+            model.constraints.append(path)
+        }
+        // A chain hanging between posts.
+        let c0 = post("ChainL", Vec3(4, 0, -6)), c1 = post("ChainR", Vec3(14, 0, -6))
+        var chain = SceneConstraint(kind: .beam)
+        chain.attachment0 = model.addAttachment(on: c0, world: Vec3(4, 5.5, -6), axis: Vec3(0, -1, 0))
+        chain.attachment1 = model.addAttachment(on: c1, world: Vec3(14, 5.5, -6), axis: Vec3(0, 1, 0))
+        chain.look.texture = "builtin://Chain"
+        chain.look.textureMode = .wrap
+        chain.look.textureLength = 1
+        chain.look.color = .from(Vec3(0.75, 0.75, 0.8), to: Vec3(0.75, 0.75, 0.8))
+        chain.look.transparency = .from(0, to: 0)
+        chain.look.faceCamera = true
+        chain.look.width0 = 0.6
+        chain.look.width1 = 0.6
+        chain.look.curveSize0 = 4
+        chain.look.curveSize1 = 4
+        chain.look.segments = 30
+        model.constraints.append(chain)
+        // A block going round, a trail behind it.
+        var runner = Part()
+        runner.name = "Runner"
+        runner.position = Vec3(0, 2, 12)
+        runner.size = Vec3(1, 2, 1)
+        runner.color = Vec3(0.2, 0.6, 1)
+        model.parts.append(runner)
+        model.addTrail(to: runner.id)
+        if let index = model.constraints.firstIndex(where: { $0.kind == .trail }) {
+            model.constraints[index].look.color = .from(Vec3(0.3, 0.8, 1), to: Vec3(0.6, 0.3, 1))
+            model.constraints[index].look.transparency = .from(0.1, to: 1)
+            model.constraints[index].look.lightEmission = 0.6
+        }
+        if night { model.lighting.clockTime = 21 }
+        let setting: (Vec3, Float, Float, Float, String?, Vec3?) = (Vec3(0, 3, 3), .pi / 2, 0.35, 30, nil, nil)
+        return renderPlace(model, setting, label: night ? "ribbons at night" : "ribbons", to: url,
+                           technology: .conventional, width: width, height: height) { renderer in
+            for frame in 0..<120 {
+                let angle = Float(frame) / 60 * 2
+                model.update(id: runner.id) { $0.position = Vec3(sin(angle) * 5, 2, 10 + cos(angle) * 5) }
+                renderer.trails.step(dt: 1.0 / 60, model: model)
+            }
+        }
     }
 
     /// `StudioApp --render-particles out.png [night]`: a pillar for each of Studio's

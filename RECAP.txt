@@ -430,6 +430,15 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Network games now need both players on this version or later (the version number went up for NPCs and particles).
    New files: Model/ParticleEmitter.swift, Play/ParticleSystem.swift, Render/Particles.swift, Scripting/ScriptRuntime+Particles.swift, UI/ParticleUI.swift, ParticleSelfTest.swift.
 
+42. Beams and Trails, 2026-09-27.
+   A Beam is a ribbon between two attachments: lasers, chains, arrows along a path. In Studio: Physics > Beam, then click two parts. It can bend (CurveSize), taper (Width0/Width1), scroll its picture (TextureSpeed) and face the camera.
+   A Trail is a ribbon left behind a moving part: Physics > Trail or right-click a part > Add Trail. It fades over Lifetime, narrows with WidthScale, and scripts can wipe it with :Clear().
+   Both use a colour and transparency along them, glow (LightEmission), and a picture (Glow, Arrows, Dots, Chain, or your own).
+   Scripts use Roblox's names: Instance.new("Beam"), Instance.new("Trail"), Enum.TextureMode.
+   The sample games use them: golden arrows along Adventure Island's paths to the Obby Tower and the Mirror Lab, and a red sweep behind each spinner's tips in Mega Obby.
+   Tested alone and with a host and a joined player (the joined player sees the host's Beam, and the trail behind a part the host moves).
+   New files: Model/RibbonLook.swift, Play/Ribbons.swift, Render/RibbonRenderer.swift, Scripting/ScriptRuntime+Ribbons.swift, UI/RibbonUI.swift, RibbonSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

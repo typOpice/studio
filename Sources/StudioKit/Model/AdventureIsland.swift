@@ -106,8 +106,23 @@ enum AdventureIsland {
             let paths = group("Paths", kind: .folder)
             let sand = rgb(214, 196, 150)
             part("ToVillage", Vec3(0, 0.25, 43), Vec3(6, 0.1, 34), sand, material: .smooth, in: paths)
-            part("ToObby", Vec3(-28.5, 0.25, 10), Vec3(25, 0.1, 6), sand, material: .smooth, in: paths)
-            part("ToLab", Vec3(40.5, 0.25, 10), Vec3(48, 0.1, 6), sand, material: .smooth, in: paths)
+            let toObby = part("ToObby", Vec3(-28.5, 0.25, 10), Vec3(25, 0.1, 6), sand, material: .smooth, in: paths)
+            let toLab = part("ToLab", Vec3(40.5, 0.25, 10), Vec3(48, 0.1, 6), sand, material: .smooth, in: paths)
+            // Arrows running along two of them, out from the plaza: Beams lying on the path.
+            var arrows = RibbonLook()
+            arrows.texture = "builtin://Arrows"
+            arrows.textureMode = .wrap
+            arrows.textureLength = 3
+            arrows.textureSpeed = 0.4
+            arrows.color = .from(rgb(255, 205, 60), to: rgb(255, 170, 40))
+            arrows.transparency = .from(0.05, to: 0.5)
+            arrows.width0 = 2
+            arrows.width1 = 2
+            for (path, length, out) in [(toObby, Float(25), Float(-1)), (toLab, 48, 1)] {
+                let from = attachment(on: path, at: Vec3(-out * (length / 2 - 1), 0.06, 0), name: "ArrowsFrom")
+                let to = attachment(on: path, at: Vec3(out * (length / 2 - 2), 0.06, 0), name: "ArrowsTo")
+                ribbon(.beam, from, to, in: path, name: "Arrows", arrows)
+            }
             part("ToCaves", Vec3(0, 0.25, -39), Vec3(6, 0.1, 64), sand, material: .smooth, in: paths)
             part("ToGarden", Vec3(-37, 0.25, 47), Vec3(6, 0.1, 72), sand, material: .smooth, rotation: Vec3(0, -45, 0),
                  in: paths)

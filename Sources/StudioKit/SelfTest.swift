@@ -34,6 +34,7 @@ enum SelfTest {
                 "Soak": SoakSelfTest.run, "Stats": FrameStatsSelfTest.run,
                 "NPC": NPCSelfTest.run,
                 "Particles": ParticleSelfTest.run,
+                "Ribbons": RibbonSelfTest.run,
             ]
             guard let suite = suites[CommandLine.arguments[flag + 1]] else {
                 print("No suite called \(CommandLine.arguments[flag + 1]): \(suites.keys.sorted().joined(separator: ", "))")
@@ -104,6 +105,7 @@ enum SelfTest {
         FrameStatsSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         NPCSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         ParticleSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        RibbonSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LANSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
 
         if failures == 0 {

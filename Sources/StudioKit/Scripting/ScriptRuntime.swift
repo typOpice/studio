@@ -359,6 +359,7 @@ final class ScriptRuntime {
         case "stats": return statsSource?() ?? .list([])
         case "npc": return npcCall(name, arguments)
         case "emitter": return emitterCall(name, arguments)
+        case "ribbon": return ribbonCall(name, arguments)
         case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)

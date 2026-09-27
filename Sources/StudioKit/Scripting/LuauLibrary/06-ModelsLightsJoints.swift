@@ -635,6 +635,27 @@ constraintKit.constraintMembers = {
 		Velocity = "number", MotorMaxForce = "number", TargetPosition = "number", Speed = "number",
 		ServoMaxForce = "number", CurrentPosition = "read",
 	},
+	-- Beams and Trails: drawn, not joints. A table is a look (Ribbons.swift): its host
+	-- name and type, converted as a ParticleEmitter's are.
+	Beam = {
+		Attachment0 = "attachment", Attachment1 = "attachment", Enabled = "bool",
+		Color = { "color", "ColorSequence" }, Transparency = { "transparency", "NumberSequence" },
+		LightEmission = { "lightemission", "number" }, Brightness = { "brightness", "number" },
+		Texture = { "texture", "string" }, TextureLength = { "texturelength", "number" },
+		TextureMode = { "texturemode", "TextureMode" }, TextureSpeed = { "texturespeed", "number" },
+		FaceCamera = { "facecamera", "boolean" }, Width0 = { "width0", "number" }, Width1 = { "width1", "number" },
+		CurveSize0 = { "curvesize0", "number" }, CurveSize1 = { "curvesize1", "number" },
+		Segments = { "segments", "number" },
+	},
+	Trail = {
+		Attachment0 = "attachment", Attachment1 = "attachment", Enabled = "bool",
+		Color = { "color", "ColorSequence" }, Transparency = { "transparency", "NumberSequence" },
+		LightEmission = { "lightemission", "number" }, Brightness = { "brightness", "number" },
+		Texture = { "texture", "string" }, TextureLength = { "texturelength", "number" },
+		TextureMode = { "texturemode", "TextureMode" }, FaceCamera = { "facecamera", "boolean" },
+		Lifetime = { "lifetime", "number" }, MinLength = { "minlength", "number" },
+		MaxLength = { "maxlength", "number" }, WidthScale = { "widthscale", "NumberSequence" },
+	},
 }
 
 constraintKit.ConstraintMeta = {}
@@ -682,8 +703,17 @@ function constraintKit.constraintMethods.IsA(self, className)
 	if className == kind or className == "Instance" then
 		return true
 	end
-	-- Roblox's joints all descend from Constraint; a weld does not.
-	return className == "Constraint" and kind ~= "WeldConstraint"
+	-- Roblox's joints all descend from Constraint; a weld, a Beam and a Trail do not.
+	return className == "Constraint" and kind ~= "WeldConstraint" and kind ~= "Beam" and kind ~= "Trail"
+end
+
+-- Trail:Clear(): what it has left behind goes, on every machine.
+function constraintKit.constraintMethods.Clear(self)
+	checkSelf(self, "Instance", "Clear")
+	if constraintKit.constraintKind(constraintIdOf[self]) ~= "Trail" then
+		raise("Clear is not a valid member of " .. constraintKit.constraintKind(constraintIdOf[self]), 2)
+	end
+	invoke("ribbon.set", constraintIdOf[self], "clear", true)
 end
 
 constraintKit.ConstraintMeta.__index = function(object, key)
@@ -691,7 +721,9 @@ constraintKit.ConstraintMeta.__index = function(object, key)
 	local kind = constraintKit.constraintKind(id)
 	local members = constraintKit.constraintMembers[kind]
 	local member = members[key]
-	if member == "number" then
+	if type(member) == "table" then
+		return emitterKit.read(member[2], invoke("ribbon.get", id, member[1]))
+	elseif member == "number" then
 		return invoke("constraint.get", id, constraintKit.constraintNumbers[key])
 	elseif member == "bool" then
 		return invoke("constraint.get", id, string.lower(key))
@@ -775,6 +807,15 @@ constraintKit.ConstraintMeta.__newindex = function(object, key, value)
 		return
 	elseif member == "read" then
 		raise(string.format("Unable to assign property %s. Property is read only", key), 2)
+	elseif type(member) == "table" then
+		local raw = emitterKit.write(member[2], value)
+		if raw == nil then
+			raise(string.format("Unable to assign property %s. %s expected, got %s", key, member[2], typeof(value)), 2)
+		end
+		if not invoke("ribbon.set", id, member[1], raw) then
+			raise(string.format("Unable to assign property %s: %s is out of range", key, tostring(value)), 2)
+		end
+		return
 	end
 	raise(string.format("%s is not a valid member of %s", tostring(key), kind), 2)
 end

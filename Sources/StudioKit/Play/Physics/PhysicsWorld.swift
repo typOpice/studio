@@ -371,7 +371,7 @@ final class PhysicsWorld {
     private func syncJoints(_ constraints: [SceneConstraint], attachments: [SceneAttachment], parts: [UUID: Part]) {
         let byID = Dictionary(uniqueKeysWithValues: attachments.map { ($0.id, $0) })
         var live: Set<UUID> = []
-        for constraint in constraints where constraint.kind != .weld && constraint.enabled {
+        for constraint in constraints where constraint.kind != .weld && !constraint.kind.isEffect && constraint.enabled {
             guard let a0 = constraint.attachment0.flatMap({ byID[$0] }), let a1 = constraint.attachment1.flatMap({ byID[$0] }),
                   let p0 = parts[a0.parentID], let p1 = parts[a1.parentID],
                   let b0 = assemblyOf[p0.id], let b1 = assemblyOf[p1.id], b0 != b1,
@@ -420,7 +420,7 @@ final class PhysicsWorld {
                 case .prismatic:
                     kind = STUDIO_JOLT_SLIDER
                     values = [constraint.limitsEnabled ? 1 : 0, constraint.lowerLimit, constraint.upperLimit]
-                case .weld:
+                case .weld, .beam, .trail:
                     continue
                 }
                 // Parts joined at a point shouldn't grind against each other.

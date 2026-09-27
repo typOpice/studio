@@ -72,6 +72,10 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
         case spring = "SpringConstraint"
         /// Slides along an axis: lifts, pistons, drawers.
         case prismatic = "PrismaticConstraint"
+        /// Not a joint: a ribbon drawn between its two attachments (Ribbons.swift).
+        case beam = "Beam"
+        /// Not a joint: a ribbon left behind its two attachments as they move.
+        case trail = "Trail"
 
         var id: String { rawValue }
 
@@ -83,6 +87,8 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
             case .rope: return "Rope"
             case .spring: return "Spring"
             case .prismatic: return "Prismatic"
+            case .beam: return "Beam"
+            case .trail: return "Trail"
             }
         }
 
@@ -94,8 +100,13 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
             case .rope: return "point.topleft.down.to.point.bottomright.curvepath"
             case .spring: return "alternatingcurrent"
             case .prismatic: return "arrow.left.and.right"
+            case .beam: return "wand.and.rays"
+            case .trail: return "scribble.variable"
             }
         }
+
+        /// Beams and Trails: drawn, never simulated, and not among the join tools.
+        var isEffect: Bool { self == .beam || self == .trail }
 
         /// Welds join parts directly; everything else joins two attachments.
         var usesAttachments: Bool { self != .weld }
@@ -143,9 +154,17 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
     var stiffness: Float = 200
     var damping: Float = 10
 
+    /// A Beam's or Trail's looks; nil for joints.
+    var ribbon: RibbonLook?
+    var look: RibbonLook {
+        get { ribbon ?? RibbonLook() }
+        set { ribbon = newValue }
+    }
+
     init(kind: Kind, name: String? = nil) {
         self.kind = kind
         self.name = name ?? kind.rawValue
+        if kind.isEffect { ribbon = RibbonLook() }
     }
 
     /// Parts it joins, through its attachments or directly.
@@ -159,7 +178,7 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
         case id, name, kind, parentID, enabled, part0, part1, attachment0, attachment1
         case actuator, limitsEnabled, lowerAngle, upperAngle, angularVelocity, motorMaxTorque
         case targetAngle, angularSpeed, servoMaxTorque, lowerLimit, upperLimit, velocity, motorMaxForce
-        case targetPosition, speed, servoMaxForce, length, freeLength, stiffness, damping
+        case targetPosition, speed, servoMaxForce, length, freeLength, stiffness, damping, ribbon
     }
 
     init(from decoder: Decoder) throws {
@@ -195,6 +214,7 @@ struct SceneConstraint: Codable, Equatable, Identifiable {
         freeLength = try c.decodeIfPresent(Float.self, forKey: .freeLength) ?? d.freeLength
         stiffness = try c.decodeIfPresent(Float.self, forKey: .stiffness) ?? d.stiffness
         damping = try c.decodeIfPresent(Float.self, forKey: .damping) ?? d.damping
+        ribbon = try c.decodeIfPresent(RibbonLook.self, forKey: .ribbon) ?? d.ribbon
     }
 }
 
@@ -259,6 +279,14 @@ extension SceneModel {
         if kind == .weld {
             constraint.part0 = a
             constraint.part1 = b
+        } else if kind.isEffect {
+            // A beam from the middle of one to the middle of the other, the same from
+            // every side (FaceCamera); a trail is made on one part (addTrail).
+            let axis = simd_length(partB.position - partA.position) > 1e-4 ? normalize(partB.position - partA.position)
+                : Vec3(1, 0, 0)
+            constraint.attachment0 = addAttachment(on: a, world: partA.position, axis: axis, name: "Attachment0")
+            constraint.attachment1 = addAttachment(on: b, world: partB.position, axis: axis, name: "Attachment1")
+            constraint.look.faceCamera = true
         } else {
             let between = partB.position - partA.position
             let axis: Vec3

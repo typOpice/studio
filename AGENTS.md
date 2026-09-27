@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2666 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # 2707 checks — THE test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -153,6 +153,7 @@ listed in §9.
 | `SceneIndexSelfTest.swift` | The scene index: 3000 random changes of every kind (parts and groups made, deleted, reparented through the array and through update(id:), moved, sent to storage and back, the parts replaced whole with the same count, shuffled, data objects and Sounds made and deleted, reparenting undone) with parts, groups, parents, children, data objects and Sounds all found as a search finds them; finding a part, a Model's pivot, moving a Model and a folder's children no dearer with 16 times the parts |
 | `SoakSelfTest.swift` | Each sample game played by `Soak.play`'s player (running, jumping, swinging, falling; the same moves every time) — Adventure Island and Mega Obby for 40 seconds, Nightfall for 60, night included: no script errors, and no parts, Models, Sounds, values, GUI objects, voices or Luau memory growing from the settled sample to the last; a host and a joined player in Nightfall for 50 seconds, both moving and fighting: no errors, and the joined player's parts and Sounds keeping the same distance from the host's (nothing the host has done with piling up) |
 | `NPCSelfTest.swift` | NPCs: Insert › Rig (the seven parts, a Humanoid, one undo step, standing on the spot, saved and reopened); MoveTo at the WalkSpeed, facing the way it goes with legs swinging, MoveDirection, WalkToPoint and the Running state, MoveToFinished(true) within a stud and standing on the ground; a wall stopping it and MoveToFinished(false) after eight seconds; a kerb stepped up, moved by a script (PivotTo) then walking off a ledge, Jump up and down; the README's PathfindingService example round a wall to a flag; TakeDamage and HealthChanged, MaxHealth lowering Health, Died once at no health, falling apart; Instance.new("Humanoid") in a script's Model walking at its own WalkSpeed, FindFirstChildOfClass, a wrong type refused; the player bumping into an NPC; Adventure Island's Postie Pat round, every stop reached; a host's NPC walking and dying in a joined player's game, their script hearing Died, the parts let go there too |
+| `RibbonSelfTest.swift` | Beams: the curve (Segments, its ends, CurveSize bending it), Width0 to Width1, Color and Transparency along it, flat across the attachments, Stretch and Wrap, TextureSpeed scrolling, FaceCamera, Enabled; Trails: a point each MinLength, as wide as the attachments are apart, gone after Lifetime, drawn from now back, WidthScale, MaxLength, Clear, Enabled off, forgotten in storage; a Beam not holding a part up; Studio (the Beam tool middle to middle facing the camera, Add Trail top to bottom, undo, neither a join tool, saved, a joint saving as before); from Luau (Beam and Trail made and read in their types, not Constraints, wrong values refused, a Beam has no Clear, Clear and Enabled); drawn, and not when off; the README's laser as written; a host's Beam and moving Trail in a joined player's game |
 | `ParticleSelfTest.swift` | ParticleEmitters: Rate and Lifetime (how many alive), made in the part and out of its top at their Speed, a turned part's top, SpreadAngle's fan, Acceleration, Drag, Enabled off, Emit(40) at once, Clear, a machine seeing an emitter first making only its last burst, LockedToPart, TimeScale 0, Size/Transparency/Color/Brightness/LightEmission through a life with envelopes, the 2000 cap, none in storage; Studio (presets, undo, saved and reopened, a part without one saving as before, copied with the part, deleted); from Luau (Instance.new, FindFirstChild, the Roblox types read back, six wrong values refused, GetChildren, Emit bursting, Clone, moved between parts and out, Clear, Enabled, Destroy); drawn red where they are, hidden behind a wall, gone when cleared; a host script's emitter and Emit(40) reaching a joined player and bursting there, a joined player's LocalScript emitter staying theirs |
 | `FrameStatsSelfTest.swift` | The Stats service: frame, script and physics times (the frame the most, the scripts' work in it), memory, the service being itself, parts and instances; no drawing time until something draws, then counted in the frame; the HUD's three lines showing the frame, drawing, scripts, physics, memory and the right part count; a version-2 place given them once under its numbers, one with its numbers deleted not; a joined player's numbers being their own machine's |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
@@ -318,6 +319,11 @@ Sources/StudioKit/
                                    `UUID(stableFrom:)`, `ensurePlaceID`
   Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them; a
                                    Humanoid's numbers
+  Model/RibbonLook.swift         a Beam's or Trail's looks (SceneConstraint.ribbon), addTrail
+  Play/Ribbons.swift             Beams' curves and Trails' history (TrailSystem) as strips
+  Render/RibbonRenderer.swift    RibbonRenderer: strips with a repeating picture; the ribbon pictures
+  Scripting/ScriptRuntime+Ribbons.swift  `ribbon.*`: a Beam's or Trail's looks
+  UI/RibbonUI.swift              RibbonSection: a Beam's or Trail's Properties
   Model/ParticleEmitter.swift    ParticleEmitter (in `Part.emitters`), NumberKey/ColorKey
                                  sequences, the Studio presets, EmitterRef and editing them
   Play/ParticleSystem.swift      each machine's particles: made by Rate and Emit, moved, aged,
@@ -1480,6 +1486,16 @@ Roughly ordered by how much time they will cost you.
       that when changing `place`.
     - A body skips putting its parts while nothing moved (`lastPut`), since each change
       is sent to every joined player.
+
+118. **Beams and Trails are constraints that are only drawn.** They're `SceneConstraint`
+    kinds (`.beam`, `.trail`; `kind.isEffect`), so saving, the Explorer, `constraint.*`,
+    replication and the Luau constraint kit come with them. Their looks are
+    `SceneConstraint.ribbon` (nil for joints, so a joint saves as before) and go through
+    `ribbon.*`. Keep to these rules:
+    - Physics and the join tools skip `isEffect` kinds. A new constraint kind has to
+      say which it is.
+    - A Trail's history (`TrailSystem`) is each Renderer's own, like particles. Clear
+      is a counter (`look.cleared`).
 
 117. **Particles are each machine's; only the emitters are scene data.** A ParticleEmitter
     lives in its part (`Part.emitters`), so it's saved, undone, copied and sent to joined

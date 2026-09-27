@@ -33,6 +33,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// The particles of the world's ParticleEmitters, this view's own, and what draws them.
     let particles = ParticleSystem()
     private var particleDrawer: ParticleRenderer?
+    /// Where the world's Trails have been, as this view has seen, and what draws Beams and Trails.
+    let trails = TrailSystem()
+    private var ribbonDrawer: RibbonRenderer?
 
     // Lighting.
     static let shadowMapSize = 2048
@@ -224,6 +227,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         skyPipeline = try makePipeline(vertex: "sky_vertex", fragment: "sky_fragment", blending: false)
         particleDrawer = ParticleRenderer(device: device, library: library, color: view.colorPixelFormat,
                                           depth: view.depthStencilPixelFormat, samples: view.sampleCount)
+        ribbonDrawer = RibbonRenderer(device: device, library: library, color: view.colorPixelFormat,
+                                      depth: view.depthStencilPixelFormat, samples: view.sampleCount)
 
         // Depth only, from the sun, into the shadow map.
         let shadow = MTLRenderPipelineDescriptor()
@@ -330,6 +335,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let delta = Float(min(max(now - lastFrameTime, 0), 0.25))
         lastFrameTime = now
         particles.step(dt: delta, model: model)
+        trails.step(dt: delta, model: model)
 
         var frame = FrameUniforms()
         frame.viewProjection = camera.viewProjection(aspect: aspect)
@@ -486,6 +492,11 @@ final class Renderer: NSObject, MTKViewDelegate {
             drawAvatar(encoder, avatar: avatar)
         }
 
+        if let ribbonDrawer, model.constraints.contains(where: \.kind.isEffect) {
+            let strips = Ribbons.strips(model: model, trails: trails, eye: camera.position,
+                                        time: Float(CACurrentMediaTime() - startTime))
+            ribbonDrawer.draw(encoder, strips: strips, frame: &frame, depth: depthNoWrite) { texture(named: $0, model: model) }
+        }
         particleDrawer?.draw(encoder, system: particles, model: model, camera: camera, frame: &frame,
                              depth: depthNoWrite) { texture(named: $0, model: model) }
     }
@@ -1131,9 +1142,17 @@ final class Renderer: NSObject, MTKViewDelegate {
             submit(encoder, mesh: ball, uniforms: &draw)
         }
 
-        for constraint in model.constraints {
+        // Beams and Trails draw themselves; picked, their attachments are shown.
+        for constraint in model.constraints where !constraint.kind.isEffect || model.selectedConstraint == constraint.id {
             let selected = model.selectedConstraint == constraint.id
             let fade: Float = constraint.enabled ? (selected ? 1 : 0.75) : 0.35
+            if constraint.kind.isEffect {
+                for end in [constraint.attachment0, constraint.attachment1] {
+                    guard let frame = end.flatMap(model.attachment(id:)).flatMap(model.worldFrame(of:)) else { continue }
+                    blob(at: frame.position, size: 0.4, colour: Vec4(1.0, 0.78, 0.35, fade))
+                }
+                continue
+            }
             switch constraint.kind {
             case .weld:
                 guard let a = constraint.part0.flatMap({ model.part(id: $0) }),

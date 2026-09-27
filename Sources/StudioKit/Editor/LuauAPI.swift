@@ -52,7 +52,8 @@ enum LuauAPI {
             property("AnimationPriority", "Enum.AnimationPriority"),
             property("Technology", "Enum.Technology"), property("ActuatorType", "Enum.ActuatorType"),
             property("TextXAlignment", "Enum.TextXAlignment"), property("PlaybackState", "Enum.PlaybackState"),
-            property("MouseBehavior", "Enum.MouseBehavior"), property("NormalId", "Enum.NormalId")
+            property("MouseBehavior", "Enum.MouseBehavior"), property("NormalId", "Enum.NormalId"),
+            property("TextureMode", "Enum.TextureMode")
         ],
         "Enum.Material": enumItems(["Plastic", "SmoothPlastic", "Metal", "Neon", "Wood", "Water"]),
         "Enum.PartType": enumItems(["Block", "Ball", "Cylinder", "Wedge"]),
@@ -72,6 +73,7 @@ enum LuauAPI {
         "Enum.PlaybackState": enumItems(["Begin", "Delayed", "Playing", "Paused", "Completed", "Cancelled"]),
         "Enum.MouseBehavior": enumItems(["Default", "LockCenter", "LockCurrentPosition"]),
         "Enum.NormalId": enumItems(["Right", "Top", "Back", "Left", "Bottom", "Front"]),
+        "Enum.TextureMode": enumItems(["Stretch", "Wrap"]),
         "task": [
             method("wait", "seconds", "number"), method("spawn", "callback, ...", "thread"),
             method("delay", "seconds, callback, ...", "thread"), method("defer", "callback, ...", "thread"),
@@ -545,6 +547,26 @@ enum LuauAPI {
             method("FindFirstChild", "name", "Instance"), method("WaitForChild", "name", "Instance"),
             method("GetChildren", "", "table"), method("Clone", "", "Tool"), method("Destroy", "", "()"),
             method("IsA", "className", "boolean")
+        ],
+        "Beam": [
+            property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
+            property("Attachment0", "Attachment"), property("Attachment1", "Attachment"),
+            property("Color", "ColorSequence"), property("Transparency", "NumberSequence"),
+            property("Width0", "number"), property("Width1", "number"), property("CurveSize0", "number"),
+            property("CurveSize1", "number"), property("Segments", "number"), property("FaceCamera", "boolean"),
+            property("Texture", "string"), property("TextureLength", "number"), property("TextureMode", "EnumItem"),
+            property("TextureSpeed", "number"), property("LightEmission", "number"), property("Brightness", "number"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "Trail": [
+            property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
+            property("Attachment0", "Attachment"), property("Attachment1", "Attachment"),
+            property("Color", "ColorSequence"), property("Transparency", "NumberSequence"),
+            property("Lifetime", "number"), property("MinLength", "number"), property("MaxLength", "number"),
+            property("WidthScale", "NumberSequence"), property("FaceCamera", "boolean"), property("Texture", "string"),
+            property("TextureLength", "number"), property("TextureMode", "EnumItem"),
+            property("LightEmission", "number"), property("Brightness", "number"),
+            method("Clear", "", "()"), method("Destroy", "", "()"), method("IsA", "className", "boolean")
         ],
         "ParticleEmitter": [
             property("Name", "string"), property("Parent", "Part"), property("Enabled", "boolean"),

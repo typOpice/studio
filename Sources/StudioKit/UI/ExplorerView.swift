@@ -310,15 +310,19 @@ struct ExplorerView: View {
         .background(Theme.panel)
         .onAppear {
             reveal(model.selectedDataObject)
-            reveal(model.selectedEmitter)
+            reveal(node: model.selectedEmitter?.part)
         }
         .onChange(of: model.selectedDataObject) { id in reveal(id) }
-        .onChange(of: model.selectedEmitter) { ref in reveal(ref) }
+        .onChange(of: model.selectedEmitter) { ref in reveal(node: ref?.part) }
+        .onChange(of: model.selectedConstraint) { id in
+            // A joint, Beam or Trail: the part (or Model) it's under.
+            reveal(node: id.flatMap(model.constraint(id:))?.parentID)
+        }
     }
 
-    /// Opens an emitter's part, and what that's inside.
-    private func reveal(_ ref: EmitterRef?) {
-        var node = ref?.part
+    /// Opens a part or Model (an emitter's, a joint's), and what that's inside.
+    private func reveal(node start: UUID?) {
+        var node = start
         for _ in 0..<64 {
             guard let id = node else { break }
             expandedParts.insert(id)
@@ -520,6 +524,10 @@ struct ExplorerView: View {
             Button("Add Sound") {
                 expandedParts.insert(part.id)
                 model.addSound(in: part.id)
+            }
+            Button("Add Trail") {
+                expandedParts.insert(part.id)
+                model.addTrail(to: part.id)
             }
             Menu("Add ParticleEmitter") {
                 ForEach(ParticleEmitter.Preset.allCases) { preset in

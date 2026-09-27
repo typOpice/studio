@@ -343,6 +343,14 @@ enum PanelSnapshot {
             let spawn = model.addDataObject(.vector3Value, in: .serverStorage)
             model.updateDataObject(id: spawn) { $0.name = "SpawnPoint"; _ = $0.setValue(.list([.number(0), .number(5), .number(20)])) }
             model.selectDataObject(round)
+        case "beam":
+            // Two posts and a Beam between them, made with the Beam tool, picked.
+            session.showWorld()
+            let a = model.addPart(shape: .block, at: Vec3(-6, 3, -6))
+            let b = model.addPart(shape: .block, at: Vec3(6, 3, -6))
+            if let beam = model.join(.beam, a, b) {
+                model.updateConstraint(id: beam) { $0.look.texture = "builtin://Glow"; $0.look.lightEmission = 1 }
+            }
         case "particles":
             // A campfire: Fire and Smoke in a part, Fire picked.
             session.showWorld()

@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2666 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2707 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -108,7 +108,8 @@ Five gems are hidden around the island (they come back after 30 seconds). Gems a
 Wins show on the leaderboard, and are saved with your rewards for next time (see
 [DataStores](#saving-progress-datastores)). Eight people live there; walk up to one and press **E**
 to talk, then **1**, **2** or **3** to answer. They turn to face you as you pass.
-Postie Pat walks the village round with the post, stopping at each door.
+Postie Pat walks the village round with the post, stopping at each door. Golden arrows
+(Beams) run along the paths from the plaza to the Obby Tower and the Mirror Lab.
 
 How it's made, script by script:
 
@@ -213,7 +214,7 @@ The obstacles:
 - fading tiles, which give way just after you step on them;
 - walls of kill bricks with gaps (and, later, low ones to jump);
 - truss climbs;
-- spinners with one or two bars;
+- spinners with one or two bars, a red sweep (a Trail) behind each tip;
 - moving platforms, and kill blocks sweeping across the path;
 - jump pads.
 
@@ -970,6 +971,55 @@ magic round Adventure Island's fountain, and Mega Obby's confetti when you win.
 
 Unlike Roblox, emitters go in parts only, not in Attachments, and they aren't lit
 (Roblox's default, `LightInfluence` 0).
+
+## Beams and Trails
+
+A **Beam** is a ribbon drawn between two attachments: a laser, a rope bridge's chain, arrows
+along a path. With **Physics › Beam**, click one part, then another. The Beam goes from
+the middle of one to the middle of the other, facing the camera.
+
+- `Width0` and `Width1` set the width at each end.
+- `CurveSize0` and `CurveSize1` bend it: it heads out along each attachment's axis before
+  turning to the other end. `Segments` sets how smooth the bend is.
+- `FaceCamera` turns it to face whoever is looking. Without it, it lies across the
+  attachments' secondary axes, flat on a path.
+
+A **Trail** is a ribbon left behind as its two attachments move: a sword's swoosh, a
+racer's streak. **Physics › Trail**, or right-click a part › **Add Trail**, puts one on a
+part, between its top and bottom.
+
+- A Trail adds a point each time the part moves `MinLength` studs.
+- Each point lasts `Lifetime` seconds, and `MaxLength` limits how long it gets.
+- `WidthScale` narrows it as it ages.
+- `trail:Clear()` wipes what it has left behind.
+
+Both take a picture: four built in (Glow, Arrows, Dots, Chain), an imported one, or
+none for plain colour. They also take `Color` and `Transparency` sequences,
+`LightEmission`, `Brightness`, `TextureLength` and `TextureMode`, `Stretch` or `Wrap`
+(once every `TextureLength` studs). A Beam's `TextureSpeed` scrolls its picture along
+it.
+
+```lua
+-- A Script: a laser between two posts, flicking on and off.
+local beam = Instance.new("Beam")
+beam.Attachment0 = Instance.new("Attachment", workspace.LeftPost)
+beam.Attachment1 = Instance.new("Attachment", workspace.RightPost)
+beam.Texture = "builtin://Glow"
+beam.Color = ColorSequence.new(Color3.fromRGB(255, 60, 60))
+beam.Transparency = NumberSequence.new(0)
+beam.LightEmission = 1
+beam.FaceCamera = true
+beam.Parent = workspace.LeftPost
+
+while true do
+	task.wait(1)
+	beam.Enabled = not beam.Enabled
+end
+```
+
+Joined players get the host's Beams and Trails like any other part of the world. Each
+player's own game draws the trail behind a part as they see it move. Unlike Roblox,
+attachments go on parts only, so characters don't have them.
 
 ## MeshParts: 3D models
 
