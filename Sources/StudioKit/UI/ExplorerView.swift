@@ -85,6 +85,7 @@ struct ExplorerView: View {
                         }
                     }
                     Button("New Tool") { model.addTool() }
+                    Button("Insert Rig") { controller.insertRig() }
                     Button("Import Picture, Sound or 3D Model…") { importAssets() }
                     Button("New Sound") {
                         let part = model.selection.count == 1 ? model.selection.first.flatMap { model.part(id: $0)?.id } : nil
@@ -181,6 +182,19 @@ struct ExplorerView: View {
                                 if let sound = model.sound(id: id) {
                                     soundRow(sound, depth: depth)
                                 }
+                            case .data(let id, let depth):
+                                if let object = model.dataObject(id: id) {
+                                    fixtureRow(id: id, depth: depth, name: object.name, icon: object.className.symbolName,
+                                               tint: StorageGroup.tint, selected: model.selectedDataObject == id,
+                                               detail: object.className == .humanoid ? "\(Int(object.health)) hp"
+                                                   : object.className.isValue ? DataObjectInspector.describe(object.value) : "") {
+                                        model.selection = []
+                                        model.selectedScript = nil
+                                        model.selectDataObject(id)
+                                    } delete: {
+                                        model.removeDataObjects([id])
+                                    }
+                                }
                             }
                         }
                         if rows.isEmpty {
@@ -271,6 +285,27 @@ struct ExplorerView: View {
             }
         }
         .background(Theme.panel)
+        .onAppear { reveal(model.selectedDataObject) }
+        .onChange(of: model.selectedDataObject) { id in reveal(id) }
+    }
+
+    /// Opens the Models and parts a data object (a Humanoid in a Rig) is inside, so its
+    /// row shows when it's picked.
+    private func reveal(_ id: UUID?) {
+        // Up through any Folders of data to the part or Model it's in, then up the tree.
+        var parent = id.flatMap { model.dataObject(id: $0)?.parent }
+        for _ in 0..<64 {
+            guard case .node(let node) = parent else { return }
+            guard let object = model.dataObject(id: node) else { break }
+            parent = object.parent
+        }
+        guard case .node(var node) = parent, model.part(id: node) != nil || model.group(id: node) != nil else { return }
+        for _ in 0..<64 {
+            expandedParts.insert(node)
+            guard let up = model.parentID(of: node) else { break }
+            node = up
+        }
+        workspaceExpanded = true
     }
 
     // MARK: - Rows
@@ -1061,7 +1096,7 @@ struct ExplorerView: View {
                     if let script = model.script(id: id) { scriptRow(script, indent: 40 + CGFloat(depth) * 14) }
                 case .sound(let id, let depth):
                     if let sound = model.sound(id: id) { soundRow(sound, depth: depth + 1) }
-                case .attachment, .constraint:
+                case .attachment, .constraint, .data:
                     EmptyView()
                 }
             }
@@ -1240,6 +1275,8 @@ enum ExplorerTreeRow: Hashable {
     case attachment(UUID, depth: Int)
     case constraint(UUID, depth: Int)
     case sound(UUID, depth: Int)
+    /// A Humanoid, Value or Folder inside a part or Model.
+    case data(UUID, depth: Int)
 }
 
 extension ExplorerView {
@@ -1279,6 +1316,13 @@ extension ExplorerView {
 
         var rows: [ExplorerTreeRow] = []
         var visited: Set<UUID> = []
+        // Data objects, and what's inside them (a Folder's Values), all showing.
+        func data(in parent: DataParent, depth: Int) {
+            for object in model.dataObjects(in: parent) where visited.insert(object.id).inserted {
+                rows.append(.data(object.id, depth: depth))
+                data(in: .node(object.id), depth: depth + 1)
+            }
+        }
         func walk(_ parent: UUID?, depth: Int) {
             for child in childrenOf[parent] ?? [] where visited.insert(child.id).inserted {
                 rows.append(.node(child, depth: depth))
@@ -1294,6 +1338,7 @@ extension ExplorerView {
                     for sound in model.sounds(in: child.id) where model.part(id: child.id) != nil {
                         rows.append(.sound(sound.id, depth: depth + 1))
                     }
+                    data(in: .node(child.id), depth: depth + 1)
                 }
             }
         }
@@ -1314,6 +1359,7 @@ extension ExplorerView {
                 case .attachment(let id, let depth): return .attachment(id, depth: depth + 1)
                 case .sound(let id, let depth): return .sound(id, depth: depth + 1)
                 case .constraint(let id, let depth): return .constraint(id, depth: depth + 1)
+                case .data(let id, let depth): return .data(id, depth: depth + 1)
                 }
             }
             for script in model.scripts where script.host == .scene && script.parentID == tool.id {
@@ -1329,6 +1375,13 @@ extension ExplorerView {
             || model.attachments.contains { $0.parentID == id }
             || model.constraints.contains { $0.parentID == id }
             || model.sounds.contains { $0.parentID == id }
+            || !model.dataObjects(in: .node(id)).isEmpty
+    }
+
+    /// Adds a Humanoid, Folder or Value inside a Model, and shows it.
+    func addData(_ kind: DataClass, to parent: UUID) {
+        expandedParts.insert(parent)
+        model.addDataObject(kind, in: .node(parent))
     }
 
     /// An attachment or a joint, under the part it belongs to.
@@ -1485,6 +1538,17 @@ extension ExplorerView {
             Button("Add Script") {
                 expandedParts.insert(group.id)
                 session.openScript(model.addScript(parentID: group.id))
+            }
+            if group.kind == .model {
+                Menu("Add Object") {
+                    if !model.dataObjects(in: .node(group.id)).contains(where: { $0.className == .humanoid }) {
+                        Button("Humanoid") { addData(.humanoid, to: group.id) }
+                    }
+                    Button("Folder") { addData(.folder, to: group.id) }
+                    ForEach(DataClass.allCases.filter(\.isValue)) { kind in
+                        Button(kind.rawValue) { addData(kind, to: group.id) }
+                    }
+                }
             }
             Divider()
             Button("Delete", role: .destructive) {

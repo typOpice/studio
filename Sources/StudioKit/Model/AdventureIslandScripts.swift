@@ -603,6 +603,37 @@ enum AdventureIslandScripts {
     end)
     """
 
+    static let postRound = """
+    -- PostRound: Postie Pat walks the village round with the post. His Humanoid walks
+    -- him: MoveTo a point, then wait for MoveToFinished (true there, false if something
+    -- held him up for eight seconds). He waits a moment at each door.
+    local humanoid = script.Parent:WaitForChild("Humanoid")
+
+    local round = {
+    	{ at = Vector3.new(-3, 0, 36) },
+    	{ at = Vector3.new(-9, 0, 64), door = true }, -- the bakery
+    	{ at = Vector3.new(-4, 0, 76) }, -- round Old Mara
+    	{ at = Vector3.new(-4, 0, 90) },
+    	{ at = Vector3.new(-9.5, 0, 91), door = true }, -- Mara's
+    	{ at = Vector3.new(9, 0, 90), door = true }, -- the inn
+    	{ at = Vector3.new(3, 0, 80) }, -- round the well
+    	{ at = Vector3.new(3, 0, 68) },
+    	{ at = Vector3.new(9, 0, 64), door = true }, -- the mill
+    	{ at = Vector3.new(4, 0, 32) }, -- back to the plaza
+    }
+
+    while true do
+    	for _, stop in round do
+    		humanoid:MoveTo(stop.at)
+    		humanoid.MoveToFinished:Wait()
+    		if stop.door then
+    			task.wait(1.5)
+    		end
+    	end
+    	task.wait(4)
+    end
+    """
+
     static let ambience = """
     -- Ambience: the lighthouse beam sweeps, the Dream Garden's islands float and its
     -- fireflies drift, and the fountain's orb bobs.

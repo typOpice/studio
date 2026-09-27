@@ -25,7 +25,7 @@ local function dispatch(event)
 		end
 		return
 	end
-	if kind == "DataChanged" or string.sub(kind, 1, 6) == "Remote" then
+	if kind == "DataChanged" or kind == "NPC" or string.sub(kind, 1, 6) == "Remote" then
 		dataKit.dispatch(event)
 		return
 	end

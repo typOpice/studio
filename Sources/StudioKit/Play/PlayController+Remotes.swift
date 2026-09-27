@@ -195,7 +195,7 @@ extension PlayController {
     /// machine's scripts setting it — on a joined player, the host's changes arriving.
     func noteDataChanges() {
         var seen: [UUID: ScriptValue] = [:]
-        for object in model.dataObjects where object.className.isValue {
+        for object in model.dataObjects where object.className.isValue || object.className == .humanoid {
             seen[object.id] = object.value
             if let known = knownDataValues[object.id], known != object.value {
                 pendingEvents.append(.list([.string("DataChanged"), .string(object.id.uuidString)]))

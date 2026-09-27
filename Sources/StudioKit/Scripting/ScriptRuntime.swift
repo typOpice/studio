@@ -77,6 +77,8 @@ final class ScriptRuntime {
     /// The Stats service's numbers (`stats.get`): the play session's, as
     /// [frame, scripts, physics, draw ms, memory MB, parts, instances].
     var statsSource: (() -> ScriptValue)?
+    /// The play session's NPCs, for `npc.*` (ScriptRuntime+NPC).
+    var npcSource: (() -> NPCSystem?)?
 
     func start() {
         stop()
@@ -352,6 +354,7 @@ final class ScriptRuntime {
         case "datastore": return dataStoreCall(name, arguments)
         case "path": return pathCall(name, arguments)
         case "stats": return statsSource?() ?? .list([])
+        case "npc": return npcCall(name, arguments)
         case "module": return moduleCall(name, arguments)
         case "shader", "screen": return shadersCall(name, arguments)
         case "runtime", "script": return runtimeCall(name, arguments)

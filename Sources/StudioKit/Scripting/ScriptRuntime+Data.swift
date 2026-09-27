@@ -17,7 +17,8 @@ extension ScriptRuntime {
         switch name {
         case "data.create":
             guard let className = arguments.first?.asString.flatMap(DataClass.init(rawValue:)) else { return .nothing }
-            var object = DataObject(name: className.rawValue, className: className)
+            var object = className == .humanoid ? DataObject.humanoid()
+                : DataObject(name: className.rawValue, className: className)
             // Made on a joined player: theirs alone, as in Roblox.
             object.local = !runsSceneScripts
             model.dataObjects.append(object)

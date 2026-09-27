@@ -143,18 +143,35 @@ enum AvatarSnapshot {
         "garden": (Vec3(-84, 9, 98), .pi / 2 + 0.7, 0.2, 42, "Dreamy", Vec3(-72, 3.7, 80)),
         "lake": (Vec3(84, 3, 94), .pi + 0.2, 0.3, 48, nil, Vec3(66, 4.5, 92)),
         "lighthouse": (Vec3(95, 20, -95), .pi / 2 + 0.45, 0.18, 74, nil, Vec3(92, 9, -82)),
+        // Played for a few seconds first: Postie Pat on his round, mid-stride.
+        "postie": (Vec3(0, 3, 40), .pi + 0.5, 0.12, 11, nil, nil),
     ]
 
     /// `StudioApp --render-adventure out.png [view] [ray]`: Adventure Island from one of
     /// `adventureViews`, its shaders compiled first, that area's screen effect on.
     static func renderAdventure(to url: URL, view name: String, technology: LightingTechnology,
                                 width: Int = 1600, height: Int = 900) -> Bool {
-        guard let setting = adventureViews[name] else {
+        guard var setting = adventureViews[name] else {
             print("Views: \(adventureViews.keys.sorted().joined(separator: ", "))")
             return false
         }
         let model = SceneModel()
         model.loadAdventureIsland()
+        var session: PlayController?
+        if name == "postie" {
+            let play = PlayController(model: model, console: ScriptConsole())
+            play.start()
+            play.character.position = Vec3(-40, 0.4, -20)
+            for _ in 0..<150 { play.step(dt: 1.0 / 60) }
+            if let root = model.parts.first(where: { $0.name == "HumanoidRootPart" }) {
+                // From in front of him, a little to one side.
+                let ahead = root.orientation.act(Vec3(0, 0, -1))
+                setting.0 = root.position
+                setting.1 = atan2(ahead.z, ahead.x) - 0.55
+            }
+            session = play
+        }
+        defer { session?.stop() }
         return renderPlace(model, setting, label: name, to: url, technology: technology, width: width, height: height)
     }
 

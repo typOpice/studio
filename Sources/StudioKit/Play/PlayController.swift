@@ -127,6 +127,7 @@ final class PlayController: ViewportSource, PlayerBridge {
         // What the Output shows, LogService hears: each line the frame after.
         console.onAppend = { [weak self] line in self?.log(line) }
         scripts.logSource = { [weak self] in self?.logHistory ?? [] }
+        scripts.npcSource = { [weak self] in self?.npcs }
         scripts.statsSource = { [weak self] in
             guard let self else { return .nothing }
             let stats = self.frameStats
@@ -365,6 +366,18 @@ final class PlayController: ViewportSource, PlayerBridge {
         refreshHUD(dt: dt)
     }
 
+    /// Models with Humanoids (NPCSystem.swift): walked here, on the machine that runs
+    /// the scene's scripts; a joined player sees their parts move.
+    lazy var npcs = NPCSystem(model: model)
+
+    private func stepCharacters(dt: Float) {
+        guard !worldFromHost else { return }
+        npcs.clock = clock
+        npcs.step(dt: dt, ground: character.solidBaseplate)
+        pendingEvents += npcs.events
+        npcs.events.removeAll()
+    }
+
     /// Where the frames go (FrameStats.swift): the Stats service reads it.
     var frameStats = FrameStats()
 
@@ -390,7 +403,10 @@ final class PlayController: ViewportSource, PlayerBridge {
         noteDataChanges()
         guard hasPlayer else {
             timed(&scriptTime) { scripts.update(dt: Double(dt)) }
-            timed(&physicsTime) { simulateParts(dt: dt) }
+            timed(&physicsTime) {
+                stepCharacters(dt: dt)
+                simulateParts(dt: dt)
+            }
             updateSounds()
             return
         }
@@ -398,6 +414,7 @@ final class PlayController: ViewportSource, PlayerBridge {
         timed(&scriptTime) { scripts.update(dt: Double(dt)) }
         timed(&physicsTime) {
             simulate(dt: dt)
+            stepCharacters(dt: dt)
             simulateParts(dt: dt)
         }
         animator.update(dt: dt, state: humanoid.state, horizontalSpeed: character.horizontalSpeed,

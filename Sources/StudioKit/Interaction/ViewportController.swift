@@ -239,4 +239,17 @@ final class ViewportController: ViewportSource {
             model.parts[index].position.y = model.parts[index].size.y / 2
         }
     }
+
+    /// Insert › Rig: a character with a Humanoid, standing on the ground in front of the
+    /// camera and facing it, for scripts to walk (NPCSystem).
+    func insertRig() {
+        var feet = camera.target + camera.forward * 6
+        feet.y = 0
+        if model.snapEnabled {
+            feet.x = snapValue(feet.x, to: model.moveSnap)
+            feet.z = snapValue(feet.z, to: model.moveSnap)
+        }
+        let back = -camera.forward
+        model.addRig(at: feet, facing: atan2(-back.x, -back.z))
+    }
 }

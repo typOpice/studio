@@ -320,6 +320,10 @@ enum AdventureSelfTest {
         LANSelfTest.run([hosting, joining], seconds: 0.05)
         sam.key("E", pressed: false)
         LANSelfTest.run([hosting, joining], seconds: 1.2)
+        let postie = { (model: SceneModel) in model.parts.first { $0.name == "HumanoidRootPart" }?.position ?? .zero }
+        check("Postie Pat walks his round for both: the host's engine walks him, the joined player sees it",
+              simd_distance(postie(host.model), Vec3(4, 3.3, 32)) > 5
+              && simd_distance(postie(host.model), postie(sam.model)) < 2.5, "\(postie(host.model)) \(postie(sam.model))")
         check("a joined player talks to an NPC on their own screen",
               gui(sam, "Dialogue")?.visible == true && gui(sam, "Words")?.text.hasPrefix("Hi Sam") == true
               && gui(host, "Dialogue")?.visible == false, "\(String(describing: gui(sam, "Words")?.text))")

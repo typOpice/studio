@@ -328,6 +328,8 @@ struct DataObjectInspector: View {
                 }), supportsOpacity: false)
                 .labelsHidden()
             }
+        case .humanoid:
+            humanoidEditor
         case .objectValue:
             LabeledRow("Value") {
                 Text(object.text.isEmpty ? "nil (scripts set it)" : object.text)
@@ -339,8 +341,31 @@ struct DataObjectInspector: View {
         }
     }
 
+    /// Health, MaxHealth, WalkSpeed and JumpPower, and whether it turns to face where it walks.
+    @ViewBuilder private var humanoidEditor: some View {
+        let numbers: [(String, Double, WritableKeyPath<DataObject, Double>)] = [
+            ("Health", object.health, \.health), ("MaxHealth", object.maxHealth, \.maxHealth),
+            ("WalkSpeed", object.walkSpeed, \.walkSpeed), ("JumpPower", object.jumpPower, \.jumpPower)]
+        ForEach(numbers, id: \.0) { name, value, path in
+            HStack {
+                Text(name).font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                Spacer()
+                NumericField(label: "", tint: .clear, value: Float(value)) { value in
+                    model.commit("Set \(name)") { model.updateDataObject(id: object.id) { $0[keyPath: path] = Double(value) } }
+                }
+                .frame(width: 100)
+            }
+        }
+        Toggle("AutoRotate", isOn: Binding(get: { object.autoRotate }, set: { on in
+            model.commit("Set AutoRotate") { model.updateDataObject(id: object.id) { $0.autoRotate = on } }
+        }))
+        .toggleStyle(.checkbox)
+    }
+
     private var note: String {
         switch object.className {
+        case .humanoid:
+            return "Makes its Model a character the game walks: a script calls :MoveTo(position) and waits on .MoveToFinished, or :Move(direction), or sets .Jump. At no Health it fires .Died and falls apart. Insert › Rig makes a Model ready to walk."
         case .unreliableRemoteEvent:
             return "A RemoteEvent for things that can be missed now and then (Roblox may drop them; here every one arrives): :FireServer, :FireClient, :FireAllClients."
         case .bindableEvent:

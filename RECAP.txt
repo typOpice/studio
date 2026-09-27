@@ -412,6 +412,15 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    In the client, the Menu button (and the hosting or joined badge) is now in the bottom-right corner while playing, so it no longer covers a game's title at the top of the screen (Nightfall's "NIGHT 1" line).
    The big news banner in Adventure Island, Nightfall and Mega Obby now wraps onto a second line instead of cutting long messages off (Nightfall's welcome was cut short).
 
+40. NPCs that walk (Humanoids in Models), 2026-09-27.
+   A Model with a Humanoid in it is now a character the game walks: at its WalkSpeed, falling, stepping up kerbs, jumping, stopping at walls, arms and legs swinging.
+   Scripts steer it the Roblox way: humanoid:MoveTo(position) and MoveToFinished (true when there, false after eight seconds held up), Move(direction), Jump. It works with PathfindingService paths.
+   Health, MaxHealth, WalkSpeed, JumpPower and AutoRotate can be set in Properties or by scripts. TakeDamage and HealthChanged work, and at no health it fires Died once and falls apart.
+   In Studio: Insert > Rig (menu, ribbon and the Explorer's + menu) makes a ready-to-walk character. Right-click any Model > Add Object > Humanoid (or a Value) adds one. Humanoids and Values inside Models now show in the Explorer, and picking one opens the Model to show it.
+   Adventure Island has Postie Pat, who walks the village round with the post.
+   Tested alone and with a host and a joined player (the joined player sees the NPC walk and die, and their scripts hear Died).
+   New files: Play/NPCSystem.swift, Model/NPCRig.swift, Scripting/ScriptRuntime+NPC.swift, NPCSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

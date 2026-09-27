@@ -64,6 +64,7 @@ enum AdventureIsland {
             lighthouse()
             woods()
             npcs()
+            postie()
             gems()
             signs()
             chime()
@@ -488,6 +489,33 @@ enum AdventureIsland {
                 skin: rgb(220, 170, 120), hat: rgb(230, 210, 120), in: folder)
         }
 
+        /// Postie Pat: a Rig with a Humanoid (Insert › Rig in Studio), who walks the village
+        /// round with the post (PostRound) — the engine walking him, legs and all.
+        mutating func postie() {
+            var colours = NPCRig.Colours()
+            colours.torso = rgb(40, 80, 170)
+            colours.legs = rgb(40, 44, 60)
+            colours.head = rgb(230, 180, 130)
+            colours.arms = colours.head
+            // On the path from the plaza, facing the village (+Z).
+            let feet = Vec3(4, 0.3, 32)
+            var rig = NPCRig.make(name: "Postie Pat", at: feet, facing: .pi, colours: colours)
+            state.groups.append(rig.group)
+            state.parts += rig.parts
+            rig.humanoid.walkSpeed = 10
+            state.dataObjects.append(rig.humanoid)
+            part("Cap", feet + Vec3(0, 5.3, 0), Vec3(1.4, 0.35, 1.4), rgb(40, 80, 170), in: rig.group.id, collide: false)
+            part("Satchel", feet + Vec3(0, 2.9, -0.75), Vec3(1.4, 1.2, 0.5), rgb(150, 90, 50), material: .wood,
+                 in: rig.group.id, collide: false)
+            // A face, on the front of his head (+Z, the way he faces).
+            let ink = rgb(25, 25, 30)
+            for x in [Float(-0.22), 0.22] {
+                part("Eye", feet + Vec3(x, 4.75, 0.62), Vec3(0.16, 0.26, 0.06), ink, shape: .sphere, in: rig.group.id,
+                     collide: false)
+            }
+            part("Smile", feet + Vec3(0, 4.38, 0.62), Vec3(0.44, 0.08, 0.06), ink, in: rig.group.id, collide: false)
+        }
+
         mutating func gems() {
             let folder = group("Gems", kind: .folder)
             let spots = [Vec3(0, 2, -112), Vec3(-76, 21.5, 104), Vec3(94, 7, 102), Vec3(98, 39.8, -95),
@@ -563,6 +591,9 @@ enum AdventureIsland {
             if let obby = state.groups.first(where: { $0.name == "Obby" }) { script("ObbyScript", S.obby, in: obby.id) }
             if let lab = state.groups.first(where: { $0.name == "MirrorLab" }) { script("LabScript", S.lab, in: lab.id) }
             if let npcs = state.groups.first(where: { $0.name == "NPCs" }) { script("NPCBrain", S.npcBrain, in: npcs.id) }
+            if let postie = state.groups.first(where: { $0.name == "Postie Pat" }) {
+                script("PostRound", S.postRound, in: postie.id)
+            }
             script("Adventure", S.adventure, host: .starterPlayer)
         }
 

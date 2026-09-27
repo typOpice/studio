@@ -343,6 +343,15 @@ enum PanelSnapshot {
             let spawn = model.addDataObject(.vector3Value, in: .serverStorage)
             model.updateDataObject(id: spawn) { $0.name = "SpawnPoint"; _ = $0.setValue(.list([.number(0), .number(5), .number(20)])) }
             model.selectDataObject(round)
+        case "rig":
+            // Insert › Rig, its Humanoid picked: the Explorer opens the Rig to show it.
+            session.showWorld()
+            let rig = model.addRig(at: Vec3(0, 0, -4))
+            if let humanoid = model.dataObjects.first(where: { $0.className == .humanoid && $0.parent == .node(rig) }) {
+                model.updateDataObject(id: humanoid.id) { $0.walkSpeed = 12 }
+                model.selection = []
+                model.selectDataObject(humanoid.id)
+            }
         case "avatar":
             // StarterPlayer dressed: a top hat and suit for everyone, the hat opened up.
             session.showWorld()

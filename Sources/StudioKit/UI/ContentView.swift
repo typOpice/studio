@@ -304,6 +304,7 @@ struct RibbonView: View {
                 }
             }
             RibbonMeshButton(model: model, session: session)
+            RibbonButton(title: "Rig", icon: "figure.stand") { controller.insertRig() }
         }
 
         divider

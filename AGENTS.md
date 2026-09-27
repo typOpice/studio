@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2597 checks — THE test suite, ~60–110s
+swift run StudioApp --selftest       # 2626 checks — THE test suite, ~60–110s
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -152,6 +152,7 @@ listed in §9.
 | `EngineSelfTest.swift` | The engine over a long game, through the real audio engine rendered offline: nightfall's sounds (music stopped and started, a gong, then the first sound in a part, which once crashed the game), none knocking another off the mix, sound coming out; 200 sounds started and stopped, flat and in parts, all heard; a change of audio device (the engine started again, the music carrying on, new sounds in parts starting); Nightfall played into the night and its fighting through it, with no errors and nothing growing (parts, Sounds, Models, GUI, Luau's memory) |
 | `SceneIndexSelfTest.swift` | The scene index: 3000 random changes of every kind (parts and groups made, deleted, reparented through the array and through update(id:), moved, sent to storage and back, the parts replaced whole with the same count, shuffled, data objects and Sounds made and deleted, reparenting undone) with parts, groups, parents, children, data objects and Sounds all found as a search finds them; finding a part, a Model's pivot, moving a Model and a folder's children no dearer with 16 times the parts |
 | `SoakSelfTest.swift` | Each sample game played by `Soak.play`'s player (running, jumping, swinging, falling; the same moves every time) — Adventure Island and Mega Obby for 40 seconds, Nightfall for 60, night included: no script errors, and no parts, Models, Sounds, values, GUI objects, voices or Luau memory growing from the settled sample to the last; a host and a joined player in Nightfall for 50 seconds, both moving and fighting: no errors, and the joined player's parts and Sounds keeping the same distance from the host's (nothing the host has done with piling up) |
+| `NPCSelfTest.swift` | NPCs: Insert › Rig (the seven parts, a Humanoid, one undo step, standing on the spot, saved and reopened); MoveTo at the WalkSpeed, facing the way it goes with legs swinging, MoveDirection, WalkToPoint and the Running state, MoveToFinished(true) within a stud and standing on the ground; a wall stopping it and MoveToFinished(false) after eight seconds; a kerb stepped up, moved by a script (PivotTo) then walking off a ledge, Jump up and down; the README's PathfindingService example round a wall to a flag; TakeDamage and HealthChanged, MaxHealth lowering Health, Died once at no health, falling apart; Instance.new("Humanoid") in a script's Model walking at its own WalkSpeed, FindFirstChildOfClass, a wrong type refused; the player bumping into an NPC; Adventure Island's Postie Pat round, every stop reached; a host's NPC walking and dying in a joined player's game, their script hearing Died, the parts let go there too |
 | `FrameStatsSelfTest.swift` | The Stats service: frame, script and physics times (the frame the most, the scripts' work in it), memory, the service being itself, parts and instances; no drawing time until something draws, then counted in the frame; the HUD's three lines showing the frame, drawing, scripts, physics, memory and the right part count; a version-2 place given them once under its numbers, one with its numbers deleted not; a joined player's numbers being their own machine's |
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
@@ -314,7 +315,14 @@ Sources/StudioKit/
                                    on the machine running the scene's scripts only
   Model/DataStores.swift           DataStoreFiles (what DataStores keep, a folder per place),
                                    `UUID(stableFrom:)`, `ensurePlaceID`
-  Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them
+  Model/DataObjects.swift          DataObject, DataClass, DataParent, and editing them; a
+                                   Humanoid's numbers
+  Play/NPCSystem.swift           NPCs: a body (CharacterController) per Humanoid in a Workspace
+                                 Model; MoveTo, Move, Jump; the parts placed round its root
+                                 with limbs swinging; teleports noticed; falling apart
+  Model/NPCRig.swift             Insert › Rig: the R6 Model with a Humanoid (`NPCRig.make`,
+                                 `SceneModel.addRig`)
+  Scripting/ScriptRuntime+NPC.swift  `npc.*`: a Humanoid's numbers, state, and steering it
   Model/PlaceTemplates.swift       the home page's templates (Baseplate, Obby and its script,
                                    Starter Scene, Empty, Adventure Island) and `loadTemplate`
   Render/PlaceThumbnail.swift      pictures of places, drawn off screen by one shared renderer,
@@ -1447,6 +1455,22 @@ Roughly ordered by how much time they will cost you.
     (`stats.get`). The HUD's three lines are version 3 of `DefaultHud`
     (`makeFrameStats`, the **FrameStats** LocalScript in the Stats frame). Upgrading a
     version-2 place adds them only if its Stats frame is still there and has none.
+
+116. **NPCs are walked by the host's engine, and a Humanoid's numbers are data.**
+    A Humanoid is a `DataObject` (`.humanoid`) inside a Model, its Health, MaxHealth,
+    WalkSpeed, JumpPower and AutoRotate in `numbers`, and `value` a list of them. So
+    saving, cloning, sending to joined players and `DataChanged` (which Luau turns into
+    HealthChanged and Died, `dataKit.humanoid.changed`) all come free. `NPCSystem`
+    (PlayController's `npcs`, stepped only when `!worldFromHost`) gives each living one a
+    `CharacterController` and moves the Model's parts from its rest poses round an
+    upright root. Joined players only ever see parts move. Keep to these rules:
+    - Steering host calls (`npc.moveTo/move/jump`) are refused off the host.
+    - MoveToFinished comes back as an engine event (`["NPC", id, "MoveToFinished",
+      reached]`), not a data change.
+    - A script moving the root (PivotTo) is noticed by comparing with `placed`. Keep
+      that when changing `place`.
+    - A body skips putting its parts while nothing moved (`lastPut`), since each change
+      is sent to every joined player.
 
 114. **`SoakSelfTest` plays every sample game for a while, and fails on growth.** It uses
     `Soak.play` — the same player as `--soak`, with a seeded generator so every run

@@ -207,6 +207,8 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         add(to: insertMenu, "Wedge", #selector(insertWedge), "4", modifiers: [.command, .shift])
         add(to: insertMenu, "Truss", #selector(insertTruss), "")
         add(to: insertMenu, "MeshPart from 3D Model…", #selector(insertMeshPart), "")
+        insertMenu.addItem(.separator())
+        add(to: insertMenu, "Rig (a character with a Humanoid)", #selector(insertRig), "")
         insertItem.submenu = insertMenu
         mainMenu.addItem(insertItem)
 
@@ -408,6 +410,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
     @objc private func insertSphere() { session.viewport.insertPart(shape: .sphere, atScreenPoint: nil) }
     @objc private func insertCylinder() { session.viewport.insertPart(shape: .cylinder, atScreenPoint: nil) }
     @objc private func insertWedge() { session.viewport.insertPart(shape: .wedge, atScreenPoint: nil) }
+    @objc private func insertRig() { session.viewport.insertRig() }
     @objc private func insertTruss() { session.viewport.insertPart(shape: .truss, atScreenPoint: nil) }
     @objc private func insertMeshPart() {
         guard !session.isPlaying else { return }

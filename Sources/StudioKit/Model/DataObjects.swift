@@ -17,6 +17,8 @@ enum DataClass: String, Codable, CaseIterable, Identifiable {
     case remoteFunction = "RemoteFunction"
     case bindableEvent = "BindableEvent"
     case bindableFunction = "BindableFunction"
+    /// In a Model: makes it a character the engine walks (NPCSystem), with health.
+    case humanoid = "Humanoid"
 
     var id: String { rawValue }
     var isValue: Bool {
@@ -48,6 +50,7 @@ enum DataClass: String, Codable, CaseIterable, Identifiable {
         case .remoteFunction: return "arrow.left.arrow.right"
         case .bindableEvent: return "bolt"
         case .bindableFunction: return "function"
+        case .humanoid: return "figure.stand"
         }
     }
 }
@@ -138,6 +141,8 @@ struct DataObject: Codable, Equatable, Identifiable {
             let values = numbers.count == count ? numbers
                 : className == .cframeValue ? [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1] : Array(repeating: 0, count: count)
             return .list(values.map { .number($0) })
+        // A Humanoid's numbers, so any change to them is noticed (noteDataChanges).
+        case .humanoid: return .list(humanoidNumbers.map { .number($0) })
         default: return .nothing
         }
     }
@@ -250,5 +255,53 @@ extension SceneModel {
 
     func selectDataObject(_ id: UUID?) {
         selectedDataObject = id
+    }
+}
+
+// MARK: - Humanoids
+
+extension DataObject {
+    /// A Humanoid's numbers, kept in `numbers`: Health, MaxHealth, WalkSpeed, JumpPower,
+    /// AutoRotate (1 or 0) — saved with the place and sent to joined players like any
+    /// value's.
+    static let humanoidDefaults: [Double] = [100, 100, 16, 50, 1]
+
+    static func humanoid(named name: String = "Humanoid", in parent: DataParent = .none) -> DataObject {
+        var object = DataObject(name: name, className: .humanoid, parent: parent)
+        object.numbers = humanoidDefaults
+        return object
+    }
+
+    var humanoidNumbers: [Double] { numbers.count == Self.humanoidDefaults.count ? numbers : Self.humanoidDefaults }
+
+    private func humanoidNumber(_ index: Int) -> Double { humanoidNumbers[index] }
+    private mutating func setHumanoidNumber(_ index: Int, _ value: Double) {
+        var values = humanoidNumbers
+        values[index] = value
+        numbers = values
+    }
+
+    var health: Double {
+        get { humanoidNumber(0) }
+        set { setHumanoidNumber(0, min(max(newValue, 0), maxHealth)) }
+    }
+    var maxHealth: Double {
+        get { humanoidNumber(1) }
+        set {
+            setHumanoidNumber(1, max(newValue, 0))
+            if health > max(newValue, 0) { setHumanoidNumber(0, max(newValue, 0)) }
+        }
+    }
+    var walkSpeed: Double {
+        get { humanoidNumber(2) }
+        set { setHumanoidNumber(2, max(newValue, 0)) }
+    }
+    var jumpPower: Double {
+        get { humanoidNumber(3) }
+        set { setHumanoidNumber(3, max(newValue, 0)) }
+    }
+    var autoRotate: Bool {
+        get { humanoidNumber(4) != 0 }
+        set { setHumanoidNumber(4, newValue ? 1 : 0) }
     }
 }

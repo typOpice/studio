@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2597 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2626 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -59,7 +59,7 @@ scene), the Luau, Wren and Metal lexers and completion engines, script-editor ca
 and input handling, the render loop, surface and full-screen shaders (rendered on
 the GPU and read back), collision, the player camera and the character controller,
 the screen GUI and chat, pictures and sounds (through a recorder, so nothing plays
-aloud), MeshParts and their collision, what characters wear, modules, remotes, raycasts and leaderstats, the sample game, and two clients playing together over loopback.
+aloud), MeshParts and their collision, what characters wear, modules, remotes, raycasts and leaderstats, NPCs, the sample game, and two clients playing together over loopback.
 
 `--only <suite>` runs one suite (Adventure, Remotes, Wardrobe, Mesh, Audio, Hud, LAN,
 Gui, Player or Script) while you work on it; the whole suite still has to pass.
@@ -108,6 +108,7 @@ Five gems are hidden around the island (they come back after 30 seconds). Gems a
 Wins show on the leaderboard, and are saved with your rewards for next time (see
 [DataStores](#saving-progress-datastores)). Eight people live there; walk up to one and press **E**
 to talk, then **1**, **2** or **3** to answer. They turn to face you as you pass.
+Postie Pat walks the village round with the post, stopping at each door.
 
 How it's made, script by script:
 
@@ -117,6 +118,8 @@ How it's made, script by script:
   RemoteFunction), rewards worn again after respawning (a BindableEvent from the obby).
 - **ObbyScript**, **LabScript**, **NPCBrain** and **Ambience**: the obstacles, the lever
   (it sets `Lighting.Technology`), NPCs turning, and everything that bobs or spins.
+- **PostRound** (inside Postie Pat, a Rig with a Humanoid): his walk, one
+  `Humanoid:MoveTo` and `MoveToFinished:Wait()` per stop. See [NPCs](#npcs-a-model-with-a-humanoid).
 - **Adventure** (a LocalScript in StarterPlayer): the talk prompt and dialogue panel,
   news banners (a RemoteEvent), name tags and signs (BillboardGuis), and the screen
   effect for the area you're in.
@@ -1454,6 +1457,51 @@ end
 
 Nightfall's zombies use it: when a wall or a house is between a zombie and whoever
 it's after, it follows a path round, worked out again every second or so.
+
+### NPCs: a Model with a Humanoid
+
+Put a **Humanoid** in a Model and the game walks it, as it does the player. It walks at
+its `WalkSpeed`, falls, steps up kerbs, jumps and stops at walls. Its arms and legs swing
+as it goes. **Insert › Rig** (on the ribbon too) makes one ready to walk: a Model of
+Head, Torso, arms, legs and an invisible HumanoidRootPart, with a Humanoid. To make any
+other Model walk, right-click it in the Explorer and choose **Add Object › Humanoid**. A
+script can do the same with `Instance.new("Humanoid", model)`.
+
+A script steers it through its Humanoid:
+
+- `humanoid:MoveTo(position)`, then `humanoid.MoveToFinished` fires with `true` when
+  it's within a stud of the spot. It fires with `false` if something held it up for
+  eight seconds.
+- `humanoid:Move(direction)` walks it one way until told otherwise.
+- `humanoid.Jump = true` makes it jump.
+- It reads `MoveDirection`, `WalkToPoint`, `RootPart` and `GetState()`.
+
+`Health`, `MaxHealth`, `WalkSpeed`, `JumpPower` and `AutoRotate` are set in Properties or
+by scripts. `TakeDamage(amount)` hurts it, firing `HealthChanged`. At no health it fires
+`Died` (once), and its parts are let go to fall. Moving it with `PivotTo` puts it there,
+and it walks on from where it lands.
+
+Only the host walks NPCs: joined players see the parts move, and hear `HealthChanged`
+and `Died` too.
+
+```lua
+-- A Script: the Rig walks round the wall to the Flag, then keeps going.
+local PathfindingService = game:GetService("PathfindingService")
+local rig = workspace.Rig
+local humanoid = rig.Humanoid
+
+local path = PathfindingService:CreatePath({ AgentRadius = 2, AgentCanJump = true })
+path:ComputeAsync(rig.HumanoidRootPart.Position, workspace.Flag.Position)
+if path.Status == Enum.PathStatus.Success then
+	for _, waypoint in path:GetWaypoints() do
+		if waypoint.Action == Enum.PathWaypointAction.Jump then
+			humanoid.Jump = true
+		end
+		humanoid:MoveTo(waypoint.Position)
+		humanoid.MoveToFinished:Wait()
+	end
+end
+```
 
 ## Wren, the second language
 

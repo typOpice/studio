@@ -218,6 +218,12 @@ do
 			return dataKit.wrapPlace(invoke("data.get", id, "parent"))
 		elseif key == "Value" and dataKit.valueKinds[class] then
 			return dataKit.readValue(id, class)
+		elseif class == "Humanoid" and dataKit.humanoid.readable[key] then
+			return dataKit.humanoid.read(id, key)
+		elseif class == "Humanoid" and dataKit.humanoid.events[key] then
+			return dataKit.humanoid.signal(id, key)
+		elseif class == "Humanoid" and dataKit.humanoid.methods[key] then
+			return dataKit.humanoid.methods[key]
 		elseif key == "Changed" then
 			return dataKit.signalsOf(id).Changed
 		elseif (class == "RemoteEvent" or class == "UnreliableRemoteEvent")
@@ -252,6 +258,8 @@ do
 		if key == "Name" then
 			expect(value, "string", "Name")
 			invoke("data.set", id, "name", value)
+		elseif class == "Humanoid" and dataKit.humanoid.writable[key] then
+			dataKit.humanoid.write(id, key, value)
 		elseif key == "Value" and dataKit.valueKinds[class] then
 			local kind = dataKit.valueKinds[class]
 			local ok = typeof(value) == kind or (class == "StringValue" and type(value) == "number")
@@ -305,12 +313,127 @@ do
 
 	dataKit.Meta.__metatable = LOCKED
 
+	-- A Humanoid in a Model: the engine walks the Model (NPCSystem, `npc.*`). Its numbers
+	-- are the data object's; its events are HealthChanged and Died (from the numbers
+	-- changing, on every machine) and MoveToFinished (from the engine).
+	dataKit.humanoid = {
+		numbers = { Health = "health", MaxHealth = "maxhealth", WalkSpeed = "walkspeed", JumpPower = "jumppower" },
+		events = { Died = true, HealthChanged = true, MoveToFinished = true, Running = true, StateChanged = true },
+		lastHealth = {},
+		dead = {},
+	}
+	dataKit.humanoid.readable = { Health = true, MaxHealth = true, WalkSpeed = true, JumpPower = true, AutoRotate = true,
+		MoveDirection = true, WalkToPoint = true, RootPart = true, Jump = true, DisplayName = true }
+	dataKit.humanoid.writable = { Health = true, MaxHealth = true, WalkSpeed = true, JumpPower = true, AutoRotate = true,
+		Jump = true }
+
+	function dataKit.humanoid.signal(id, name)
+		local signals = dataKit.signalsOf(id)
+		signals[name] = signals[name] or makeSignal()
+		return signals[name]
+	end
+
+	function dataKit.humanoid.read(id, key)
+		local number = dataKit.humanoid.numbers[key]
+		if number ~= nil then
+			return invoke("npc.get", id, number)
+		elseif key == "AutoRotate" then
+			return invoke("npc.get", id, "autorotate")
+		elseif key == "MoveDirection" or key == "WalkToPoint" then
+			return toVector(invoke("npc.get", id, string.lower(key)))
+		elseif key == "RootPart" then
+			local token = invoke("npc.get", id, "rootpart")
+			return if token ~= nil then wrapToken(token) else nil
+		elseif key == "DisplayName" then
+			return invoke("data.get", id, "name")
+		end
+		return false
+	end
+
+	function dataKit.humanoid.write(id, key, value)
+		if key == "Jump" then
+			expect(value, "boolean", "Jump")
+			if value then
+				invoke("npc.jump", id)
+			end
+			return
+		end
+		expect(value, if key == "AutoRotate" then "boolean" else "number", key)
+		invoke("npc.set", id, string.lower(key), value)
+	end
+
+	-- Its numbers changed: HealthChanged if the health did, Died the first time it's gone.
+	function dataKit.humanoid.changed(id)
+		local health = invoke("npc.get", id, "health")
+		if health == nil then
+			return
+		end
+		local kit = dataKit.humanoid
+		if kit.lastHealth[id] ~= health then
+			kit.lastHealth[id] = health
+			fire(kit.signal(id, "HealthChanged"), health)
+		end
+		if health <= 0 and not kit.dead[id] then
+			kit.dead[id] = true
+			fire(kit.signal(id, "Died"))
+		elseif health > 0 then
+			kit.dead[id] = nil
+		end
+	end
+
+	local function humanoidOf(self, method)
+		local id = dataKit.idOf[self]
+		if id == nil or dataClass(id) ~= "Humanoid" then
+			raise(string.format("Expected ':' not '.' calling member function %s", method), 3)
+		end
+		return id
+	end
+
+	dataKit.humanoid.methods = {
+		MoveTo = function(self, position, part)
+			local id = humanoidOf(self, "MoveTo")
+			if typeof(position) ~= "Vector3" then
+				raise("MoveTo expects a Vector3", 2)
+			end
+			-- With a part, a point relative to it, where it is now.
+			if part ~= nil and partIdOf[part] then
+				position = part.Position + position
+			end
+			invoke("npc.moveTo", id, { position[1], position[2], position[3] })
+		end,
+		Move = function(self, direction)
+			local id = humanoidOf(self, "Move")
+			if typeof(direction) ~= "Vector3" then
+				raise("Move expects a Vector3", 2)
+			end
+			invoke("npc.move", id, { direction[1], direction[2], direction[3] })
+		end,
+		TakeDamage = function(self, amount)
+			local id = humanoidOf(self, "TakeDamage")
+			if type(amount) ~= "number" then
+				raise("TakeDamage expects a number", 2)
+			end
+			invoke("npc.damage", id, amount)
+		end,
+		GetState = function(self)
+			return Enum.HumanoidStateType[invoke("npc.get", humanoidOf(self, "GetState"), "state")]
+		end,
+		ChangeState = function(self, state)
+			local id = humanoidOf(self, "ChangeState")
+			if state == Enum.HumanoidStateType.Dead then
+				invoke("npc.set", id, "health", 0)
+			elseif state == Enum.HumanoidStateType.Jumping then
+				invoke("npc.jump", id)
+			end
+		end,
+	}
+
 	-- Instance.new for the Values and remotes (a Folder is made in the Workspace tree,
 	-- and becomes a data Folder if it goes where only one can).
 	dataKit.classes = { IntValue = true, NumberValue = true, StringValue = true, BoolValue = true,
 		ObjectValue = true, Vector3Value = true, Color3Value = true, CFrameValue = true,
 		RemoteEvent = true, UnreliableRemoteEvent = true, RemoteFunction = true,
-		BindableEvent = true, BindableFunction = true }
+		BindableEvent = true, BindableFunction = true, Humanoid = true }
 
 	function dataKit.new(className, parent)
 		local object = dataKit.wrap(invoke("data.create", className))
@@ -696,6 +819,15 @@ do
 	-- The host's events for remotes and Values, from part 13's dispatch.
 	function dataKit.dispatch(event)
 		local kind = event[1]
+		if kind == "NPC" then
+			-- ["NPC", humanoid, "MoveToFinished", reached]
+			fire(dataKit.humanoid.signal(event[2], event[3]), event[4])
+			return
+		end
+		if kind == "DataChanged" and dataClass(event[2]) == "Humanoid" then
+			dataKit.humanoid.changed(event[2])
+			return
+		end
 		if kind == "DataChanged" then
 			local id = event[2]
 			local signals = dataKit.signals[id]
