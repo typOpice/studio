@@ -55,7 +55,15 @@ int invokeTrampoline(lua_State *L) {
     }
     lua_State *previous = self->current;
     self->current = L;
+    // The engine's work for the script (building a path grid, say) isn't the script's
+    // own time: the watchdog's deadline moves on by however long the call took. A loop
+    // in the script still runs out of time, since the deadline only moves once the call
+    // is back.
+    auto started = std::chrono::steady_clock::now();
     int results = self->invoke(self->context, opaque(self), lua_gettop(L));
+    if (self->timing) {
+        self->deadline += std::chrono::steady_clock::now() - started;
+    }
     self->current = previous;
     return results;
 }

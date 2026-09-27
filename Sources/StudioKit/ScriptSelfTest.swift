@@ -641,6 +641,34 @@ enum ScriptSelfTest {
         check("frames keep coming for the other handlers",
               handler.parts[1].position.x >= 2, "\(handler.parts[1].position)")
         check("the frame loop itself survives", !looping.runtime.updateHookFailed)
+
+        // The engine's work for a script — a slow host call, like a big map's path grid
+        // being built — isn't the script's time; a loop straight after one still is.
+        let slow = scene()
+        add(slow, """
+        local Stats = game:GetService("Stats")
+        local total = 0
+        for _ = 1, 4 do
+        \ttotal += Stats.HeartbeatTimeMs
+        end
+        print("patient", total)
+        """, name: "Patient")
+        add(slow, """
+        local _ = game:GetService("Stats").HeartbeatTimeMs
+        while true do end
+        """, name: "StillStopped")
+        let stalling: (ScriptRuntime) -> Void = { runtime in
+            runtime.timeout = 0.15
+            runtime.statsSource = {
+                Thread.sleep(forTimeInterval: 0.1)
+                return .list([.number(1), .number(0), .number(0), .number(0), .number(0), .number(0), .number(0)])
+            }
+        }
+        let waited = execute(slow, prepare: stalling)
+        check("host calls taking longer than the watchdog's time between them don't get a script stopped",
+              waited.output == ["patient 4"], "\(waited.output) \(waited.errors)")
+        check("…while a loop after one still is", waited.errors.filter { $0.contains("ran for too long") }.count == 1
+              && waited.errors.contains { $0.hasPrefix("StillStopped:") }, "\(waited.errors)")
     }
 
     private static func testSandbox(_ check: Checker) {

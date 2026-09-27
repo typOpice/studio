@@ -116,7 +116,7 @@ listed in §9.
 | `AnimationSelfTest.swift` | Animation keys, sampling and easing, saving/undo, track playback (fades, loops, markers), priority layering, the editor (snapping, posing, picking, preview), the Luau AnimationTrack API |
 | `AvatarSelfTest.swift` | Avatar meshes (size, face placement), body layout and facing, walk/jump/fall/fly/dead animations, blending |
 | `PlayerSelfTest.swift` | Humanoid, default ControlScript/Health, respawn and scopes, player Luau API, StarterPlayer saving; a tap of Space is one jump, holding repeats, jump pads work; the first character isn't re-announced |
-| `ScriptSelfTest.swift` | **Luau**: the library, scheduler (task: defer in the same frame and nested, a runaway defer, cancel on waits/defers/events and its refusals, argument errors, the deprecated wait/spawn/delay, synchronize), watchdog, sandbox, errors; both languages together |
+| `ScriptSelfTest.swift` | **Luau**: the library, scheduler (task: defer in the same frame and nested, a runaway defer, cancel on waits/defers/events and its refusals, argument errors, the deprecated wait/spawn/delay, synchronize), watchdog (slow host calls not counted, a loop after one still stopped), sandbox, errors; both languages together |
 | `WrenScriptSelfTest.swift` | **Wren**: the VM, `studio` module, host bridge |
 | `WrenMathSelfTest.swift` | Wren's `math` module, through the real VM |
 | `ShaderSelfTest.swift` | Surface shaders: generated Metal, error line mapping, compile pipeline |
@@ -1699,8 +1699,10 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   multiplayer test; a scene script that needs `Players.LocalPlayer` gets nil there, as
   on a Roblox server.
 - **Wren has no watchdog.** An endless loop in a Wren script hangs the app; Luau's is
-  stopped after `ScriptRuntime.timeout` (2s). Wren offers no interrupt hook to build
-  one from.
+  stopped after `ScriptRuntime.timeout` (2s) of its own time. Host calls don't count:
+  the shim's `invokeTrampoline` moves the deadline on by each call's length, so the
+  engine's work for a script (a big map's path grid) can't get it stopped. Wren offers
+  no interrupt hook to build one from.
 - **Luau type annotations are parsed, not checked** — `Analysis` (the type checker) is
   not vendored.
 - **Scripts in different languages cannot call each other**; they share the scene only.
