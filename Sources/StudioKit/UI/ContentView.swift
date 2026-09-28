@@ -391,11 +391,16 @@ struct RibbonView: View {
 
         divider
 
-        // A push on the selected part (Align Position and No Collision are join tools).
+        // A push or a twist on the selected part (the Align tools, Motor6D and No
+        // Collision are join tools).
         group("Forces") {
             RibbonButton(title: "VectorForce", icon: SceneConstraint.Kind.vectorForce.symbolName,
                          enabled: model.selectedParts.count == 1) {
                 if let part = model.selectedParts.first { model.addVectorForce(to: part.id) }
+            }
+            RibbonButton(title: "Torque", icon: SceneConstraint.Kind.torque.symbolName,
+                         enabled: model.selectedParts.count == 1) {
+                if let part = model.selectedParts.first { model.addTorque(to: part.id) }
             }
         }
 

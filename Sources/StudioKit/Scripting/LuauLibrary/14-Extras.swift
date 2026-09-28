@@ -822,7 +822,10 @@ do
 	}
 
 	-- The enums properties here (and Beams' and Trails') take.
-	emitterKit.enums = { NormalId = true, TextureMode = true, PositionAlignmentMode = true, ActuatorRelativeTo = true }
+	emitterKit.enums = {
+		NormalId = true, TextureMode = true, PositionAlignmentMode = true, ActuatorRelativeTo = true,
+		OrientationAlignmentMode = true,
+	}
 
 	-- A property's value as the host holds it, and back. Beams and Trails use these too.
 	function emitterKit.read(kind, raw)

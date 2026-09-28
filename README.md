@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2861 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2897 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -637,6 +637,46 @@ while true do
 	task.wait(4)
 	align.Position = low
 	task.wait(4)
+end
+```
+
+### Turning: Motor6D, AlignOrientation and Torque
+
+- **Motor6D** holds Part1 to Part0 the way a rig's joints do: at `C0` on Part0 and `C1`
+  on Part1, turned by `Transform` and by `CurrentAngle` about C0's Z axis.
+  `CurrentAngle` heads for `DesiredAngle`, at most `MaxVelocity` radians a frame, so a
+  script sets `DesiredAngle` and the joint swings there — doors, windmills, turrets.
+  Use the **Motor6D** tool: click the part that stays, then the part that turns (it
+  turns about its own middle). An anchored Part0 holds still; two unanchored parts move
+  together.
+- **AlignOrientation** turns Attachment0's part to face as Attachment1 does, or as its
+  `CFrame` says when `Mode` is `OneAttachment`. `MaxTorque`, `MaxAngularVelocity`,
+  `Responsiveness` and `RigidityEnabled` work as AlignPosition's do; `PrimaryAxisOnly`
+  lines up the attachment's Axis alone. Use the **Align Orientation** tool.
+- **Torque** twists its part all the time, about the world's axes or its attachment's
+  (`RelativeTo`). **Torque** on the Physics tab adds one that turns the part where it
+  rests.
+
+```lua
+-- A Script: a windmill's sail turning a quarter at a time, and a vane that turns with it.
+local turn = Instance.new("Motor6D")
+turn.Part0 = workspace.Hub
+turn.Part1 = workspace.Sail
+turn.C1 = CFrame.new(-4, 0, 0) -- the hub is 4 studs along the sail from its middle
+turn.MaxVelocity = 0.05
+turn.Parent = workspace.Hub
+
+local vane = workspace.Vane
+local face = Instance.new("AlignOrientation")
+face.Attachment0 = Instance.new("Attachment", vane)
+face.Mode = Enum.OrientationAlignmentMode.OneAttachment
+face.MaxTorque = 1e6
+face.Parent = vane
+
+while true do
+	turn.DesiredAngle += math.pi / 2
+	face.CFrame = CFrame.Angles(0, turn.DesiredAngle, 0)
+	task.wait(2)
 end
 ```
 

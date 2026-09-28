@@ -650,7 +650,27 @@ constraintKit.constraintMembers = {
 		Force = { "force", "Vector3", "force" }, RelativeTo = { "relativeto", "ActuatorRelativeTo", "force" },
 		ApplyAtCenterOfMass = { "applyatcenterofmass", "boolean", "force" },
 	},
+	AlignOrientation = {
+		Attachment0 = "attachment", Attachment1 = "attachment", Enabled = "bool", Active = "read",
+		Mode = { "mode", "OrientationAlignmentMode", "force" }, CFrame = { "cframe", "CFrame", "force" },
+		MaxTorque = { "maxtorque", "number", "force" }, MaxAngularVelocity = { "maxangularvelocity", "number", "force" },
+		Responsiveness = { "responsiveness", "number", "force" },
+		RigidityEnabled = { "rigidityenabled", "boolean", "force" },
+		PrimaryAxisOnly = { "primaryaxisonly", "boolean", "force" },
+	},
+	Torque = {
+		Attachment0 = "attachment", Attachment1 = "attachment", Enabled = "bool", Active = "read",
+		Torque = { "torque", "Vector3", "force" }, RelativeTo = { "relativeto", "ActuatorRelativeTo", "force" },
+	},
 	NoCollisionConstraint = { Part0 = "part", Part1 = "part", Enabled = "bool", Active = "read" },
+	-- A joint, not a Constraint: Part1 held to Part0 at C0 · Transform · (CurrentAngle
+	-- about Z) · C1⁻¹. CurrentAngle is read from the physics as it turns.
+	Motor6D = {
+		Part0 = "part", Part1 = "part", Enabled = "bool", Active = "read",
+		C0 = { "c0", "CFrame", "force" }, C1 = { "c1", "CFrame", "force" },
+		Transform = { "transform", "CFrame", "force" }, CurrentAngle = { "currentangle", "number", "force" },
+		DesiredAngle = { "desiredangle", "number", "force" }, MaxVelocity = { "maxvelocity", "number", "force" },
+	},
 	-- Beams and Trails: drawn, not joints. A table is a look (Ribbons.swift): its host
 	-- name and type, converted as a ParticleEmitter's are.
 	Beam = {
@@ -719,6 +739,9 @@ function constraintKit.constraintMethods.IsA(self, className)
 	if className == kind or className == "Instance" then
 		return true
 	end
+	if kind == "Motor6D" then
+		return className == "JointInstance"
+	end
 	-- Roblox's joints all descend from Constraint; a weld, a Beam and a Trail do not.
 	return className == "Constraint" and kind ~= "WeldConstraint" and kind ~= "Beam" and kind ~= "Trail"
 end
@@ -737,6 +760,10 @@ constraintKit.ConstraintMeta.__index = function(object, key)
 	local kind = constraintKit.constraintKind(id)
 	local members = constraintKit.constraintMembers[kind]
 	local member = members[key]
+	if key == "CurrentAngle" and kind == "Motor6D" then
+		-- Where the physics has it, as it turns.
+		return invoke("physics.joint", id)
+	end
 	if type(member) == "table" then
 		return emitterKit.read(member[2], invoke((member[3] or "ribbon") .. ".get", id, member[1]))
 	elseif member == "number" then

@@ -1289,11 +1289,29 @@ final class Renderer: NSObject, MTKViewDelegate {
                 continue
             }
             switch constraint.kind {
-            case .weld, .noCollision:
+            case .weld, .noCollision, .motor6d:
                 guard let a = constraint.part0.flatMap({ model.part(id: $0) }),
                       let b = constraint.part1.flatMap({ model.part(id: $0) }) else { continue }
-                rod(from: a.position, to: b.position, thickness: selected ? 0.16 : 0.1,
-                    colour: constraint.kind == .weld ? Vec4(0.45, 0.85, 0.95, fade) : Vec4(0.95, 0.45, 0.45, fade))
+                let colour = constraint.kind == .weld ? Vec4(0.45, 0.85, 0.95, fade)
+                    : constraint.kind == .motor6d ? Vec4(0.78, 0.55, 0.98, fade) : Vec4(0.95, 0.45, 0.45, fade)
+                rod(from: a.position, to: b.position, thickness: selected ? 0.16 : 0.1, colour: colour)
+                if constraint.kind == .motor6d {
+                    // Where it turns, and about which way.
+                    let pivot = a.pose.applying(constraint.c0)
+                    let axis = pivot.orientation.act(Vec3(0, 0, 1)) * 1.6
+                    rod(from: pivot.position - axis, to: pivot.position + axis, thickness: 0.07, colour: colour)
+                }
+            case .torque:
+                // About which way it twists (in the world, as it is now).
+                guard let a0 = constraint.attachment0.flatMap({ model.attachment(id: $0) }),
+                      let f0 = model.worldFrame(of: a0), simd_length(constraint.torque) > 0 else { continue }
+                var twist = simd_normalize(constraint.torque)
+                if constraint.relativeTo == .attachment0 {
+                    twist = simd_quatf(float3x3(f0.axis, f0.secondary, simd_cross(f0.axis, f0.secondary))).act(twist)
+                }
+                let colour = Vec4(0.55, 0.95, 0.55, fade)
+                rod(from: f0.position - twist * 2, to: f0.position + twist * 2, thickness: selected ? 0.14 : 0.09, colour: colour)
+                blob(at: f0.position + twist * 2, size: 0.35, colour: colour)
             case .vectorForce:
                 // Where it pushes from, and which way (in the world, as it is now).
                 guard let a0 = constraint.attachment0.flatMap({ model.attachment(id: $0) }),

@@ -56,6 +56,7 @@ enum LuauAPI {
             property("MouseBehavior", "Enum.MouseBehavior"), property("NormalId", "Enum.NormalId"),
             property("TextureMode", "Enum.TextureMode"),
             property("PositionAlignmentMode", "Enum.PositionAlignmentMode"),
+            property("OrientationAlignmentMode", "Enum.OrientationAlignmentMode"),
             property("ActuatorRelativeTo", "Enum.ActuatorRelativeTo")
         ],
         "Enum.Material": enumItems(["Plastic", "SmoothPlastic", "Metal", "Neon", "Wood", "Water", "Air", "Grass",
@@ -80,6 +81,7 @@ enum LuauAPI {
         "Enum.NormalId": enumItems(["Right", "Top", "Back", "Left", "Bottom", "Front"]),
         "Enum.TextureMode": enumItems(["Stretch", "Wrap"]),
         "Enum.PositionAlignmentMode": enumItems(["OneAttachment", "TwoAttachment"]),
+        "Enum.OrientationAlignmentMode": enumItems(["OneAttachment", "TwoAttachment"]),
         "Enum.ActuatorRelativeTo": enumItems(["Attachment0", "Attachment1", "World"]),
         "task": [
             method("wait", "seconds", "number"), method("spawn", "callback, ...", "thread"),
@@ -586,6 +588,27 @@ enum LuauAPI {
             property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
             property("Active", "boolean"), property("Attachment0", "Attachment"), property("Attachment1", "Attachment"),
             property("Force", "Vector3"), property("RelativeTo", "EnumItem"), property("ApplyAtCenterOfMass", "boolean"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "AlignOrientation": [
+            property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
+            property("Active", "boolean"), property("Attachment0", "Attachment"), property("Attachment1", "Attachment"),
+            property("Mode", "EnumItem"), property("CFrame", "CFrame"), property("MaxTorque", "number"),
+            property("MaxAngularVelocity", "number"), property("Responsiveness", "number"),
+            property("RigidityEnabled", "boolean"), property("PrimaryAxisOnly", "boolean"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "Torque": [
+            property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
+            property("Active", "boolean"), property("Attachment0", "Attachment"), property("Attachment1", "Attachment"),
+            property("Torque", "Vector3"), property("RelativeTo", "EnumItem"),
+            method("Destroy", "", "()"), method("IsA", "className", "boolean")
+        ],
+        "Motor6D": [
+            property("Name", "string"), property("Parent", "Instance"), property("Enabled", "boolean"),
+            property("Active", "boolean"), property("Part0", "Part"), property("Part1", "Part"),
+            property("C0", "CFrame"), property("C1", "CFrame"), property("Transform", "CFrame"),
+            property("CurrentAngle", "number"), property("DesiredAngle", "number"), property("MaxVelocity", "number"),
             method("Destroy", "", "()"), method("IsA", "className", "boolean")
         ],
         "NoCollisionConstraint": [

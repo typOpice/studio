@@ -566,6 +566,82 @@ struct ConstraintInspector: View {
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.textDim)
                         .fixedSize(horizontal: false, vertical: true)
+                case .alignOrientation:
+                    LabeledRow("Mode") {
+                        Picker("", selection: Binding(get: { constraint.alignMode }, set: { value in
+                            model.commit("Set Mode") { model.updateConstraint(id: constraint.id) { $0.alignMode = value } }
+                        })) {
+                            ForEach(AlignMode.allCases) { Text($0 == .oneAttachment ? "One" : "Two").tag($0) }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                    }
+                    if constraint.alignMode == .oneAttachment {
+                        VectorEditor(title: "Orientation", value: constraint.cframe.orientation.eulerDegrees) { axis, value in
+                            model.commit("Set CFrame") {
+                                model.updateConstraint(id: constraint.id) { c in
+                                    var degrees = c.cframe.orientation.eulerDegrees
+                                    degrees[axis] = value
+                                    c.cframe.orientation = .fromEulerDegrees(degrees)
+                                }
+                            }
+                        }
+                    }
+                    number("MaxTorque", \.maxTorque, 0...1_000_000_000)
+                    number("Responsiveness", \.responsiveness, 5...200)
+                    Toggle("Limit spin (MaxAngularVelocity)", isOn: Binding(get: { constraint.maxAngularVelocity.isFinite }, set: { on in
+                        model.commit("Set MaxAngularVelocity") {
+                            model.updateConstraint(id: constraint.id) { $0.maxAngularVelocity = on ? 4 : .infinity }
+                        }
+                    }))
+                    .toggleStyle(.checkbox)
+                    if constraint.maxAngularVelocity.isFinite { number("MaxAngularVelocity", \.maxAngularVelocity, 0...1000) }
+                    Toggle("RigidityEnabled", isOn: toggle(\.rigidityEnabled)).toggleStyle(.checkbox)
+                    Toggle("PrimaryAxisOnly", isOn: toggle(\.primaryAxisOnly)).toggleStyle(.checkbox)
+                    Text(constraint.alignMode == .oneAttachment
+                         ? "Turns Attachment0's part to face as Orientation says, as hard as MaxTorque lets it."
+                         : "Turns Attachment0's part to face as Attachment1 does, as hard as MaxTorque lets it.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.textDim)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .torque:
+                    VectorEditor(title: "Torque", value: constraint.torque) { axis, value in
+                        model.commit("Set Torque") { model.updateConstraint(id: constraint.id) { $0.torque[axis] = value } }
+                    }
+                    LabeledRow("RelativeTo") {
+                        Picker("", selection: Binding(get: { constraint.relativeTo }, set: { value in
+                            model.commit("Set RelativeTo") { model.updateConstraint(id: constraint.id) { $0.relativeTo = value } }
+                        })) {
+                            ForEach(ForceFrame.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                    }
+                    Text("A twist, all the time, about the Torque's direction: the bigger it is, the harder.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.textDim)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .motor6d:
+                    number("DesiredAngle", \.desiredAngle, -1000...1000)
+                    number("MaxVelocity", \.maxVelocity, 0...10)
+                    number("CurrentAngle", \.currentAngle, -1000...1000)
+                    VectorEditor(title: "C0 Position", value: constraint.c0.position) { axis, value in
+                        model.commit("Set C0") { model.updateConstraint(id: constraint.id) { $0.c0.position[axis] = value } }
+                    }
+                    VectorEditor(title: "C0 Orientation", value: constraint.c0.orientation.eulerDegrees) { axis, value in
+                        model.commit("Set C0") {
+                            model.updateConstraint(id: constraint.id) { c in
+                                var degrees = c.c0.orientation.eulerDegrees
+                                degrees[axis] = value
+                                c.c0.orientation = .fromEulerDegrees(degrees)
+                            }
+                        }
+                    }
+                    Text("Holds Part1 to Part0 at C0. It turns about C0's Z axis towards DesiredAngle (radians), "
+                         + "MaxVelocity radians a frame at most.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.textDim)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 SmallButton("Delete", icon: "trash") { model.deleteConstraint(id: constraint.id) }

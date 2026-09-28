@@ -51,15 +51,15 @@ enum ForceSelfTest {
         session.stop()
     }
 
-    private static let frame: Float = 1.0 / 60
+    static let frame: Float = 1.0 / 60
 
-    private static func block(_ name: String, _ position: Vec3, size: Vec3 = Vec3(2, 2, 2), anchored: Bool = false) -> Part {
+    static func block(_ name: String, _ position: Vec3, size: Vec3 = Vec3(2, 2, 2), anchored: Bool = false) -> Part {
         var part = PhysicsSelfTest.block(position, size: size, anchored: anchored)
         part.name = name
         return part
     }
 
-    private static func scene(_ parts: [Part]) -> SceneModel {
+    static func scene(_ parts: [Part]) -> SceneModel {
         let model = SceneModel()
         model.parts = parts
         model.scripts = []
@@ -70,7 +70,7 @@ enum ForceSelfTest {
     }
 
     /// Runs physics over a model as the game does.
-    private static func simulate(_ world: PhysicsWorld, _ model: SceneModel, seconds: Float, each: (() -> Void)? = nil) {
+    static func simulate(_ world: PhysicsWorld, _ model: SceneModel, seconds: Float, each: (() -> Void)? = nil) {
         var elapsed: Float = 0
         while elapsed < seconds - 1e-4 {
             each?()
@@ -84,11 +84,11 @@ enum ForceSelfTest {
         }
     }
 
-    private static func part(_ model: SceneModel, _ name: String) -> Part { model.parts.first { $0.name == name }! }
+    static func part(_ model: SceneModel, _ name: String) -> Part { model.parts.first { $0.name == name }! }
 
     /// A constraint of a kind, from an attachment at the middle of one part (and another's).
     @discardableResult
-    private static func add(_ kind: SceneConstraint.Kind, _ model: SceneModel, on a: String, to b: String? = nil,
+    static func add(_ kind: SceneConstraint.Kind, _ model: SceneModel, on a: String, to b: String? = nil,
                             _ set: (inout SceneConstraint) -> Void = { _ in }) -> UUID {
         var c = SceneConstraint(kind: kind)
         let first = part(model, a)

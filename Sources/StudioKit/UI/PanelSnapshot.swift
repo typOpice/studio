@@ -379,6 +379,17 @@ enum PanelSnapshot {
             if let beam = model.join(.beam, a, b) {
                 model.updateConstraint(id: beam) { $0.look.texture = "builtin://Glow"; $0.look.lightEmission = 1 }
             }
+        case "motor":
+            // The Physics tab, and a windmill's sail on a Motor6D made with its tool, picked.
+            session.showWorld()
+            session.ribbonTab = .physics
+            let hub = model.addPart(shape: .block, at: Vec3(0, 6, -6))
+            let sail = model.addPart(shape: .block, at: Vec3(3, 6, -6))
+            model.update(id: hub) { $0.name = "Hub" }
+            model.update(id: sail) { $0.name = "Sail"; $0.size = Vec3(4, 1, 0.5); $0.anchored = false }
+            if let motor = model.join(.motor6d, hub, sail) {
+                model.updateConstraint(id: motor) { $0.desiredAngle = 6.28; $0.maxVelocity = 0.05 }
+            }
         case "particles":
             // A campfire: Fire and Smoke in a part, Fire picked.
             session.showWorld()

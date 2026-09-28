@@ -105,7 +105,8 @@ enum StudioJoltJoint {
     STUDIO_JOLT_POINT = 2,     // ball and socket
     STUDIO_JOLT_ROPE = 3,      // values: length
     STUDIO_JOLT_SPRING = 4,    // values: free length, stiffness, damping
-    STUDIO_JOLT_SLIDER = 5     // values: limits on (0/1), lower, upper (studs)
+    STUDIO_JOLT_SLIDER = 5,    // values: limits on (0/1), lower, upper (studs)
+    STUDIO_JOLT_MOTOR = 6      // held at a pose (studio_jolt_drive_motor): axis and normal are its X and Y
 };
 
 /// Joins two bodies. Points, axes and normals are in world space; each body's is
@@ -125,6 +126,12 @@ void studio_jolt_ignore_pair(StudioJoltWorld *world, uint32_t bodyA, uint32_t bo
 void studio_jolt_drive_joint(StudioJoltWorld *world, uint32_t joint, int on, float speed, float limit);
 /// A hinge's angle (radians) or a slider's position (studs).
 float studio_jolt_joint_value(StudioJoltWorld *world, uint32_t joint);
+/// Where a motor joint holds body B's frame, in body A's frame: a position and a rotation
+/// (x, y, z, w). Stiff springs get it there.
+void studio_jolt_drive_motor(StudioJoltWorld *world, uint32_t joint, const float *position, const float *rotation);
+/// A dynamic body's inertia (in the world, as it's turned now) times a vector: the
+/// angular impulse that changes its spin by `spin`. Zero for a body that doesn't move.
+void studio_jolt_inertia_times(StudioJoltWorld *world, uint32_t body, const float *spin, float *out);
 
 #ifdef __cplusplus
 }

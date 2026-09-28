@@ -21,10 +21,12 @@
 #include <Jolt/Physics/Constraints/PointConstraint.h>
 #include <Jolt/Physics/Constraints/DistanceConstraint.h>
 #include <Jolt/Physics/Constraints/SliderConstraint.h>
+#include <Jolt/Physics/Constraints/SixDOFConstraint.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 
 #include <algorithm>
+#include <cmath>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -587,12 +589,34 @@ uint32_t studio_jolt_add_joint(StudioJoltWorld *world, int kind, uint32_t bodyA,
         settings = slider;
         break;
     }
+    case STUDIO_JOLT_MOTOR: {
+        // Every axis free, and a stiff spring on each holding it where it's driven.
+        auto *six = new SixDOFConstraintSettings();
+        six->mSpace = EConstraintSpace::WorldSpace;
+        six->mPosition1 = RVec3(vec(pointA));
+        six->mPosition2 = RVec3(vec(pointB));
+        six->mAxisX1 = vec(axisA).Normalized();
+        six->mAxisY1 = vec(normalA).Normalized();
+        six->mAxisX2 = vec(axisB).Normalized();
+        six->mAxisY2 = vec(normalB).Normalized();
+        for (int axis = 0; axis < SixDOFConstraintSettings::EAxis::Num; ++axis) {
+            six->mMotorSettings[axis] = MotorSettings(25.0f, 1.0f);
+        }
+        settings = six;
+        break;
+    }
     default:
         return STUDIO_JOLT_NO_BODY;
     }
 
     TwoBodyConstraint *constraint = world->bodies().CreateConstraint(settings, BodyID(bodyA), BodyID(bodyB));
     if (!constraint) return STUDIO_JOLT_NO_BODY;
+    if (kind == STUDIO_JOLT_MOTOR) {
+        auto *six = static_cast<SixDOFConstraint *>(constraint);
+        for (int axis = 0; axis < SixDOFConstraintSettings::EAxis::Num; ++axis) {
+            six->SetMotorState(SixDOFConstraintSettings::EAxis(axis), EMotorState::Position);
+        }
+    }
     world->system.AddConstraint(constraint);
     world->bodies().ActivateConstraint(constraint);
     if (noCollide) world->jointFilter->pairs[JointFilter::key(bodyA, bodyB)] += 1;
@@ -645,6 +669,28 @@ void studio_jolt_drive_joint(StudioJoltWorld *world, uint32_t id, int on, float 
         return;
     }
     if (on) world->bodies().ActivateConstraint(joint.constraint);
+}
+
+void studio_jolt_drive_motor(StudioJoltWorld *world, uint32_t id, const float *position, const float *rotation) {
+    auto found = world->joints.find(id);
+    if (found == world->joints.end() || found->second.kind != STUDIO_JOLT_MOTOR) return;
+    auto *six = static_cast<SixDOFConstraint *>(found->second.constraint.GetPtr());
+    six->SetTargetPositionCS(vec(position));
+    six->SetTargetOrientationCS(Quat(rotation[0], rotation[1], rotation[2], rotation[3]).Normalized());
+    world->bodies().ActivateConstraint(found->second.constraint);
+}
+
+void studio_jolt_inertia_times(StudioJoltWorld *world, uint32_t id, const float *spin, float *out) {
+    out[0] = out[1] = out[2] = 0;
+    BodyLockRead lock(world->system.GetBodyLockInterface(), BodyID(id));
+    if (!lock.Succeeded() || !lock.GetBody().IsDynamic()) return;
+    Mat44 inverse = lock.GetBody().GetInverseInertia();
+    if (std::abs(inverse.GetDeterminant3x3()) < 1e-30f) return;
+    Vec3 result = inverse.Inversed3x3().Multiply3x3(vec(spin));
+    if (!std::isfinite(result.GetX()) || !std::isfinite(result.GetY()) || !std::isfinite(result.GetZ())) return;
+    out[0] = result.GetX();
+    out[1] = result.GetY();
+    out[2] = result.GetZ();
 }
 
 float studio_jolt_joint_value(StudioJoltWorld *world, uint32_t id) {

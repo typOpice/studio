@@ -350,8 +350,12 @@ extension PlayController {
 
         case "physics.joint":
             // A hinge's angle in degrees or a slider's position in studs, as simulated.
+            // A Motor6D's CurrentAngle in radians, or where it starts before the physics has it.
             guard let id = arguments.first?.asString.flatMap(UUID.init(uuidString:)),
-                  let value = physics.jointValue(id), let constraint = model.constraint(id: id) else { return .number(0) }
+                  let constraint = model.constraint(id: id) else { return .number(0) }
+            guard let value = physics.jointValue(id) else {
+                return .number(constraint.kind == .motor6d ? Double(constraint.currentAngle) : 0)
+            }
             return .number(Double(constraint.kind == .hinge ? value * 180 / .pi : value))
 
         case "physics.impulse", "physics.angularimpulse":

@@ -53,6 +53,20 @@ final class PhysicsWorld {
     private var ignoredPairs: [UUID: (UInt32, UInt32)] = [:]
     /// AlignPositions and VectorForces, worked out at each sync and applied each step.
     private var forces: [ForceRecord] = []
+    /// Each AlignOrientation's spin as its last impulse left it: what friction (or anything
+    /// else) took off by the next step is made good then.
+    private var aimedSpin: [UUID: Vec3] = [:]
+    /// Motor6Ds between two bodies: the Jolt joint, the settings, and the angle it's at.
+    private var motors: [UUID: MotorRecord] = [:]
+
+    private struct MotorRecord {
+        let handle: UInt32
+        let fingerprint: Int
+        var constraint: SceneConstraint
+        /// CurrentAngle as it goes, and how many times a script had set it when last looked.
+        var angle: Float
+        var writes: Int
+    }
 
     /// A push on a body: what the constraint says, and where its ends are on bodies (or
     /// fixed in the world).
@@ -393,6 +407,7 @@ final class PhysicsWorld {
         var live: Set<UUID> = []
         syncNoCollisions(constraints, parts: parts)
         syncForces(constraints, attachments: byID, parts: parts)
+        syncMotors(constraints, parts: parts)
         for constraint in constraints where constraint.kind.isJoint && constraint.enabled {
             guard let a0 = constraint.attachment0.flatMap({ byID[$0] }), let a1 = constraint.attachment1.flatMap({ byID[$0] }),
                   let p0 = parts[a0.parentID], let p1 = parts[a1.parentID],
@@ -442,7 +457,7 @@ final class PhysicsWorld {
                 case .prismatic:
                     kind = STUDIO_JOLT_SLIDER
                     values = [constraint.limitsEnabled ? 1 : 0, constraint.lowerLimit, constraint.upperLimit]
-                case .weld, .beam, .trail, .alignPosition, .vectorForce, .noCollision:
+                case .weld, .beam, .trail, .alignPosition, .vectorForce, .noCollision, .alignOrientation, .torque, .motor6d:
                     continue
                 }
                 // Parts joined at a point shouldn't grind against each other.
@@ -507,11 +522,74 @@ final class PhysicsWorld {
         }
     }
 
-    // MARK: - AlignPosition and VectorForce
+    // MARK: - Motor6D
+
+    /// Each enabled one between parts of two bodies, not both anchored: a Jolt joint held
+    /// at Part0 · C0 · Transform · (CurrentAngle about Z) against Part1 · C1.
+    private func syncMotors(_ constraints: [SceneConstraint], parts: [UUID: Part]) {
+        var live: Set<UUID> = []
+        for c in constraints where c.kind == .motor6d && c.enabled {
+            guard let a = c.part0, let b = c.part1, let p0 = parts[a], let p1 = parts[b],
+                  let b0 = assemblyOf[a], let b1 = assemblyOf[b], b0 != b1,
+                  !(assemblies[b0]?.isStatic == true && assemblies[b1]?.isStatic == true) else { continue }
+            var hasher = Hasher()
+            hasher.combine(b0); hasher.combine(b1)
+            for value in c.c0.components + c.c1.components { hasher.combine(value) }
+            let fingerprint = hasher.finalize()
+            live.insert(c.id)
+            let previous = motors[c.id]
+            if let previous, previous.fingerprint != fingerprint {
+                studio_jolt_remove_joint(world, previous.handle)
+                motors.removeValue(forKey: c.id)
+            }
+            if motors[c.id] == nil {
+                // Each end's frame where it is now: Jolt keeps each on its own body.
+                let frameA = p0.pose.applying(c.c0), frameB = p1.pose.applying(c.c1)
+                let x = Vec3(1, 0, 0), y = Vec3(0, 1, 0)
+                let handle = studio_jolt_add_joint(world, Int32(STUDIO_JOLT_MOTOR.rawValue), b0, b1,
+                                                   Self.floats(frameA.position), Self.floats(frameB.position),
+                                                   Self.floats(frameA.orientation.act(x)), Self.floats(frameB.orientation.act(x)),
+                                                   Self.floats(frameA.orientation.act(y)), Self.floats(frameB.orientation.act(y)),
+                                                   nil, 0, 1)
+                guard handle != STUDIO_JOLT_NO_BODY else { continue }
+                motors[c.id] = MotorRecord(handle: handle, fingerprint: fingerprint, constraint: c,
+                                           angle: previous?.angle ?? c.currentAngle, writes: c.angleWrites)
+            }
+            motors[c.id]?.constraint = c
+            if let record = motors[c.id], record.writes != c.angleWrites {
+                motors[c.id]?.angle = c.currentAngle
+                motors[c.id]?.writes = c.angleWrites
+            }
+        }
+        for (id, record) in motors where !live.contains(id) {
+            studio_jolt_remove_joint(world, record.handle)
+            motors.removeValue(forKey: id)
+        }
+    }
+
+    /// Once a frame: each Motor6D's CurrentAngle a step nearer DesiredAngle (MaxVelocity
+    /// radians a sixtieth of a second), and where it holds Part1 now.
+    private func driveMotors(dt: Float) {
+        for (id, var record) in motors {
+            let c = record.constraint
+            let most = max(c.maxVelocity, 0) * dt * 60
+            let gap = c.desiredAngle - record.angle
+            record.angle += most.isFinite ? min(max(gap, -most), most) : gap
+            motors[id] = record
+            let held = c.transform.applying(Pose(position: .zero, orientation: simd_quatf(angle: record.angle, axis: Vec3(0, 0, 1))))
+            studio_jolt_drive_motor(world, record.handle, Self.floats(held.position), Self.floats(held.orientation))
+        }
+    }
+
+    // MARK: - AlignPosition, VectorForce, AlignOrientation and Torque
 
     /// Where each enabled one's ends are, on which bodies; only those on a body that moves.
     private func syncForces(_ constraints: [SceneConstraint], attachments: [UUID: SceneAttachment], parts: [UUID: Part]) {
         forces = []
+        defer {
+            let kept = Set(forces.map(\.constraint.id))
+            aimedSpin = aimedSpin.filter { kept.contains($0.key) }
+        }
         for constraint in constraints where constraint.kind.isForce && constraint.enabled {
             guard let a0 = constraint.attachment0.flatMap({ attachments[$0] }), let p0 = parts[a0.parentID],
                   let body = assemblyOf[p0.id], let assembly = assemblies[body], !assembly.isStatic,
@@ -529,7 +607,8 @@ final class PhysicsWorld {
                     target = (nil, p1.position + p1.orientation.act(a1.position), p1.orientation * frame1)
                 }
             }
-            if constraint.kind == .alignPosition, constraint.alignMode == .twoAttachment, target == nil { continue }
+            if constraint.kind == .alignPosition || constraint.kind == .alignOrientation,
+               constraint.alignMode == .twoAttachment, target == nil { continue }
             forces.append(ForceRecord(constraint: constraint, body: body, point: point, frame0: frame0, target: target))
         }
     }
@@ -586,6 +665,21 @@ final class PhysicsWorld {
                 impulse = (wanted - current) * mass + Vec3(0, gravity * mass * dt, 0)
                 let limit = (c.rigidityEnabled ? Float.greatestFiniteMagnitude : max(c.maxForce, 0)) * dt
                 if simd_length(impulse) > limit { impulse = simd_normalize(impulse) * limit }
+            case .torque:
+                var twist = c.torque
+                switch c.relativeTo {
+                case .world: break
+                case .attachment0: twist = (bodyPose.orientation * record.frame0).act(twist)
+                case .attachment1:
+                    if let target = record.target {
+                        twist = (target.body.map { pose(of: $0).orientation * target.frame } ?? target.frame).act(twist)
+                    }
+                }
+                turn(record.body, by: twist * dt)
+                continue
+            case .alignOrientation:
+                alignOrientation(record, bodyPose: bodyPose, dt: dt)
+                continue
             default:
                 continue
             }
@@ -600,8 +694,66 @@ final class PhysicsWorld {
         }
     }
 
-    /// A hinge's angle (radians) or a slider's position (studs), as simulated.
+    private func turn(_ body: UInt32, by impulse: Vec3) {
+        guard simd_length(impulse) > 0, impulse.x.isFinite, impulse.y.isFinite, impulse.z.isFinite else { return }
+        studio_jolt_wake(world, body)
+        studio_jolt_add_angular_impulse(world, body, Self.floats(impulse))
+    }
+
+    /// An AlignOrientation's turn: the spin it wants (Responsiveness × the angle between
+    /// Attachment0 and its goal, no more than MaxAngularVelocity), got to as far as
+    /// MaxTorque allows in one step. PrimaryAxisOnly lines up the Axis alone and leaves
+    /// the spin about it be.
+    private func alignOrientation(_ record: ForceRecord, bodyPose: Pose, dt: Float) {
+        let c = record.constraint
+        let current = simd_normalize(bodyPose.orientation * record.frame0)
+        var goal = c.cframe.orientation
+        if c.alignMode == .twoAttachment, let target = record.target {
+            goal = target.body.map { pose(of: $0).orientation * target.frame } ?? target.frame
+        }
+        let axis = current.act(Vec3(1, 0, 0))
+        var gap = Vec3.zero
+        if c.primaryAxisOnly {
+            let to = simd_normalize(goal.act(Vec3(1, 0, 0)))
+            let across = simd_cross(axis, to), sine = simd_length(across), cosine = simd_dot(axis, to)
+            if sine > 1e-6 {
+                gap = across / sine * atan2(sine, cosine)
+            } else if cosine < 0 {
+                // Facing exactly away: any way round will do.
+                gap = current.act(Vec3(0, 1, 0)) * .pi
+            }
+        } else {
+            var between = simd_normalize(goal * current.inverse)
+            if between.real < 0 { between = simd_quatf(vector: -between.vector) }
+            let angle = between.angle
+            if angle > 1e-6, simd_length(between.imag) > 1e-9 { gap = simd_normalize(between.imag) * angle }
+        }
+        var wanted = c.rigidityEnabled ? gap / dt : gap * max(c.responsiveness, 0) * 0.35
+        let most = c.maxAngularVelocity.isFinite ? max(c.maxAngularVelocity, 0) : Float.greatestFiniteMagnitude
+        if simd_length(wanted) > most { wanted = simd_normalize(wanted) * most }
+        var spin = [Float](repeating: 0, count: 3)
+        studio_jolt_get_angular_velocity(world, record.body, &spin)
+        let now = Vec3(spin[0], spin[1], spin[2])
+        // What was lost since the last step (friction, on the ground), made good — no more
+        // than the spin wanted, or half a turn a second, so a part held still can't wind up.
+        var lost = aimedSpin[c.id].map { $0 - now } ?? .zero
+        let room = max(simd_length(wanted), 0.5)
+        if simd_length(lost) > room { lost = simd_normalize(lost) * room }
+        var change = wanted - now + lost
+        if c.primaryAxisOnly { change -= axis * simd_dot(change, axis) }
+        aimedSpin[c.id] = now + change
+        var impulse = [Float](repeating: 0, count: 3)
+        studio_jolt_inertia_times(world, record.body, Self.floats(change), &impulse)
+        var turning = Vec3(impulse[0], impulse[1], impulse[2])
+        let limit = (c.rigidityEnabled ? Float.greatestFiniteMagnitude : max(c.maxTorque, 0)) * dt
+        if simd_length(turning) > limit { turning = simd_normalize(turning) * limit }
+        turn(record.body, by: turning)
+    }
+
+    /// A hinge's angle (radians), a slider's position (studs) or a Motor6D's CurrentAngle
+    /// (radians), as simulated.
     func jointValue(_ constraintID: UUID) -> Float? {
+        if let motor = motors[constraintID] { return motor.angle }
         guard let joint = joints[constraintID] else { return nil }
         return studio_jolt_joint_value(world, joint.handle)
     }
@@ -730,6 +882,7 @@ final class PhysicsWorld {
     /// Advances by `dt` in fixed steps. Returns the parts that moved (their new poses)
     /// and those that fell out of the world.
     func step(dt: Float) -> (moved: [(UUID, Pose)], fallen: [UUID]) {
+        driveMotors(dt: min(max(dt, 0), 0.1))
         accumulator += min(max(dt, 0), 0.1)
         var steps = 0
         while accumulator >= Self.timeStep && steps < Self.maxSteps {

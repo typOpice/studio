@@ -436,6 +436,7 @@ Enum = table.freeze({
 	NormalId = makeEnum("NormalId", { "Right", "Top", "Back", "Left", "Bottom", "Front" }),
 	TextureMode = makeEnum("TextureMode", { "Stretch", "Wrap" }),
 	PositionAlignmentMode = makeEnum("PositionAlignmentMode", { "OneAttachment", "TwoAttachment" }),
+	OrientationAlignmentMode = makeEnum("OrientationAlignmentMode", { "OneAttachment", "TwoAttachment" }),
 	ActuatorRelativeTo = makeEnum("ActuatorRelativeTo", { "Attachment0", "Attachment1", "World" }),
 	ActuatorType = makeEnum("ActuatorType", { "None", "Motor", "Servo" }),
 	KeyCode = makeEnum("KeyCode", { __KEYCODE_NAMES__ }),

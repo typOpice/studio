@@ -137,6 +137,22 @@ struct Pose: Equatable {
 
 }
 
+/// Saved as its twelve components (Roblox's CFrame order).
+extension Pose: Codable {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        guard let pose = Pose(components: try c.decode([Float].self)) else {
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "not a CFrame's twelve numbers")
+        }
+        self = pose
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(components)
+    }
+}
+
 extension Pose {
     /// From `components`; the rotation is re-orthonormalised, so a slightly skewed
     /// matrix from a script still makes a clean rotation.

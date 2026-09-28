@@ -482,6 +482,14 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Also corrected the known-limitations notes, which still said Sky, Atmosphere, AlignPosition, VectorForce and NoCollisionConstraint were missing.
    Tested alone and with a host and a joined player (a logpoint in the host's RemoteEvent handler prints every player's message without stopping the game).
 
+48. Motor6D, AlignOrientation and Torque, 2026-09-28.
+   Motor6D: joins two parts the way a rig's joints do, with C0, C1 and Transform. Set DesiredAngle and the part swings there, MaxVelocity radians a frame at most: doors, windmills, turrets. Physics tab > Motor6D: click the part that stays, then the part that turns.
+   AlignOrientation: turns a part to face the way another does (or the way a CFrame says), as hard as MaxTorque allows. PrimaryAxisOnly lines up one axis only. Physics tab > Align Orientation.
+   Torque: twists a part all the time. Physics tab > Torque adds one that spins the part where it sits.
+   Scripts use Roblox's names: Instance.new("Motor6D"), motor.C0, motor.DesiredAngle, motor.CurrentAngle, Enum.OrientationAlignmentMode, and the rest.
+   Tested alone and with a host and a joined player (the joined player sees the host's Motor6D turn a windmill's sail).
+   New file: MotorSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

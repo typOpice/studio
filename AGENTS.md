@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2861 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # 2897 checks — THE test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -155,6 +155,7 @@ listed in §9.
 | `NPCSelfTest.swift` | NPCs: Insert › Rig (the seven parts, a Humanoid, one undo step, standing on the spot, saved and reopened); MoveTo at the WalkSpeed, facing the way it goes with legs swinging, MoveDirection, WalkToPoint and the Running state, MoveToFinished(true) within a stud and standing on the ground; a wall stopping it and MoveToFinished(false) after eight seconds; a kerb stepped up, moved by a script (PivotTo) then walking off a ledge, Jump up and down; the README's PathfindingService example round a wall to a flag; TakeDamage and HealthChanged, MaxHealth lowering Health, Died once at no health, falling apart; Instance.new("Humanoid") in a script's Model walking at its own WalkSpeed, FindFirstChildOfClass, a wrong type refused; the player bumping into an NPC; Adventure Island's Postie Pat round, every stop reached; a host's NPC walking and dying in a joined player's game, their script hearing Died, the parts let go there too |
 | `TerrainSelfTest.swift` | Terrain: FillBall (full, part-full, empty), Air carving, a turned FillBlock, FillCylinder, FillWedge's slope, FillRegion, ReplaceMaterial, the seven brushes, Generate (materials, the same from a seed), saved small and read back, a place without it saving as before; meshes (a flat top at its height, whole across chunks, Precise collision parts, water at its level, only the changed chunk remade, the chunks round a corner edit); played on (standing on it and a hill, swimming with no floor at 0, a block landing, Raycast hitting it as workspace.Terrain with its material and normal, its water unless IgnoreWater, filtered out, a path round a hill); from Luau (workspace.Terrain found by name and class, every Fill, Region3, ReplaceMaterial, Read/WriteVoxels, material colours, water, cells, Clouds in it, five wrong values refused); drawn; painted with a brush in Studio (a stroke one undo step, the preview, a join tool putting it down); the Hills and Lake template (a player lands on it); the README's island as written; a host's terrain and a script's edits in a joined player's game |
 | `ForceSelfTest.swift` | AlignPosition, VectorForce and NoCollisionConstraint: a Force of the block's weight holding it up (none, it falls; twice, it rises), RelativeTo Attachment0 turning with the part, off the middle turning it unless ApplyAtCenterOfMass; pulled to Attachment1 and held against gravity, not with too little MaxForce, no faster than MaxVelocity, at once with RigidityEnabled and slower at Responsiveness 5, OneAttachment to Position, following a moving target; falling through a shelf it mustn't collide with and resting on it when disabled; Studio (the Align Position and No Collision tools, Add VectorForce's hover, undo, saved with MaxVelocity's no-limit, a hinge saving as before); from Luau (all three, their enums, five wrong values refused, math.huge); the README's lift as written; a host's AlignPosition lifting a crate in a joined player's game |
+| `MotorSelfTest.swift` | Motor6D, AlignOrientation and Torque: an arm swung on an anchored base to DesiredAngle (MaxVelocity a frame at most) and held there against gravity, turned by Transform, pulled to where C0 and C1 say, two unanchored parts falling and landing together, let go when disabled; a floating block turned to face as another does (not moved), to a CFrame in OneAttachment mode, slowly with little MaxTorque, no faster than MaxAngularVelocity, at once with RigidityEnabled, only its axis with PrimaryAxisOnly; a Torque spinning a block about its direction (twice as hard, twice as fast), about its attachment's axis, and Studio's turning a crate where it rests; Studio (the Motor6D tool holding the part where it is, the Align Orientation tool, Add Torque, saved and reopened, a weld saving as before); from Luau (all three, IsA JointInstance, CFrame properties, the new enum, wrong values refused, CurrentAngle read as it turns and set); the README's windmill and vane as written; a host's Motor6D turning a windmill in a joined player's game |
 | `SkySelfTest.swift` | Lighting's Sky, Atmosphere and Clouds: none in a new place (a default sun, moon and stars) and it saving as before, added with undo, saved and reopened, what the shaders get; drawn — stars at night and none at StarCount 0, the sun's disc and not with CelestialBodiesShown off, clouds whitening the sky and going when disabled, a far wall fading into the Atmosphere's colour, a skybox's sides where they belong and the right way up, the day's sky again without all six; from Luau (made loose then put in Lighting, found by name and class, children, the Roblox types, Offset kept in range, five wrong values refused, Clone, out and back, Destroy); the README's dusk fog as written; a host's Atmosphere and Clouds in a joined player's sky and scripts |
 | `RibbonSelfTest.swift` | Beams: the curve (Segments, its ends, CurveSize bending it), Width0 to Width1, Color and Transparency along it, flat across the attachments, Stretch and Wrap, TextureSpeed scrolling, FaceCamera, Enabled; Trails: a point each MinLength, as wide as the attachments are apart, gone after Lifetime, drawn from now back, WidthScale, MaxLength, Clear, Enabled off, forgotten in storage; a Beam not holding a part up; Studio (the Beam tool middle to middle facing the camera, Add Trail top to bottom, undo, neither a join tool, saved, a joint saving as before); from Luau (Beam and Trail made and read in their types, not Constraints, wrong values refused, a Beam has no Clear, Clear and Enabled); drawn, and not when off; the README's laser as written; a host's Beam and moving Trail in a joined player's game |
 | `ParticleSelfTest.swift` | ParticleEmitters: Rate and Lifetime (how many alive), made in the part and out of its top at their Speed, a turned part's top, SpreadAngle's fan, Acceleration, Drag, Enabled off, Emit(40) at once, Clear, a machine seeing an emitter first making only its last burst, LockedToPart, TimeScale 0, Size/Transparency/Color/Brightness/LightEmission through a life with envelopes, the 2000 cap, none in storage; Studio (presets, undo, saved and reopened, a part without one saving as before, copied with the part, deleted); from Luau (Instance.new, FindFirstChild, the Roblox types read back, six wrong values refused, GetChildren, Emit bursting, Clone, moved between parts and out, Clear, Enabled, Destroy); drawn red where they are, hidden behind a wall, gone when cleared; a host script's emitter and Emit(40) reaching a joined player and bursting there, a joined player's LocalScript emitter staying theirs |
@@ -328,7 +329,7 @@ Sources/StudioKit/
                                  chunks as Precise MeshParts for collision, remade as they change
   Scripting/ScriptRuntime+Terrain.swift  `terrain.*`: fills, regions, voxels, water, colours
   UI/TerrainUI.swift             the dock's Terrain Editor
-  Scripting/ScriptRuntime+Forces.swift  `force.*`: an AlignPosition's or VectorForce's own properties
+  Scripting/ScriptRuntime+Forces.swift  `force.*`: the own properties of AlignPosition, VectorForce, AlignOrientation, Torque, Motor6D
   Model/SkyObjects.swift         Lighting's Sky, Atmosphere and Clouds (SkySettings and the rest)
   Scripting/ScriptRuntime+Sky.swift  `sky.*`: making, reading, moving them; SkyObject; loose ones
   UI/SkyUI.swift                 SkyObjectsEditor: their sections in Lighting's Properties
@@ -1500,6 +1501,27 @@ Roughly ordered by how much time they will cost you.
     - A body skips putting its parts while nothing moved (`lastPut`), since each change
       is sent to every joined player.
 
+123. **Motor6D is a driven Jolt joint; AlignOrientation and Torque are twists.**
+    - **Motor6D** (`part0`/`part1`, `c0`/`c1`/`transform`, all `Pose`s saved as twelve
+      numbers) becomes a Jolt six-degrees-of-freedom constraint (`STUDIO_JOLT_MOTOR`),
+      every axis free with a stiff position motor (25 Hz, critically damped; Jolt's
+      position motors need a stiffness, so it isn't perfectly rigid).
+      `PhysicsWorld.syncMotors` builds it from each end's frame where it is now: Part0 ·
+      C0 on body A, Part1 · C1 on body B. Once a frame, `driveMotors` steps CurrentAngle
+      towards DesiredAngle (MaxVelocity × dt × 60) and holds B's frame at Transform ·
+      (CurrentAngle about Z) in A's (`studio_jolt_drive_motor`).
+    - CurrentAngle is the physics' (`jointValue`, read through `physics.joint`); the
+      model's `currentAngle` is only where it starts. A script setting it bumps
+      `angleWrites`, and the physics takes each write up, even the same number twice.
+    - Both parts anchored, or in one welded assembly, and there's nothing to move: no
+      joint. The two ends stay separate bodies (Roblox makes them one assembly).
+    - **AlignOrientation and Torque** are `isForce`: `applyForces` gives them angular
+      impulses. An AlignOrientation wants a spin (Responsiveness × the angle to its goal,
+      capped by MaxAngularVelocity) and gets it through `studio_jolt_inertia_times`,
+      capped by MaxTorque × the step. It makes good what friction took since the last
+      step (`aimedSpin`), no more than the spin wanted, so a part on the ground reaches
+      its goal and a blocked one can't wind up.
+
 122. **Watches and conditions run Luau on the stopped thread, in a scope built for them.**
     `studio_lua_debug_evaluate` (the shim) compiles `return <expression>` and loads it
     with an environment table holding the frame's upvalues, then its locals (so a local
@@ -1761,10 +1783,12 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
 
 - **Physics:** the character is a kinematic capsule: parts hitting it shove it (a fading
   push, by mass) and platforms carry it, but it has no real mass in Jolt; water parts
-  don't make parts float (only characters swim); a TrussPart draws as a plain box; no Motor6D,
-  AlignOrientation or Torque (AlignPosition, VectorForce and NoCollisionConstraint are
-  there, invariant 120), and a servo is a speed-limited controller rather than Jolt's
-  position motor.
+  don't make parts float (only characters swim); a TrussPart draws as a plain box; a
+  servo is a speed-limited controller rather than Jolt's position motor; a Motor6D is a
+  very stiff spring rather than rigid, its two parts stay two bodies, and characters'
+  limbs aren't Motor6Ds (scripts can't reach them); AlignOrientation has no
+  AlignType, LookAtPosition or separate PrimaryAxis/SecondaryAxis (its CFrame says it
+  all); no LinearVelocity, AngularVelocity, VehicleSeat or the legacy BodyMovers.
 - **Multiplayer is LAN-only, host-run:** the host runs the scene's scripts and physics;
   joiners apply its `SceneDelta`s. Host scripts see joined players (invariant 77); only
   the host forwards writes (a joiner's LocalScripts can't change other players). Host

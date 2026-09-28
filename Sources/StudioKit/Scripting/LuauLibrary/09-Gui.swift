@@ -477,6 +477,8 @@ function gui.read(kind, raw)
 		return toColor(raw)
 	elseif kind == "Vector3" then
 		return toVector(raw)
+	elseif kind == "CFrame" then
+		return cframeMath.cframeFromList(raw)
 	elseif kind == "Adornee" then
 		return gui.adorneeFrom(raw)
 	elseif kind == "ColorSequence" then
@@ -536,6 +538,8 @@ function gui.write(kind, value)
 		return list
 	elseif kind == "Vector3" then
 		return if typeof(value) == "Vector3" then { value[1], value[2], value[3] } else nil
+	elseif kind == "CFrame" then
+		return if isCFrame(value) then cframeMath.cframeList(value) else nil
 	elseif kind == "Adornee" then
 		local id = partIdOf[value]
 		if id ~= nil then
