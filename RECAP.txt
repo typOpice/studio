@@ -512,6 +512,12 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the joined player clicks the host's door and sees it open).
    New files: UI/ToolboxView.swift, ToolboxSelfTest.swift.
 
+52. Pathfinding: swimming, climbing and jumping gaps, 2026-09-28.
+   PathfindingService now finds paths that swim across water (water parts and the Terrain's lakes), climb TrussParts (with AgentCanClimb = true, as in Roblox), and jump across gaps up to 6 studs wide. Waypoints carry a Label: "Water" in water, "Climb" at the top of a climb.
+   An NPC following such a path with Humanoid:MoveTo swims, climbs and jumps by itself.
+   Also fixed: pressing Space at the water's surface now leaps out, so players and NPCs can climb onto a bank as high as the water; an NPC's Jump is no longer lost if it can't jump that very frame; and paths could not go near the Terrain's lakes and steep slopes.
+   Tested alone and with a host and a joined player (the joined player sees the host's NPC cross a pond, jump a gap and climb a truss to the goal).
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

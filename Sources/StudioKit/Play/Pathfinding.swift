@@ -5,7 +5,9 @@ import simd
 /// 2-stud cells, each holding the solid spans of the parts over it (from exact rays, so
 /// wedges and balls count as they are). A floor is the top of a span — or the ground at
 /// 0 — with room above it for the agent; a step is a walk if it rises no more than the
-/// character can step (2 studs), a jump if no more than it can jump.
+/// character can step (2 studs), a jump if no more than it can jump. Water deeper than
+/// the agent can wade is swum, at its surface; a TrussPart can be climbed (if the agent
+/// can climb); a gap of up to three cells can be jumped across.
 ///
 /// The grid is kept up to date part by part: before each search, parts that moved,
 /// appeared, went or stopped colliding are drawn again, so one zombie walking about
@@ -18,6 +20,8 @@ final class NavigationGrid {
         var spacing: Float = 4
         /// Cost multipliers by material name ("Water", "Neon", …); infinity keeps out.
         var costs: [String: Float] = [:]
+        /// Up TrussParts (Roblox's AgentCanClimb: off unless asked for).
+        var canClimb = false
     }
 
     enum Action: String { case walk = "Walk", jump = "Jump" }
@@ -25,6 +29,8 @@ final class NavigationGrid {
     struct Waypoint: Equatable {
         var position: Vec3
         var action: Action
+        /// "Water" in water (swum or waded), "Climb" at the top of a climb, "" otherwise.
+        var label = ""
     }
 
     enum Status: String {
@@ -38,6 +44,11 @@ final class NavigationGrid {
     static let jump: Float = 6
     /// The furthest a path drops in one step.
     static let drop: Float = 30
+    /// How far a jump carries across a gap, in cells (6 studs: a run and a jump, with
+    /// a little to spare).
+    static let reach = 3
+    /// How much harder a stud climbed is than one walked.
+    static let climbCost: Float = 1.5
     /// The most a grid spans on a side, in cells.
     static let largest = 1024
 
@@ -46,6 +57,7 @@ final class NavigationGrid {
         let bottom: Float
         let top: Float
         let material: String
+        var truss = false
     }
 
     private struct Signature: Equatable {
@@ -63,11 +75,16 @@ final class NavigationGrid {
     /// Each cell's solid intervals, merged, and the material on top of each; made when asked.
     private var merged: [[(bottom: Float, top: Float, material: String)]?] = []
     var ground = true
+    /// The Terrain's water: its surface above a point in it, if the point is in any.
+    var terrainWater: ((Vec3) -> Float?)?
+    /// The water parts, as of the last update.
+    private var waterParts: [Part] = []
 
     // MARK: - Keeping up with the world
 
     /// Brings the grid up to the parts as they are now.
     func update(_ parts: [Part]) {
+        waterParts = parts.filter { $0.inWorld && $0.material == .water }
         let solid = parts.filter(\.isSolid)
         if width == 0 || solid.contains(where: { !covers(bounds(of: $0)) }) { rebuild(around: solid) }
         var seen = Set<UUID>()
@@ -161,7 +178,8 @@ final class NavigationGrid {
                 }
                 guard top >= bottom else { continue }
                 let index = z * width + x
-                spans[index].append(Span(part: part.id, bottom: bottom, top: top, material: material))
+                spans[index].append(Span(part: part.id, bottom: bottom, top: top, material: material,
+                                         truss: part.shape == .truss))
                 merged[index] = nil
                 cells.append(index)
             }
@@ -222,6 +240,8 @@ final class NavigationGrid {
     /// Remembered through one search: each cell's floors, and which are clear.
     private var floorsSeen: [Int: [(height: Float, material: String)]] = [:]
     private var clearSeen: [Node: Bool] = [:]
+    /// Floors that are a water's surface, swum (getting out onto land is a jump).
+    private var swum: Set<Node> = []
 
     /// Where the agent could stand in a cell: each floor's height and material, if there's
     /// room for it above.
@@ -241,7 +261,38 @@ final class NavigationGrid {
         for interval in solid where interval.top > -50 {
             if room(above: interval.top, in: solid, agent) { found.append((interval.top, interval.material)) }
         }
-        return found
+        guard terrainWater != nil || !waterParts.isEmpty else { return found }
+        // In water: waded where it's shallow (its material is Water, for Costs), swum at
+        // the surface where it's deeper than half the agent — as the character swims.
+        let c = centre(index)
+        var wet: [(height: Float, material: String)] = []
+        for floor in found {
+            guard let surface = waterSurface(at: Vec3(c.x, floor.height + 0.5, c.y)) else {
+                wet.append(floor)
+                continue
+            }
+            if surface - floor.height <= agent.height / 2 {
+                wet.append((floor.height, "Water"))
+            } else if room(above: surface, in: solid, agent), !wet.contains(where: { abs($0.height - surface) < 0.05 }) {
+                wet.append((surface, "Water"))
+                swum.insert(Node(cell: index, floor: surface))
+            }
+        }
+        return wet
+    }
+
+    /// The surface of the water a point is in (a water part's, or the Terrain's), if any.
+    private func waterSurface(at point: Vec3) -> Float? {
+        var surface: Float?
+        for part in waterParts {
+            let local = part.orientation.inverse.act(point - part.position)
+            let h = part.size * 0.5
+            guard abs(local.x) <= h.x, abs(local.y) <= h.y, abs(local.z) <= h.z else { continue }
+            let top = part.position.y + abs(part.orientation.act(Vec3(0, h.y, 0)).y)
+            surface = max(surface ?? top, top)
+        }
+        if let terrainWater, let top = terrainWater(point) { surface = max(surface ?? top, top) }
+        return surface
     }
 
     private func room(above floor: Float, in solid: [(bottom: Float, top: Float, material: String)], _ agent: Agent) -> Bool {
@@ -259,7 +310,9 @@ final class NavigationGrid {
 
     /// Room for the body: nothing between a step above the floor and the top of the
     /// agent's head nearer the cell's centre than its radius (a quarter-stud of give),
-    /// measured to each part's own shape rather than to the cells it touches.
+    /// measured to each part's own box rather than to the cells it touches — but for a
+    /// mesh (a MeshPart, the Terrain's chunks), whose box can hold a whole lake, to the
+    /// cell its span is in.
     private func roomAround(_ index: Int, floor: Float, _ agent: Agent) -> Bool {
         let reach = Int((agent.radius / Self.cell).rounded(.up))
         let x = index % width, z = index / width
@@ -273,7 +326,14 @@ final class NavigationGrid {
                 for span in spans[nz * width + nx] where !ignoring.contains(span.part) {
                     // Beside the feet, anything below a step is fine to stand next to.
                     guard span.bottom < floor + agent.height, span.top > floor + Self.step,
-                          checked.insert(span.part).inserted, let shape = footprints[span.part]?.signature else { continue }
+                          let shape = footprints[span.part]?.signature else { continue }
+                    if shape.mesh != nil {
+                        let corner = origin + SIMD2(Float(nx), Float(nz)) * Self.cell
+                        let flat = SIMD2(point.x, point.z)
+                        if simd_distance(simd_clamp(flat, corner, corner + Self.cell), flat) < agent.radius - 0.25 { return false }
+                        continue
+                    }
+                    guard checked.insert(span.part).inserted else { continue }
                     if distance(from: point, to: shape) < agent.radius - 0.25 { return false }
                 }
             }
@@ -330,10 +390,12 @@ final class NavigationGrid {
     func path(from start: Vec3, to finish: Vec3, agent: Agent, budget: Int = 60_000) -> (Status, [Waypoint]) {
         floorsSeen = [:]
         clearSeen = [:]
+        swum = []
         ignoring = containing(start)
         defer {
             floorsSeen = [:]
             clearSeen = [:]
+            swum = []
             ignoring = []
         }
         guard width > 0, let from = place(start, agent) else { return (.startNotEmpty, []) }
@@ -352,6 +414,7 @@ final class NavigationGrid {
         var best: [Node: Float] = [from: 0]
         var came: [Node: Node] = [:]
         var jumped: Set<Node> = []
+        var climbed: Set<Node> = []
         open.push(from, estimate(from))
         var expanded = 0
         var reached = false
@@ -373,22 +436,60 @@ final class NavigationGrid {
                     guard canStep(from: node.floor, into: side1, agent) != nil,
                           canStep(from: node.floor, into: side2, agent) != nil else { continue }
                 }
-                guard let (floor, jump, material) = canStep(from: node.floor, into: index, agent) else { continue }
+                guard var (floor, jump, material) = canStep(from: node.floor, into: index, agent) else { continue }
                 let weight = cost(of: material, agent)
                 guard weight.isFinite else { continue }
                 let next = Node(cell: index, floor: floor)
+                // Out of the water onto land: a swimmer climbs out with a jump.
+                if swum.contains(node), !swum.contains(next), floor >= node.floor - Self.step { jump = true }
+                floor = next.floor
                 let length = (dx != 0 && dz != 0 ? 1.4142 : 1) * Self.cell
                 let total = here + length * weight + (jump ? Self.cell * 2 : 0)
                 if total < best[next] ?? .greatestFiniteMagnitude {
                     best[next] = total
                     came[next] = node
                     if jump { jumped.insert(next) } else { jumped.remove(next) }
+                    climbed.remove(next)
                     open.push(next, total + estimate(next))
+                }
+            }
+            // Up a truss beside: to its top, or the ledge it leads to.
+            if agent.canClimb {
+                for (next, height) in climbs(from: node, agent) {
+                    let weight = cost(of: floors(next.cell, agent).first { $0.height == next.floor }?.material ?? "", agent)
+                    guard weight.isFinite, box.minX...box.maxX ~= next.cell % width, box.minZ...box.maxZ ~= next.cell / width
+                    else { continue }
+                    let total = here + height * Self.climbCost + Self.cell * weight
+                    if total < best[next] ?? .greatestFiniteMagnitude {
+                        best[next] = total
+                        came[next] = node
+                        jumped.remove(next)
+                        climbed.insert(next)
+                        open.push(next, total + estimate(next))
+                    }
                 }
             }
             // A jump carries you further than a step: up onto something from a cell
             // beyond the one beside it, which a wide agent can't stand in.
             guard agent.canJump else { continue }
+            // Across a gap: over cells with nothing to stand on near this height, to a floor
+            // no higher than a step, with nothing in the way of the jump.
+            for (dx, dz) in Self.gapLeaps {
+                let nx = x + dx, nz = z + dz
+                guard nx >= box.minX, nx <= box.maxX, nz >= box.minZ, nz <= box.maxZ,
+                      let floor = leapAcross(from: node.floor, at: (x, z), by: (dx, dz), agent) else { continue }
+                let next = Node(cell: nz * width + nx, floor: floor.height)
+                let weight = cost(of: floor.material, agent)
+                guard weight.isFinite else { continue }
+                let total = here + simd_length(SIMD2(Float(dx), Float(dz))) * Self.cell * weight + Self.cell * 3
+                if total < best[next] ?? .greatestFiniteMagnitude {
+                    best[next] = total
+                    came[next] = node
+                    jumped.insert(next)
+                    climbed.remove(next)
+                    open.push(next, total + estimate(next))
+                }
+            }
             for (dx, dz) in Self.leaps {
                 let nx = x + dx, nz = z + dz
                 guard nx >= box.minX, nx <= box.maxX, nz >= box.minZ, nz <= box.maxZ else { continue }
@@ -402,6 +503,7 @@ final class NavigationGrid {
                     best[next] = total
                     came[next] = node
                     jumped.insert(next)
+                    climbed.remove(next)
                     open.push(next, total + estimate(next))
                 }
             }
@@ -410,7 +512,86 @@ final class NavigationGrid {
         var nodes = [to]
         while let previous = came[nodes.last!] { nodes.append(previous) }
         nodes.reverse()
-        return (.success, waypoints(nodes, jumped: jumped, start: start, finish: finish, agent: agent))
+        return (.success, waypoints(nodes, jumped: jumped, climbed: climbed, start: start, finish: finish, agent: agent))
+    }
+
+    /// Jumps across gaps: two or three cells straight, or near enough.
+    private static let gapLeaps: [(Int, Int)] = {
+        var list: [(Int, Int)] = []
+        for dz in -reach...reach {
+            for dx in -reach...reach where max(abs(dx), abs(dz)) >= 2 {
+                if Float(dx * dx + dz * dz) <= Float(reach * reach) + 0.5 { list.append((dx, dz)) }
+            }
+        }
+        return list
+    }()
+
+    /// Where a jump across a gap lands: a clear floor no higher than a step above (and not
+    /// far below), when the first cell on the way has nothing to stand on near this
+    /// height, and nothing stands up in the way of the jump.
+    private func leapAcross(from height: Float, at cell: (x: Int, z: Int), by offset: (x: Int, z: Int),
+                            _ agent: Agent) -> (height: Float, material: String)? {
+        let length = simd_length(SIMD2(Float(offset.x), Float(offset.z)))
+        let direction = SIMD2(Float(offset.x), Float(offset.z)) / length
+        // The cells passed over, the first beside where it jumps from.
+        var between: [Int] = []
+        var t: Float = 0.75
+        while t < length - 0.5 {
+            let at = SIMD2(Float(cell.x), Float(cell.z)) + direction * t
+            let index = Int(at.y.rounded()) * width + Int(at.x.rounded())
+            if index != cell.z * width + cell.x, !between.contains(index) { between.append(index) }
+            t += 0.5
+        }
+        guard let first = between.first, first >= 0, first < spans.count else { return nil }
+        // Something to walk on beside: no need to jump.
+        if floors(first, agent).contains(where: { abs($0.height - height) <= Self.step && $0.material != "Water" }) { return nil }
+        let index = (cell.z + offset.z) * width + cell.x + offset.x
+        for floor in floors(index, agent) where floor.material != "Water" {
+            let rise = floor.height - height
+            guard rise <= Self.step, rise >= -Self.drop, clear(index, floor: floor.height, agent) else { continue }
+            // The jump's arc, about the agent's height above the higher end, is clear.
+            let low = max(height, floor.height) + 0.1, high = max(height, floor.height) + agent.height + 3
+            let open = between.allSatisfy { cell in
+                cell >= 0 && cell < spans.count && intervals(cell).allSatisfy { $0.top <= low || $0.bottom >= high }
+            }
+            if open { return floor }
+        }
+        return nil
+    }
+
+    /// Climbs from a floor: up a truss within the agent's reach (as near as it can stand),
+    /// from its foot to the top of it or to a floor beside its top (the ledge it leans
+    /// on) — and how high.
+    private func climbs(from node: Node, _ agent: Agent) -> [(Node, Float)] {
+        let x = node.cell % width, z = node.cell / width
+        let near = Int((agent.radius / Self.cell).rounded(.up)) + 1
+        var found: [(Node, Float)] = []
+        for dz in -near...near {
+          for dx in -near...near where dx != 0 || dz != 0 {
+            let tx = x + dx, tz = z + dz
+            guard tx >= 0, tz >= 0, tx < width, tz < depth else { continue }
+            let trussCell = tz * width + tx
+            for span in spans[trussCell] where span.truss && !ignoring.contains(span.part)
+                && span.bottom <= node.floor + Self.step && span.top > node.floor + Self.step {
+                let top = span.top
+                // Onto the truss itself…
+                if floors(trussCell, agent).contains(where: { abs($0.height - top) < 0.05 }), clear(trussCell, floor: top, agent) {
+                    found.append((Node(cell: trussCell, floor: top), top - node.floor))
+                }
+                // …or off it at the top, onto what's beside.
+                for (ex, ez) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+                    let lx = tx + ex, lz = tz + ez
+                    guard lx >= 0, lz >= 0, lx < width, lz < depth, lz * width + lx != node.cell else { continue }
+                    let ledge = lz * width + lx
+                    for floor in floors(ledge, agent) where abs(floor.height - top) <= Self.step
+                        && floor.height > node.floor + Self.step && clear(ledge, floor: floor.height, agent) {
+                        found.append((Node(cell: ledge, floor: floor.height), floor.height - node.floor))
+                    }
+                }
+            }
+          }
+        }
+        return found
     }
 
     private static let leaps = [(2, 0), (-2, 0), (0, 2), (0, -2), (2, 1), (2, -1), (-2, 1), (-2, -1),
@@ -457,19 +638,22 @@ final class NavigationGrid {
 
     /// The cells as a path: straightened where the way between is clear and level
     /// enough, then cut into waypoints `spacing` apart.
-    private func waypoints(_ nodes: [Node], jumped: Set<Node>, start: Vec3, finish: Vec3, agent: Agent) -> [Waypoint] {
+    private func waypoints(_ nodes: [Node], jumped: Set<Node>, climbed: Set<Node>, start: Vec3, finish: Vec3,
+                           agent: Agent) -> [Waypoint] {
         func point(_ node: Node) -> Vec3 {
             let c = centre(node.cell)
             return Vec3(c.x, node.floor, c.y)
         }
         // Corners: the nodes the straight line can't skip.
         var corners: [(Vec3, Bool)] = [(Vec3(start.x, nodes[0].floor, start.z), false)]
+        var climbTops: [Vec3] = []
         var anchor = 0
         var index = 1
         while index < nodes.count {
-            if jumped.contains(nodes[index]) {
+            if jumped.contains(nodes[index]) || climbed.contains(nodes[index]) {
                 if index - 1 > anchor { corners.append((point(nodes[index - 1]), false)) }
-                corners.append((point(nodes[index]), true))
+                corners.append((point(nodes[index]), jumped.contains(nodes[index])))
+                if climbed.contains(nodes[index]) { climbTops.append(point(nodes[index])) }
                 anchor = index
             } else if index - 1 > anchor && !straight(from: point(nodes[anchor]), to: point(nodes[index]), agent) {
                 // The last that could be reached straight is a corner; carry on from there.
@@ -487,7 +671,8 @@ final class NavigationGrid {
             let from = list.last!.position
             let flat = SIMD2(position.x - from.x, position.z - from.z)
             let length = simd_length(flat)
-            if agent.spacing.isFinite && agent.spacing > 0 && length > agent.spacing * 1.5 && !jump {
+            let climb = climbTops.contains(position)
+            if agent.spacing.isFinite && agent.spacing > 0 && length > agent.spacing * 1.5 && !jump && !climb {
                 let pieces = Int((length / agent.spacing).rounded(.down))
                 for piece in 1..<pieces {
                     let t = Float(piece) / Float(pieces)
@@ -495,10 +680,20 @@ final class NavigationGrid {
                 }
             }
             if simd_distance(from, position) > 0.3 || jump {
-                list.append(Waypoint(position: position, action: jump ? .jump : .walk))
+                list.append(Waypoint(position: position, action: jump ? .jump : .walk, label: climb ? "Climb" : ""))
             }
         }
         if list.count == 1 { list.append(Waypoint(position: end, action: .walk)) }
+        // In water: its label says so. (A straight stretch's waypoints are placed along
+        // the line, so it's the floor nearest under each that counts.)
+        for index in list.indices where list[index].label.isEmpty {
+            let p = list[index].position
+            let (x, z) = cellCoordinates(SIMD2(p.x, p.z))
+            guard x >= 0, z >= 0, x < width, z < depth else { continue }
+            let under = floors(z * width + x, agent).filter { abs($0.height - p.y) <= Self.step + 0.1 }
+                .min { abs($0.height - p.y) < abs($1.height - p.y) }
+            if under?.material == "Water" { list[index].label = "Water" }
+        }
         return list
     }
 
@@ -539,7 +734,7 @@ final class NavigationGrid {
         guard waypoints.count > 1 else { return -1 }
         for index in max(from, 1)..<waypoints.count {
             let a = waypoints[index - 1], b = waypoints[index]
-            if b.action == .jump { continue }
+            if b.action == .jump || b.label == "Climb" { continue }
             if !straight(from: a.position, to: b.position, agent) { return index + 1 }
         }
         return -1

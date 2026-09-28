@@ -141,8 +141,7 @@ struct CharacterController {
         if !intent.dead, let surface = waterSurface(in: parts) {
             climbing = false
             swimming = true
-            stepSwimming(dt: dt, wish: wish, surface: surface, intent: intent, solids: solids)
-            return false
+            return stepSwimming(dt: dt, wish: wish, surface: surface, intent: intent, solids: solids)
         }
         swimming = false
 
@@ -216,13 +215,23 @@ struct CharacterController {
     }
 
     /// Floating with the head out; Space swims up (and out, at the surface).
-    private mutating func stepSwimming(dt: Float, wish: Vec3, surface: Float, intent: CharacterIntent, solids: [Part]) {
+    /// Returns true when it leaps out of the water (a jump, used up).
+    private mutating func stepSwimming(dt: Float, wish: Vec3, surface: Float, intent: CharacterIntent,
+                                       solids: [Part]) -> Bool {
+        var leapt = false
         let speed = intent.walkSpeed * Self.swimSpeedFactor
         velocity.x = wish.x * speed + shove.x
         velocity.z = wish.z * speed + shove.z
         let depth = surface - (position.y + Self.floatDepth)
-        let goal = intent.jump ? speed : max(min(depth * 4, speed), -speed)
-        velocity.y += (goal - velocity.y) * min(1, dt * 5)
+        if intent.jump, depth < 0.6, velocity.y < intent.jumpVelocity * 0.5 {
+            // At the surface a jump leaps out of the water — onto a bank as high as the
+            // water, say, which swimming up alone can't reach.
+            velocity.y = intent.jumpVelocity
+            leapt = true
+        } else {
+            let goal = intent.jump ? speed : max(min(depth * 4, speed), -speed)
+            velocity.y += (goal - velocity.y) * min(1, dt * 5)
+        }
         position.x += velocity.x * dt
         position.z += velocity.z * dt
         resolveWalls(parts: solids)
@@ -236,6 +245,7 @@ struct CharacterController {
         walkPhase += horizontalSpeed * dt * 0.55
         fadeShove(dt: dt)
         fellIntoVoid = position.y < Self.voidHeight
+        return leapt
     }
 
     /// The way out of a truss the body is against (horizontal), if it is against one.

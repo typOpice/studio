@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2961 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2977 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1740,15 +1740,19 @@ wins, so you carry on from there.
 
 `game:GetService("PathfindingService"):CreatePath(agent)` makes a path for an agent
 of a size — `AgentRadius` (2), `AgentHeight` (5), `AgentCanJump` (true),
-`WaypointSpacing` (4) and `Costs` (by material, `math.huge` to keep out:
-`{ Water = 20, Neon = math.huge }`). `path:ComputeAsync(start, finish)` finds a way
-round anything in the between, over the tops of parts and the ground. It goes up
-only as high as a character can step (2 studs), or jump (about 6) if it may. Then
-`path.Status` is `Enum.PathStatus.Success` (or `NoPath`, `FailStartNotEmpty`,
-`FailFinishNotEmpty`). `path:GetWaypoints()` gives `PathWaypoint`s, each with
-`Position` and `Action` (`Walk`, or `Jump` for one to jump up to). `path.Blocked`
-fires with a waypoint's index when something comes to stand in the way, and
-`path:CheckOcclusionAsync(from)` says where now (or -1).
+`WaypointSpacing` (4), `AgentCanClimb` (false) and `Costs` (by material, `math.huge` to
+keep out: `{ Water = 20, Neon = math.huge }`). `path:ComputeAsync(start, finish)` finds
+a way round anything in the between, over the tops of parts, the Terrain and the
+ground. It goes up only as high as a character can step (2 studs), or jump (about 6)
+if it may; it jumps across gaps up to 6 studs wide; it swims across water (a water
+part's or the Terrain's) too deep to wade, and wades what isn't; and, with
+`AgentCanClimb`, it climbs TrussParts. Then `path.Status` is `Enum.PathStatus.Success`
+(or `NoPath`, `FailStartNotEmpty`, `FailFinishNotEmpty`). `path:GetWaypoints()` gives
+`PathWaypoint`s, each with `Position`, `Action` (`Walk`, or `Jump` for one to jump to:
+up, across a gap, or out of the water) and `Label` (`"Water"` in water, `"Climb"` at
+the top of a climb, `""` otherwise). A character following them with `Humanoid:MoveTo`
+swims and climbs by itself. `path.Blocked` fires with a waypoint's index when something
+comes to stand in the way, and `path:CheckOcclusionAsync(from)` says where now (or -1).
 
 The world is seen as a grid of 2-stud squares, so a gap has to be a little wider than
 the agent to get through. The agent's own body, where the path starts, doesn't count.

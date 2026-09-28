@@ -8,7 +8,11 @@ import simd
 /// body; the Luau API (CreatePath, ComputeAsync, Status, GetWaypoints, Blocked,
 /// CheckOcclusionAsync, FindPathAsync, errors, completion); the README's example walking
 /// a character round a wall with Humanoid:MoveTo; and Nightfall's zombies finding their
-/// way round walls to a player, and to a joined player.
+/// way round walls to a player, and to a joined player. Then water (swum at its surface
+/// when deep, waded when not, in water parts and the Terrain, kept out of by its Cost),
+/// trusses (climbed only by an agent that can), gaps (jumped across, not too wide); the
+/// Luau side of those; and a Rig following a path across a pond, over a gap and up a
+/// truss, alone and in a joined player's game.
 enum PathfindingSelfTest {
     static func run(check: Checker) {
         testGrid(check)
@@ -16,6 +20,11 @@ enum PathfindingSelfTest {
         testReadme(check)
         testZombies(check)
         testTogether(check)
+        testWater(check)
+        testClimbing(check)
+        testGaps(check)
+        testCourse(check)
+        testCourseTogether(check)
     }
 
     private static let frame: Float = 1.0 / 60
@@ -328,5 +337,202 @@ enum PathfindingSelfTest {
         joining.leaveGame()
         hosting.leaveGame()
         DataStoreFiles.shared.clear(place: Nightfall.placeID)
+    }
+
+    // MARK: - Water
+
+    private static func testWater(_ check: Checker) {
+        print("\nPathfinding: water")
+        // Land either side of a pond 6 deep, nothing round it (no ground).
+        func pond(depth: Float) -> NavigationGrid {
+            let grid = NavigationGrid()
+            grid.ground = false
+            var water = block("Pond", Vec3(0, 6 - depth / 2, -15), Vec3(24, depth, 10))
+            water.material = .water
+            water.canCollide = false
+            grid.update([block("Near", Vec3(0, 3, 0), Vec3(24, 6, 20)), block("Far", Vec3(0, 3, -30), Vec3(24, 6, 20)),
+                         block("Bed", Vec3(0, 5.5 - depth, -15), Vec3(24, 1, 10)), water])
+            return grid
+        }
+        let deep = pond(depth: 6)
+        // Points a root part's height above the floor, as a character's are.
+        let start = Vec3(0, 9, 0), goal = Vec3(0, 9, -30)
+        let (status, points) = deep.path(from: start, to: goal, agent: NavigationGrid.Agent(radius: 1.5))
+        let wet = points.filter { $0.position.z < -10.5 && $0.position.z > -19.5 }
+        check("deep water is swum across, at its surface, labelled Water", status == .success && !wet.isEmpty
+              && wet.allSatisfy { $0.label == "Water" && abs($0.position.y - 6) < 0.05 }
+              && points.filter { $0.label == "Water" }.allSatisfy { $0.position.z < -9 && $0.position.z > -21 },
+              "\(status) \(points.map { ($0.position, $0.label) })")
+        let out = points.first { $0.position.z < -19.5 }
+        check("…climbing out onto the far bank with a jump", out.map { $0.action == .jump && $0.label == "" } == true,
+              "\(String(describing: out))")
+        let shallow = pond(depth: 2).path(from: start, to: goal, agent: NavigationGrid.Agent(radius: 1.5))
+        let waded = shallow.1.filter { $0.position.z < -10.5 && $0.position.z > -19.5 }
+        check("…shallow water is waded (not swum), labelled Water", shallow.0 == .success && !waded.isEmpty
+              && waded.allSatisfy { $0.label == "Water" && $0.position.y <= 6.01 }
+              && !shallow.1.contains { $0.action == .jump }, "\(shallow)")
+        var keepOut = NavigationGrid.Agent(radius: 1.5)
+        keepOut.costs["Water"] = .infinity
+        check("…and a Water cost of infinity keeps out of it", deep.path(from: start, to: goal, agent: keepOut).0 == .noPath)
+
+        // The Terrain's: a lake between rock banks.
+        let model = SceneModel()
+        model.parts = []
+        model.terrain.fillRegion(low: Vec3(-32, -16, -44), high: Vec3(32, 8, 12), material: .rock)
+        model.terrain.fillRegion(low: Vec3(-32, -8, -24), high: Vec3(32, 8, -8), material: .air)
+        model.terrain.fillRegion(low: Vec3(-32, -8, -24), high: Vec3(32, 4, -8), material: .water)
+        let lake = NavigationGrid()
+        lake.ground = false
+        lake.terrainWater = { [terrain = model.terrain] in terrain.waterSurface(at: $0) }
+        lake.update(model.terrainParts)
+        let across = lake.path(from: Vec3(0, 11, 4), to: Vec3(0, 11, -36), agent: NavigationGrid.Agent(radius: 1.5))
+        let swum = across.1.filter { $0.label == "Water" }
+        check("…the Terrain's water too", across.0 == .success && !swum.isEmpty && swum.allSatisfy { abs($0.position.y - 4) < 0.3 },
+              "\(across.0) \(across.1.map { ($0.position, $0.label) })")
+    }
+
+    // MARK: - Trusses
+
+    private static func testClimbing(_ check: Checker) {
+        print("\nPathfinding: climbing")
+        let grid = NavigationGrid()
+        var truss = block("Truss", Vec3(0, 5, -9), Vec3(2, 10, 2))
+        truss.shape = .truss
+        grid.update([block("Loft", Vec3(0, 5, -15), Vec3(10, 10, 10)), truss])
+        let start = Vec3(0, 0, 0), goal = Vec3(0, 10, -15)
+        let walker = grid.path(from: start, to: goal, agent: NavigationGrid.Agent(radius: 1.5))
+        check("a loft too high to jump to is out of reach, unless climbing", walker.0 == .noPath, "\(walker)")
+        var climber = NavigationGrid.Agent(radius: 1.5)
+        climber.canClimb = true
+        let (status, points) = grid.path(from: start, to: goal, agent: climber)
+        let top = points.first { $0.label == "Climb" }
+        check("…an agent that can climbs the truss, the top of the climb labelled Climb", status == .success
+              && top.map { abs($0.position.y - 10) < 0.05 && $0.action == .walk } == true
+              && points.filter { $0.label == "Climb" }.count == 1 && abs(points.last!.position.y - 10) < 0.05,
+              "\(status) \(points.map { ($0.position, $0.label) })")
+        check("…and the climbed path isn't blocked by its own truss", grid.firstBlocked(points, from: 1, agent: climber) == -1)
+    }
+
+    // MARK: - Gaps
+
+    private static func testGaps(_ check: Checker) {
+        print("\nPathfinding: gaps")
+        func across(_ gap: Float, jump: Bool = true) -> (NavigationGrid.Status, [NavigationGrid.Waypoint]) {
+            let grid = NavigationGrid()
+            grid.ground = false
+            grid.update([block("Near", Vec3(0, 2.5, 0), Vec3(20, 5, 20)),
+                         block("Far", Vec3(0, 2.5, -20 - gap), Vec3(20, 5, 20))])
+            return grid.path(from: Vec3(0, 8, 5), to: Vec3(0, 8, -25 - gap), agent: NavigationGrid.Agent(radius: 1.5, canJump: jump))
+        }
+        let small = across(5)
+        let landing = small.1.first { $0.action == .jump }
+        check("a gap is jumped across, the jump on the waypoint it lands on", small.0 == .success
+              && landing.map { $0.position.z <= -15 && abs($0.position.y - 5) < 0.05 } == true
+              && small.1.filter { $0.action == .jump }.count == 1, "\(small)")
+        check("…not by an agent that can't jump", across(5, jump: false).0 == .noPath)
+        check("…and not one too wide", across(12).0 == .noPath)
+    }
+
+    // MARK: - A Rig following a path
+
+    /// Near land, a pond to swim, a gap over a drop to jump, far land and a loft on it up a
+    /// truss: 12 above the ground, so there's no way round.
+    static func course(at offset: Vec3 = .zero) -> [Part] {
+        var water = block("Pond", offset + Vec3(0, 6, -10), Vec3(30, 12, 10))
+        water.material = .water
+        water.canCollide = false
+        var truss = block("Truss", offset + Vec3(0, 17, -39), Vec3(2, 10, 2))
+        truss.shape = .truss
+        var goal = block("Goal", offset + Vec3(0, 23, -45), Vec3(1, 2, 1))
+        goal.canCollide = false
+        return [block("Near", offset + Vec3(0, 6, 5), Vec3(30, 12, 20)), water,
+                block("Middle", offset + Vec3(0, 6, -20), Vec3(30, 12, 10)),
+                block("Far", offset + Vec3(0, 6, -40), Vec3(30, 12, 20)),
+                block("Loft", offset + Vec3(0, 17, -45), Vec3(10, 10, 10)), truss, goal]
+    }
+
+    static let follower = """
+    local PathfindingService = game:GetService("PathfindingService")
+    local rig = workspace:WaitForChild("Rig")
+    local humanoid = rig:WaitForChild("Humanoid")
+    local root = rig:WaitForChild("HumanoidRootPart")
+    local goal = workspace:WaitForChild("Goal")
+    task.wait(0.5)
+    local path = PathfindingService:CreatePath({ AgentRadius = 1.5, AgentCanClimb = true })
+    path:ComputeAsync(root.Position, goal.Position)
+    local labels = {}
+    for _, waypoint in path:GetWaypoints() do
+    \tif waypoint.Label ~= "" and labels[#labels] ~= waypoint.Label then
+    \t\ttable.insert(labels, waypoint.Label)
+    \tend
+    end
+    print("path", path.Status.Name, table.concat(labels, ","))
+    for _, waypoint in path:GetWaypoints() do
+    \tif waypoint.Action == Enum.PathWaypointAction.Jump then
+    \t\thumanoid.Jump = true
+    \tend
+    \thumanoid:MoveTo(waypoint.Position)
+    \thumanoid.MoveToFinished:Wait()
+    end
+    print("arrived", (root.Position - goal.Position).Magnitude < 5)
+    """
+
+    private static func testCourse(_ check: Checker) {
+        print("\nPathfinding: a Rig across a pond, over a gap and up a truss")
+        let model = SceneModel()
+        model.scripts = []
+        model.parts = [block("Baseplate", Vec3(0, -0.5, 0), Vec3(300, 1, 300))] + course()
+        model.addRig(at: Vec3(0, 12, 10))
+        var script = ScriptObject.blank(language: .luau)
+        script.source = follower
+        model.scripts = [script]
+        let session = PlayController(model: model, console: ScriptConsole(), withPlayer: false)
+        session.start()
+        var swam = false, climbed = false
+        for _ in 0..<(40 * 2) {
+            step(session, seconds: 0.5)
+            let at = model.parts.first { $0.name == "HumanoidRootPart" }?.position ?? .zero
+            if at.z < -6 && at.z > -14 { swam = true }
+            if at.y > 16 && at.z > -41 { climbed = true }
+            if session.console.lines.contains(where: { $0.text.hasPrefix("arrived") }) { break }
+        }
+        let said = session.console.lines.filter { $0.kind == .output }.map(\.text)
+        check("the path swims, jumps and climbs", said.contains("path Success Water,Climb"), "\(said)")
+        check("…and the Rig follows it: through the water, up the truss, to the goal",
+              said.contains("arrived true") && swam && climbed, "\(said) \(swam) \(climbed)")
+        let errors = session.console.lines.filter { $0.kind == .error }.map(\.text)
+        check("…with no errors", errors.isEmpty, "\(errors)")
+        session.stop()
+    }
+
+    private static func testCourseTogether(_ check: Checker) {
+        print("\nPathfinding: the course in a joined player's game")
+        let offset = Vec3(80, 0, 0)
+        guard let (hosting, joining) = LANSelfTest.twoPlayers({ model in
+            model.parts = [block("Baseplate", Vec3(0, -0.5, 0), Vec3(400, 1, 400))] + course(at: offset)
+            model.addRig(at: offset + Vec3(0, 12, 10))
+            var script = ScriptObject.blank(language: .luau)
+            script.source = follower
+            model.scripts.append(script)
+        }), let host = hosting.player, let sam = joining.player else {
+            check("a host and a player join", false)
+            return
+        }
+        var arrived = false
+        for _ in 0..<40 {
+            LANSelfTest.run([hosting, joining], seconds: 1)
+            if host.console.lines.contains(where: { $0.text == "arrived true" }) {
+                arrived = true
+                break
+            }
+        }
+        LANSelfTest.run([hosting, joining], seconds: 0.5)
+        let seen = joining.model.parts.first { $0.name == "HumanoidRootPart" }?.position ?? .zero
+        check("the host's Rig crosses the course, and the joined player sees it reach the goal",
+              arrived && simd_distance(seen, offset + Vec3(0, 23, -45)) < 5, "\(arrived) \(seen)")
+        let errors = (host.console.lines + sam.console.lines).filter { $0.kind == .error }.map(\.text)
+        check("…with no errors on either", errors.isEmpty, "\(errors)")
+        joining.leaveGame()
+        hosting.leaveGame()
     }
 }

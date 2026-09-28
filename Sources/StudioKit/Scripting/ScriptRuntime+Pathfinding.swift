@@ -4,9 +4,9 @@ import Foundation
 // the runtime's NavigationGrid (Pathfinding.swift). The grid catches up with the parts
 // once a frame, however many paths are asked for in it.
 //
-// An agent comes as [radius, height, canJump, spacing, [[material, cost], …]]; waypoints
-// go back as [x, y, z, "Walk" | "Jump"], with the ids of the parts the search left out
-// (the agent's own body), which a check of the path later leaves out too.
+// An agent comes as [radius, height, canJump, spacing, [[material, cost], …], canClimb];
+// waypoints go back as [x, y, z, "Walk" | "Jump", label], with the ids of the parts the
+// search left out (the agent's own body), which a check of the path later leaves out too.
 
 extension ScriptRuntime {
     func pathCall(_ name: String, _ arguments: [ScriptValue]) -> ScriptValue {
@@ -44,6 +44,7 @@ extension ScriptRuntime {
         // The ground at 0 is solid in play (CharacterController.solidBaseplate), always
         // but for tests that take it away.
         navigation.ground = (player as? PlayController)?.character.solidBaseplate ?? true
+        navigation.terrainWater = model.terrain.isEmpty ? nil : { [terrain = model.terrain] in terrain.waterSurface(at: $0) }
         navigation.update(model.parts + model.terrainParts)
     }
 
@@ -61,18 +62,20 @@ extension ScriptRuntime {
                 }
             }
         }
+        if list.count > 5, let climb = list[5].asBool { agent.canClimb = climb }
         return agent
     }
 
     private static func value(_ waypoint: NavigationGrid.Waypoint) -> ScriptValue {
         .list([.number(Double(waypoint.position.x)), .number(Double(waypoint.position.y)),
-               .number(Double(waypoint.position.z)), .string(waypoint.action.rawValue)])
+               .number(Double(waypoint.position.z)), .string(waypoint.action.rawValue), .string(waypoint.label)])
     }
 
     private static func waypoint(_ value: ScriptValue) -> NavigationGrid.Waypoint? {
         guard let list = value.asList, list.count >= 4, let x = list[0].asFloat, let y = list[1].asFloat,
               let z = list[2].asFloat else { return nil }
         return NavigationGrid.Waypoint(position: Vec3(x, y, z),
-                                       action: NavigationGrid.Action(rawValue: list[3].asString ?? "") ?? .walk)
+                                       action: NavigationGrid.Action(rawValue: list[3].asString ?? "") ?? .walk,
+                                       label: list.count > 4 ? list[4].asString ?? "" : "")
     }
 }

@@ -1332,6 +1332,7 @@ do
 			parameters.AgentCanJump ~= false,
 			if parameters.WaypointSpacing == math.huge then -1 else tonumber(parameters.WaypointSpacing) or 4,
 			costs,
+			parameters.AgentCanClimb == true,
 		}
 	end
 
@@ -1383,7 +1384,7 @@ do
 				state.waypoints = {}
 				for _, point in result[2] do
 					table.insert(state.waypoints, PathWaypoint.new(vector(point[1], point[2], point[3]),
-						Enum.PathWaypointAction[point[4]]))
+						Enum.PathWaypointAction[point[4]], point[5]))
 				end
 				state.generation += 1
 				if #state.waypoints > 0 then

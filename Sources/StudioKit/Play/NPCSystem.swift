@@ -161,8 +161,9 @@ final class NPCSystem {
         intent.walkSpeed = Float(object.walkSpeed)
         intent.jumpVelocity = Float(object.jumpPower)
         intent.autoRotate = object.autoRotate
+        // Jump stays asked for until it jumps (as Roblox's does): a frame it can't — in the
+        // air, bobbing in water — doesn't lose it.
         intent.jump = body.jump
-        body.jump = false
         if let target = body.target {
             let across = SIMD2(target.x - body.controller.position.x, target.z - body.controller.position.z)
             if simd_length(across) <= Self.arrival {
@@ -180,7 +181,9 @@ final class NPCSystem {
         let own = Set(body.rest.map(\.part))
         body.controller.solidBaseplate = solidGround
         body.controller.terrainWater = model.terrain.isEmpty ? nil : { [terrain = model.terrain] in terrain.waterSurface(at: $0) }
-        body.controller.step(dt: dt, intent: intent, parts: model.parts.filter { !own.contains($0.id) } + model.terrainParts)
+        if body.controller.step(dt: dt, intent: intent, parts: model.parts.filter { !own.contains($0.id) } + model.terrainParts) {
+            body.jump = false
+        }
         if body.controller.position.y < CharacterController.voidHeight {
             model.updateDataObject(id: body.humanoid) { $0.health = 0 }
             return

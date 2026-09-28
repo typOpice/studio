@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2961 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # 2977 checks — THE test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -147,7 +147,7 @@ listed in §9.
 | `DataStoreSelfTest.swift` | DataStores: a place id for each new place and New Scene, saved and reopened, one from its path for an old file (the same each time, not marked edited), fixed ones for the sample games (from the home page too); kept on disk by place, store and scope, files named safely, read back, removed, cleared for one place only; from Luau: the same store each time, tables read back as copies, UpdateAsync (and nil leaving it), IncrementAsync, RemoveAsync, number keys, scopes, every refusal (Instance, Vector3, function, NaN, mixed and cyclic tables, nil, long keys, incrementing text, fractions in an ordered store) with nothing written, ordered pages both ways and between two values, GetGlobalDataStore, a LocalScript refused, Run mode; saved across plays, reopened, another place apart, cleared; completion; the README example; Mega Obby, Nightfall and Adventure Island carrying on next time; a joined player saving nothing themselves, the host keeping their stage by name, and on stage 4 when they join again |
 | `GamePickerSelfTest.swift` | The client's game picker: where it starts, the sample games and the Starter Scene with their pictures; places opened remembered (newest first, once each, not Studio's hand-over copy, kept between runs, a deleted one left out), one chosen opening on the menu, one that can't be opened saying so; the character and join screens returning where they came from; choosing, playing and choosing another game; a host choosing Mega Obby there and a joined player (from the picker) playing it |
 | `GameSoundsSelfTest.swift` | Built-in sounds: twenty effects and three loops, each mono, levelled, effects short, music without a gap at the loop, the same every time, made once, unknown names refused; a script's built-in Sound loaded with its length and playing, a scene Sound looping from the start, the README's coin; Nightfall (music and news sounds in SoundService, a groan in every zombie's head, day music then night music and a gong, groans from zombies, a bite's hit and your own hurt, a swing and a fall, your orb, dawn's chime and the day music back, the end of a run heard by you alone); Mega Obby (music, sounds in every jump pad and fading tile, your checkpoint ding, a boing from the pad, a crack, an oof); a joined player hearing the host's music and a pad the host boings for them, their checkpoint ding heard by them and not the host |
-| `PathfindingSelfTest.swift` | PathfindingService: the grid round a wall (start to goal, round the end and never through, evenly spaced and walkable, on the ground), none into a closed box, a step walked, a platform jumped onto (marked on the landing), none without jumping or too high, a gap one agent fits and a bigger doesn't, a Neon strip crossed or avoided by cost, a wall put down blocking an old path from where it meets it, a start inside the agent's own body; from Luau (CreatePath, ComputeAsync, Status, PathWaypoints, Blocked firing and CheckOcclusionAsync when a crate lands on the path, FindPathAsync, a bad start refused, PathWaypoint.new, completion); the README's example walking a character round a wall to a flag; a Nightfall zombie behind a pen's back wall going round and in to bite; the same for a joined player, seen from their game |
+| `PathfindingSelfTest.swift` | PathfindingService: the grid round a wall (start to goal, round the end and never through, evenly spaced and walkable, on the ground), none into a closed box, a step walked, a platform jumped onto (marked on the landing), none without jumping or too high, a gap one agent fits and a bigger doesn't, a Neon strip crossed or avoided by cost, a wall put down blocking an old path from where it meets it, a start inside the agent's own body; from Luau (CreatePath, ComputeAsync, Status, PathWaypoints, Blocked firing and CheckOcclusionAsync when a crate lands on the path, FindPathAsync, a bad start refused, PathWaypoint.new, completion); the README's example walking a character round a wall to a flag; a Nightfall zombie behind a pen's back wall going round and in to bite; the same for a joined player, seen from their game; then water — deep water swum at its surface with a jump out onto the far bank, shallow water waded, a Water cost of infinity keeping out, the Terrain's lake; a loft out of reach unless climbing, the climb's top labelled Climb, not blocked by its own truss; a gap jumped across (not by an agent that can't jump, not one too wide); a Rig following a path across a pond, over a gap and up a truss to a goal, alone and in a joined player's game |
 | `DebuggerSelfTest.swift` | The Luau debugger: a breakpoint stopping each time its line runs, in the function and called from the script's line, with locals, upvalues and the caller's (a table shown by its entries, no compiler temporaries), the script carrying on after; a breakpoint on a line with no code landing on the next; values described (a long string cut short, an Instance by class and name, an empty table, nil); Step Over (to the next line, out to the caller, on to the breakpoint again), Step Into (into the called function), Step Out (back to the caller), Stop (no more stops, the session asked to end); a breakpoint put on and taken off while running; a LocalScript's and a ModuleScript's called from it; a character script's for the first character and the next; the world waiting while stopped and the watchdog not counting the wait; breakpoints saved (and not written when there are none), toggling not an undoable edit, kept through Stop in Studio, and moving with added or removed lines; watch expressions (locals, upvalues, globals, another call's; failing, not Luau, a runaway one cut short, the script unaffected); conditional breakpoints (holding, never holding, calling the script's functions with breakpoints of their own, failing with a note, two on one line, changed and taken away while running); tables opened (by name with paths, numbered in order, nested, empty, not a table); conditions saved, moved, dropped and kept through Stop; logpoints (printing as print does and going on, only when their condition holds, failing into the output, beside a breakpoint) and hit counts (stopping or not, shown live in Studio); watches and log messages saved with the place, not sent to joined players, kept through Stop and undo; a host stopped in a RemoteEvent handler with a joined player's message — only for what its condition asks, the player's name in a watch, the table they sent opened, a logpoint printing every player's message and both lines counting them — the replies reaching them after |
 | `EngineSelfTest.swift` | The engine over a long game, through the real audio engine rendered offline: nightfall's sounds (music stopped and started, a gong, then the first sound in a part, which once crashed the game), none knocking another off the mix, sound coming out; 200 sounds started and stopped, flat and in parts, all heard; a change of audio device (the engine started again, the music carrying on, new sounds in parts starting); Nightfall played into the night and its fighting through it, with no errors and nothing growing (parts, Sounds, Models, GUI, Luau's memory) |
 | `SceneIndexSelfTest.swift` | The scene index: 3000 random changes of every kind (parts and groups made, deleted, reparented through the array and through update(id:), moved, sent to storage and back, the parts replaced whole with the same count, shuffled, data objects and Sounds made and deleted, reparenting undone) with parts, groups, parents, children, data objects and Sounds all found as a search finds them; finding a part, a Model's pivot, moving a Model and a folder's children no dearer with 16 times the parts |
@@ -1507,6 +1507,25 @@ Roughly ordered by how much time they will cost you.
     - A body skips putting its parts while nothing moved (`lastPut`), since each change
       is sent to every joined player.
 
+127. **The navigation grid swims, climbs and leaps; the characters it's for do too.**
+    - **Water** isn't solid, so it's no span: `update` keeps the water parts, and
+      `terrainWater` is the Terrain's. `standing` looks for water just above each floor:
+      shallower than half the agent, the floor is waded (material "Water"); deeper, the
+      surface is the floor (swum, in `swum`). A swum node stepping onto land is a jump —
+      a swimmer's feet are well below a bank level with the water, and
+      `CharacterController.stepSwimming` makes a jump at the surface a leap out.
+    - **Trusses** are spans marked `truss`. With `canClimb`, `climbs` links a floor
+      within the agent's reach of one to its top, or to a floor beside its top; those
+      nodes are corners, their waypoints labelled "Climb" (Walk: the character climbs by
+      walking into the truss), and `firstBlocked` doesn't check them.
+    - **Gaps**: `leapAcross`, up to `reach` cells, only when the first cell on the way has
+      nothing to stand on near this height, landing no higher than a step, with the arc
+      clear. Marked like any jump, on the waypoint landed on.
+    - **Room round the body** is measured to a part's box, but to the cell of a mesh's
+      span (a Terrain chunk's box can hold a whole lake).
+    - **An NPC's Jump** stays asked for until it jumps (`NPCSystem`), as Roblox's
+      Humanoid.Jump does and the player's already did; a leap out of water counts.
+
 126. **The Toolbox's models are code, inserted as saved models are.** Each
     `ToolboxModel` builds a `ModelFile` standing on y = 0 around its pivot (the Rig is
     `addRig`, having a Humanoid), and `ViewportController.insert` puts it on whatever a
@@ -1956,8 +1975,10 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   place only when something else makes it save. While stopped, a network host sends nothing, so its players see
   the world stand still. A line with only `end` on it can't be stopped at.
 - **Pathfinding** sees the world as 2-stud squares, so a gap must be a little wider than
-  the agent. No climbing (TrussParts), no swimming, no jumping across gaps (only up),
-  no PathfindingModifier or PathfindingLink. A search stays within 96 studs of the
+  the agent. Trusses are climbed up, not down (a path drops down instead, 30 studs at
+  most); a jump across a gap is 3 cells at most, landing no higher than a step; water
+  is flat (one surface per cell) and swum across, not dived under; no
+  PathfindingModifier or PathfindingLink. A search stays within 96 studs of the
   line between its ends. `Blocked` is checked twice a second, and only while someone
   listens.
 - **Screen effects** all read the world's depth (not an earlier effect's), run in
