@@ -12,8 +12,10 @@ import Foundation
 ///
 /// A breakpoint may have a condition, a Luau expression worked out in the stopped call
 /// (its locals, then its upvalues, then the script's globals): it stops only when that
-/// holds, or when it fails (to say why). Watch expressions are worked out the same way
-/// at every stop, and while stopped any expression can be, and any table opened.
+/// holds, or when it fails (to say why). One with a log message is a logpoint: it
+/// prints the message (worked out the same way) and goes on. Each counts its hits.
+/// Watch expressions are worked out at every stop, and while stopped any expression
+/// can be, and any table opened.
 final class ScriptDebugger {
     enum Command: Equatable { case resume, stepOver, stepInto, stepOut, stop }
     enum Reason: Equatable { case breakpoint, step }
@@ -59,9 +61,20 @@ final class ScriptDebugger {
     private weak var runtime: ScriptRuntime?
     private weak var vm: LuauInterpreter?
     /// Each script's breakpoints as they landed (a line with no code moves to the next),
-    /// and the conditions of those that have them.
+    /// and what each one there asks: several can land on one line.
     private var landed: [UUID: Set<Int>] = [:]
-    private var conditions: [UUID: [Int: String]] = [:]
+    private var rules: [UUID: [Int: [Rule]]] = [:]
+    /// How many times each breakpoint's line has run, by the line it was put on.
+    private(set) var hits: [UUID: [Int: Int]] = [:]
+    /// A breakpoint's line ran (for a live count of hits).
+    var onHit: (() -> Void)?
+
+    /// A breakpoint as it landed: the line it was put on, and its condition and message.
+    private struct Rule {
+        var line: Int
+        var condition: String?
+        var log: String?
+    }
     private var stepping: (mode: Command, thread: UnsafeRawPointer?, depth: Int)?
 
     init(handler: ((Pause) -> Command)? = nil) {
@@ -73,7 +86,7 @@ final class ScriptDebugger {
         self.vm = vm
         self.runtime = runtime
         landed = [:]
-        conditions = [:]
+        rules = [:]
         stepping = nil
         vm.attachDebugger()
         vm.onLoaded = { [weak self] environment in self?.loaded(environment) }
@@ -94,25 +107,24 @@ final class ScriptDebugger {
         land(script)
     }
 
-    /// Puts a script's breakpoints on its chunks, noting where they landed and with what
-    /// conditions: two on one line stop when either would, one without a condition always.
+    /// Puts a script's breakpoints on its chunks, noting where they landed and what each
+    /// asks there.
     private func land(_ script: ScriptObject) {
         guard let vm else { return }
-        var lines: Set<Int> = [], when: [Int: String] = [:], always: Set<Int> = []
+        var lines: Set<Int> = [], found: [Int: [Rule]] = [:]
         for line in script.breakpoints {
             let at = vm.setBreakpoint(key: script.id.uuidString, line: line, enabled: true)
             guard at > 0 else { continue }
             lines.insert(at)
-            if let condition = script.breakpointConditions[line] {
-                when[at] = when[at].map { "(\($0)) or (\(condition))" } ?? condition
-            } else {
-                always.insert(at)
-            }
+            found[at, default: []].append(Rule(line: line, condition: script.breakpointConditions[line],
+                                               log: script.breakpointLogs[line]))
         }
-        for at in always { when[at] = nil }
         landed[script.id] = lines.isEmpty ? nil : lines
-        conditions[script.id] = when.isEmpty ? nil : when
+        rules[script.id] = found.isEmpty ? nil : found
     }
+
+    /// How many times a breakpoint's line has run this session.
+    func hits(script id: UUID, line: Int) -> Int { hits[id]?[line] ?? 0 }
 
     /// A breakpoint put on or taken off while the scripts run.
     func setBreakpoint(script id: UUID, line: Int, on: Bool) {
@@ -134,7 +146,7 @@ final class ScriptDebugger {
         guard let script = runtime?.model.script(id: id) else { return }
         if script.breakpoints.isEmpty {
             landed[id] = nil
-            conditions[id] = nil
+            rules[id] = nil
         } else {
             land(script)
         }
@@ -160,16 +172,35 @@ final class ScriptDebugger {
             default: wanted = false
             }
         }
-        // A condition that doesn't hold passes the breakpoint over; one that fails stops,
-        // to say so.
+        // Each breakpoint here: a condition that doesn't hold passes it over, and one that
+        // fails stops, to say so; a logpoint prints and goes on; the rest stop.
         var note: String?
-        if isBreakpoint, !wanted, let id, let condition = conditions[id]?[line] {
-            let result = vm.evaluate(condition, at: 0)
-            if let error = result.error {
-                note = "The breakpoint's condition (\(condition)) failed: \(error)"
-            } else if !result.truthy {
-                isBreakpoint = false
+        if isBreakpoint, let id {
+            var stops = false
+            for rule in rules[id]?[line] ?? [Rule(line: line)] {
+                hits[id, default: [:]][rule.line, default: 0] += 1
+                if let condition = rule.condition {
+                    let result = vm.evaluate(condition, at: 0)
+                    if let error = result.error {
+                        note = "The breakpoint's condition (\(condition)) failed: \(error)"
+                        stops = true
+                        continue
+                    }
+                    guard result.truthy else { continue }
+                }
+                if let log = rule.log {
+                    let message = vm.logMessage(log, at: 0)
+                    if let error = message.error {
+                        runtime?.console.error("Logpoint at \(runtime?.model.script(id: id)?.name ?? "Script"):\(rule.line): \(error)")
+                    } else {
+                        runtime?.console.output(message.value)
+                    }
+                } else {
+                    stops = true
+                }
             }
+            isBreakpoint = stops
+            onHit?()
         }
         guard wanted || isBreakpoint else { return }
         if stepping != nil { endStepping() }

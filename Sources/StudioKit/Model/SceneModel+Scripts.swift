@@ -110,34 +110,56 @@ extension SceneModel {
 extension SceneModel {
     /// A script's breakpoints: not an edit (nothing to undo, and the place isn't marked
     /// changed), but saved with it the next time it is.
-    /// Conditions go with lines that are no longer breakpoints; `conditions`, if given,
-    /// replaces them all.
-    func setBreakpoints(_ lines: [Int], conditions: [Int: String]? = nil, forScript id: UUID) {
+    /// Conditions and log messages go with lines that are no longer breakpoints;
+    /// `conditions` and `logs`, if given, replace them all.
+    func setBreakpoints(_ lines: [Int], conditions: [Int: String]? = nil, logs: [Int: String]? = nil,
+                        forScript id: UUID) {
         guard let index = scripts.firstIndex(where: { $0.id == id }) else { return }
         let sorted = Array(Set(lines)).sorted()
         if scripts[index].breakpoints != sorted { scripts[index].breakpoints = sorted }
         let kept = (conditions ?? scripts[index].breakpointConditions).filter { sorted.contains($0.key) }
         if scripts[index].breakpointConditions != kept { scripts[index].breakpointConditions = kept }
+        let logged = (logs ?? scripts[index].breakpointLogs).filter { sorted.contains($0.key) }
+        if scripts[index].breakpointLogs != logged { scripts[index].breakpointLogs = logged }
     }
 
-    /// Breakpoints (and their conditions) moved by an edit: old line → new, those whose
-    /// lines went left out (ScriptObject.movingLines).
+    /// Breakpoints (and their conditions and messages) moved by an edit: old line → new,
+    /// those whose lines went left out (ScriptObject.movingLines).
     func moveBreakpoints(_ moves: [Int: Int], forScript id: UUID) {
         guard let script = script(id: id) else { return }
-        var conditions: [Int: String] = [:]
-        for (line, condition) in script.breakpointConditions {
-            if let to = moves[line] { conditions[to] = condition }
+        func moved(_ settings: [Int: String]) -> [Int: String] {
+            var result: [Int: String] = [:]
+            for (line, text) in settings { if let to = moves[line] { result[to] = text } }
+            return result
         }
-        setBreakpoints(Array(moves.values), conditions: conditions, forScript: id)
+        setBreakpoints(Array(moves.values), conditions: moved(script.breakpointConditions),
+                       logs: moved(script.breakpointLogs), forScript: id)
     }
 
     /// A breakpoint stops only when `condition` holds; blank, or nil, and it always does.
     func setBreakpointCondition(_ condition: String?, line: Int, forScript id: UUID) {
+        setBreakpointSetting(\.breakpointConditions, condition, line: line, forScript: id)
+    }
+
+    /// A breakpoint prints `message` and goes on, rather than stopping; blank, or nil,
+    /// and it stops.
+    func setBreakpointLog(_ message: String?, line: Int, forScript id: UUID) {
+        setBreakpointSetting(\.breakpointLogs, message, line: line, forScript: id)
+    }
+
+    private func setBreakpointSetting(_ setting: WritableKeyPath<ScriptObject, [Int: String]>, _ text: String?,
+                                      line: Int, forScript id: UUID) {
         guard let index = scripts.firstIndex(where: { $0.id == id }),
               scripts[index].breakpoints.contains(line) else { return }
-        let trimmed = condition?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let value: String? = trimmed.isEmpty ? nil : trimmed
-        if scripts[index].breakpointConditions[line] != value { scripts[index].breakpointConditions[line] = value }
+        if scripts[index][keyPath: setting][line] != value { scripts[index][keyPath: setting][line] = value }
+    }
+
+    /// The Debugger's watch expressions: saved with the place (the next time it is),
+    /// but not an edit.
+    func setWatches(_ expressions: [String]) {
+        if watches != expressions { watches = expressions }
     }
 }
 

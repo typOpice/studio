@@ -106,6 +106,9 @@ final class SceneModel: ObservableObject {
     @Published var lighting = LightingSettings()
     /// The Workspace's Terrain.
     @Published var terrain = TerrainData()
+    /// The Debugger's watch expressions (SceneState.watches): change them with
+    /// `setWatches`, which isn't an edit.
+    @Published var watches: [String] = []
     /// Its meshes and collision (TerrainMesher.swift), made as needed.
     let terrainGeometry = TerrainGeometry()
     /// Lighting is selected in the Explorer, so the inspector shows it.
@@ -273,7 +276,7 @@ final class SceneModel: ObservableObject {
                          animations: animations, lighting: lighting, groups: groups,
                          attachments: attachments, constraints: constraints, starterGui: starterGui,
                          assets: assets, sounds: sounds, dataObjects: dataObjects, defaultGui: defaultGui,
-                         placeID: placeID, terrain: terrain) }
+                         placeID: placeID, terrain: terrain, watches: watches) }
         set {
             parts = newValue.parts
             groups = newValue.groups
@@ -293,6 +296,7 @@ final class SceneModel: ObservableObject {
             animations = newValue.animations
             lighting = newValue.lighting
             if terrain != newValue.terrain { terrain = newValue.terrain }
+            if watches != newValue.watches { watches = newValue.watches }
             if let id = selectedAnimation, !animations.contains(where: { $0.id == id }) {
                 selectedAnimation = nil
             }
@@ -397,13 +401,19 @@ final class SceneModel: ObservableObject {
 
     /// Script and shader text has its own undo, in its editor, so stepping the scene
     /// back or forward leaves the text of every script and shader as it is now —
-    /// otherwise undoing a part move would silently throw away code typed since.
+    /// otherwise undoing a part move would silently throw away code typed since. The
+    /// debugger's breakpoints and watches aren't edits either, so they stay as they are.
     private func keepingText(_ target: SceneState) -> SceneState {
         var target = target
-        let scriptText = Dictionary(scripts.map { ($0.id, $0.source) }, uniquingKeysWith: { first, _ in first })
+        let current = Dictionary(scripts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for index in target.scripts.indices {
-            if let text = scriptText[target.scripts[index].id] { target.scripts[index].source = text }
+            guard let now = current[target.scripts[index].id] else { continue }
+            target.scripts[index].source = now.source
+            target.scripts[index].breakpoints = now.breakpoints
+            target.scripts[index].breakpointConditions = now.breakpointConditions
+            target.scripts[index].breakpointLogs = now.breakpointLogs
         }
+        target.watches = watches
         let shaderText = Dictionary(shaders.map { ($0.id, $0.source) }, uniquingKeysWith: { first, _ in first })
         for index in target.shaders.indices {
             if let text = shaderText[target.shaders[index].id] { target.shaders[index].source = text }
@@ -573,6 +583,7 @@ final class SceneModel: ObservableObject {
         var shared = withoutServerStorage(state)
         shared.sounds.removeAll(where: \.local)
         shared.dataObjects.removeAll(where: \.local)
+        shared.watches = []
         return shared
     }
 

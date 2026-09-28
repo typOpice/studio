@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2847 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2861 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -1876,11 +1876,14 @@ along the bottom shows:
 - **Watch**: expressions worked out at every stop, in the call picked: type one in
   (`player.Name`, `#inventory`, `health < 20`, `workspace.Door.Position.Y`) and press
   Return. It sees the call's locals and upvalues, then the script's globals. One that
-  fails says why; × takes it away. Watches stay for the rest of the session.
-- **Breakpoints**: every one in the place. Click to go there; × takes it away. Type a
-  **condition** under one — a Luau expression, like `amount > 100` or
-  `player.Name == "Robin"` — and it stops only when that's true (its tag turns
-  orange). If the condition fails, it stops anyway and says why above the panels.
+  fails says why; × takes it away. Watches are saved with the place.
+- **Breakpoints**: every one in the place, with how many times its line ran in the
+  last play. Click to go there; × takes it away. Type a **condition** under one — a
+  Luau expression, like `amount > 100` or `player.Name == "Robin"` — and it stops only
+  when that's true (its tag turns orange). If the condition fails, it stops anyway
+  and says why above the panels. Type a **log message** — written as print's
+  arguments, like `"health", health` — and it becomes a **logpoint** (blue): it
+  prints to Output and the game goes on, no stopping.
 
 Then **Continue** (F5), **Step Over** (F10: the next line, not into what it calls),
 **Step Into** (F11: into a function the line calls), **Step Out** (⇧F11: back to

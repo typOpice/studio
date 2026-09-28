@@ -10,8 +10,9 @@ import Foundation
 /// RemoteEvent handler with a joined player's message, the reply reaching them after.
 /// Then watch expressions (locals, upvalues, globals, another call's; errors, a runaway
 /// one cut short); conditional breakpoints (true, false, failing, calling code with a
-/// breakpoint of its own, two on one line, changed while running); and tables opened,
-/// nested and in order.
+/// breakpoint of its own, two on one line, changed while running); tables opened,
+/// nested and in order; logpoints (printing and going on, with a condition, failing,
+/// beside a breakpoint) and hit counts; watches saved with the place.
 enum DebuggerSelfTest {
     static func run(check: Checker) {
         testBreakpoints(check)
@@ -21,6 +22,7 @@ enum DebuggerSelfTest {
         testWatches(check)
         testConditions(check)
         testTables(check)
+        testLogpoints(check)
         testStudio(check)
         testTogether(check)
     }
@@ -81,7 +83,7 @@ enum DebuggerSelfTest {
 
     /// Like `debugged`, but the handler gets the debugger too, to look around while stopped.
     private static func looking(_ source: String, breakpoints: [Int], conditions: [Int: String] = [:],
-                                watches: [String] = [],
+                                logs: [Int: String] = [:], watches: [String] = [],
                                 handler: @escaping (ScriptDebugger, ScriptDebugger.Pause) -> Void)
         -> (SceneModel, PlayController) {
         let model = SceneModel()
@@ -90,6 +92,7 @@ enum DebuggerSelfTest {
         script.source = source
         script.breakpoints = breakpoints
         script.breakpointConditions = conditions
+        script.breakpointLogs = logs
         model.scripts = [script]
         let session = PlayController(model: model, console: ScriptConsole())
         let debugger = ScriptDebugger()
@@ -485,6 +488,45 @@ enum DebuggerSelfTest {
         session.stop()
     }
 
+    // MARK: - Logpoints and hits
+
+    private static func testLogpoints(_ check: Checker) {
+        print("\nDebugger: logpoints and hit counts")
+        func logged(_ breakpoints: [Int], conditions: [Int: String] = [:], logs: [Int: String])
+            -> (stops: Int, output: [String], errors: [String], hits: [Int: Int]) {
+            var stops = 0
+            let (model, session) = looking(counting, breakpoints: breakpoints, conditions: conditions, logs: logs) { _, _ in
+                stops += 1
+            }
+            session.start()
+            step(session, seconds: 0.1)
+            defer { session.stop() }
+            let id = model.scripts[0].id
+            let hits = Dictionary(uniqueKeysWithValues: breakpoints.map {
+                ($0, session.scripts.debugger?.hits(script: id, line: $0) ?? -1)
+            })
+            return (stops, said(session), said(session, .error), hits)
+        }
+        let plain = logged([4], logs: [4: "\"adding\", amount, \"to\", total, items"])
+        check("a logpoint prints its message each time, as print would, and goes on", plain.stops == 0
+              && plain.output.filter { $0.hasPrefix("adding") } == ["adding 1 to 0 nil", "adding 2 to 1 nil", "adding 3 to 3 nil"]
+              && plain.output.contains("total 6 2"), "\(plain.output)")
+        let when = logged([4], conditions: [4: "amount >= 2"], logs: [4: "`big one: {amount}`"])
+        check("…only when its condition holds", when.stops == 0
+              && when.output.filter { $0.hasPrefix("big") } == ["big one: 2", "big one: 3"], "\(when.output)")
+        let failing = logged([4], logs: [4: "amount.size"])
+        check("one that fails says so in the output, and goes on", failing.stops == 0
+              && failing.errors.count == 3 && failing.errors.first?.hasPrefix("Logpoint at Counter:4: attempt to index number") == true
+              && failing.output.contains("total 6 2"), "\(failing.errors)")
+        // Line 11 is a comment: its logpoint lands on 13, beside 13's breakpoint.
+        let beside = logged([11, 13], logs: [11: "\"before the end\""])
+        check("a logpoint beside a breakpoint prints, and the breakpoint stops", beside.stops == 1
+              && beside.output.contains("before the end"), "\(beside.stops) \(beside.output)")
+        let counted = logged([4, 9, 13], conditions: [4: "false"], logs: [9: "index"])
+        check("every breakpoint counts how often its line ran, stopping or not",
+              counted.hits == [4: 3, 9: 3, 13: 1] && counted.stops == 1, "\(counted.hits) \(counted.stops)")
+    }
+
     // MARK: - Studio
 
     private static func testStudio(_ check: Checker) {
@@ -536,7 +578,44 @@ enum DebuggerSelfTest {
         session.addWatch("")
         session.addWatch("name")
         session.removeWatch(at: 0)
-        check("watches are added and taken away", session.watchExpressions == ["name"])
+        check("watches are added and taken away, and aren't edits", session.watchExpressions == ["name"]
+              && model.watches == ["name"] && model.revision == unedited)
+        session.setBreakpointLog(script: id, line: 8, "\"lives\", lives")
+        check("a log message makes a logpoint", model.script(id: id)?.breakpointLogs == [8: "\"lives\", lives"])
+        let placed = (try? model.encodeScene()).flatMap { try? JSONDecoder().decode(SceneState.self, from: $0) }
+        check("watches and log messages are saved with the place", placed?.watches == ["name"]
+              && placed?.scripts.first { $0.id == id }?.breakpointLogs == [8: "\"lives\", lives"])
+        let shared = (try? model.encodeScene(shared: true)).map { String(decoding: $0, as: UTF8.self) }
+        check("…but joined players aren't sent the watches", shared?.contains("\"watches\"") == false)
+        session.startPlay()
+        session.addWatch("lives")
+        session.setBreakpointLog(script: id, line: 8, "lives")
+        session.stopPlay()
+        check("…and Stop keeps those changed while playing", model.watches == ["name", "lives"]
+              && model.script(id: id)?.breakpointLogs == [8: "lives"])
+        _ = model.addPart(shape: .block)
+        session.toggleBreakpoint(script: id, line: 2)
+        session.addWatch("later")
+        model.undo()
+        check("undoing an edit leaves the breakpoints and watches as they are",
+              model.script(id: id)?.breakpoints == [2, 8] && model.script(id: id)?.breakpointLogs == [8: "lives"]
+              && model.watches == ["name", "lives", "later"], "\(String(describing: model.script(id: id)?.breakpoints))")
+        model.moveBreakpoints([2: 2, 8: 10], forScript: id)
+        check("…and a log message moves with its breakpoint", model.script(id: id)?.breakpointLogs == [10: "lives"])
+
+        // Hit counts, live in Studio.
+        var counter = ScriptObject.blank(language: .luau)
+        counter.name = "Counter"
+        counter.source = counting
+        counter.breakpoints = [4]
+        counter.breakpointLogs = [4: "amount"]
+        model.scripts.append(counter)
+        session.startPlay()
+        for _ in 0..<6 { session.play?.step(dt: frame) }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.35))
+        check("Studio shows how often each breakpoint's line ran", session.breakpointHits[counter.id]?[4] == 3,
+              "\(session.breakpointHits)")
+        session.stopPlay()
         check("lines added or taken away above a breakpoint move it",
               ScriptObject.movingBreakpoints([5, 9], editing: NSRange(location: 0, length: 0), replacement: "\n\n",
                                              in: "one\ntwo\n" as NSString) == [7, 11]
@@ -566,8 +645,9 @@ enum DebuggerSelfTest {
         \tBuy:FireClient(player, item, price)
         end)
         """
-        handler.breakpoints = [10]
+        handler.breakpoints = [9, 10]
         handler.breakpointConditions = [10: "item == \"sword\""]
+        handler.breakpointLogs = [9: "player.Name, \"wants\", item, options.quantity"]
         var shopper = ScriptObject.blank(language: .luau)
         shopper.name = "Shopper"
         shopper.host = .starterPlayer
@@ -615,6 +695,12 @@ enum DebuggerSelfTest {
               "\(String(describing: sent))")
         check("…and when it goes on, the replies reach them", said(sam).contains("bought sword 10")
               && said(sam).contains("bought shield 5"), "\(said(sam))")
+        check("a logpoint in the handler prints each player's message on the host, without stopping",
+              said(host).contains("Sam wants shield 1") && said(host).contains("Sam wants sword 2")
+              && stops.allSatisfy { $0.frames.first?.line == 10 }, "\(said(host))")
+        let shop = handler.id
+        check("…and both lines count every message, the host's own too", debugger.hits(script: shop, line: 9) == 4
+              && debugger.hits(script: shop, line: 10) == 4, "\(debugger.hits)")
         let errors = said(host, .error) + said(sam, .error)
         check("…with no errors on either", errors.isEmpty, "\(errors)")
         joining.leaveGame()

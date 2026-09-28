@@ -240,6 +240,7 @@ struct ScriptDocumentView: View {
                        reveal: session.revealRequest(for: document),
                        breakpoints: script.breakpoints,
                        conditionalBreakpoints: Set(script.breakpointConditions.keys),
+                       loggingBreakpoints: Set(script.breakpointLogs.keys),
                        pausedLine: pausedLine,
                        onToggleBreakpoint: script.language == .luau
                            ? { [session, id = script.id] line in session.toggleBreakpoint(script: id, line: line) } : nil,

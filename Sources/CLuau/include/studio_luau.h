@@ -68,6 +68,9 @@ const char *studio_lua_debug_variable_path(StudioLua *vm, int index);
 /// globals: 1 and the result described, or 0 and why (studio_lua_debug_evaluation).
 int studio_lua_debug_evaluate(StudioLua *vm, int level, const char *expression);
 void studio_lua_debug_evaluation(StudioLua *vm, const char **type, const char **value, const char **error, int *truthy);
+/// A logpoint's message: an expression list worked out in a frame, written as print
+/// writes its arguments (the evaluation's value), or 0 and why.
+int studio_lua_debug_log(StudioLua *vm, int level, const char *expression);
 /// A table an expression comes to: up to `most` of its entries as variables (read with
 /// studio_lua_debug_variable and _path); -1 if it isn't a table or fails.
 int studio_lua_debug_fields(StudioLua *vm, int level, const char *expression, int most);

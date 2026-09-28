@@ -3,8 +3,9 @@ import SwiftUI
 /// The Debugger tab: while the scripts are stopped at a breakpoint, where (the calls,
 /// innermost first — pick one to see its variables and its line) and what each
 /// variable holds (tables open to show what's in them), with Continue, Step Over, Step
-/// Into, Step Out and Stop; watch expressions, worked out at every stop; and always,
-/// the place's breakpoints, each with an optional condition. Breakpoints are set by
+/// Into, Step Out and Stop; watch expressions, worked out at every stop (the place's);
+/// and always, the place's breakpoints, each with how often its line ran, an optional
+/// condition, and an optional message that makes it a logpoint. Breakpoints are set by
 /// clicking beside a line number.
 struct DebuggerPanel: View {
     @ObservedObject var model: SceneModel
@@ -142,15 +143,23 @@ struct DebuggerPanel: View {
                 ForEach(all) { mark in
                     let script = mark.script, line = mark.line
                     let condition = script.breakpointConditions[line] ?? ""
+                    let log = script.breakpointLogs[line] ?? ""
+                    let hits = session.breakpointHits[script.id]?[line] ?? 0
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 6) {
-                            Circle().fill(condition.isEmpty ? Color(red: 0.9, green: 0.3, blue: 0.3) : Self.conditional)
+                            Circle().fill(!log.isEmpty ? Self.logging : condition.isEmpty ? Color(red: 0.9, green: 0.3, blue: 0.3)
+                                                                                         : Self.conditional)
                                 .frame(width: 7, height: 7)
                             Button { session.openScript(script.id, line: line) } label: {
                                 Text("\(script.name):\(line)")
                             }
                             .buttonStyle(.plain)
                             Spacer()
+                            if hits > 0 {
+                                Text(hits == 1 ? "1 hit" : "\(hits) hits")
+                                    .foregroundStyle(Theme.textDim)
+                                    .help("How many times this line ran in the last play")
+                            }
                             Button { session.toggleBreakpoint(script: script.id, line: line) } label: {
                                 Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
                             }
@@ -158,39 +167,53 @@ struct DebuggerPanel: View {
                             .foregroundStyle(Theme.textDim)
                             .help("Remove this breakpoint")
                         }
-                        ConditionField(condition: condition) { session.setBreakpointCondition(script: script.id, line: line, $0) }
-                            .padding(.leading, 13)
+                        SettingField(text: condition, placeholder: "Condition — stops always when empty",
+                                     help: "Stop here only when this Luau expression is true — say, health < 20",
+                                     color: Self.conditional) {
+                            session.setBreakpointCondition(script: script.id, line: line, $0)
+                        }
+                        .padding(.leading, 13)
+                        SettingField(text: log, placeholder: "Log message — prints and goes on",
+                                     help: "Print this instead of stopping, written as print's arguments — say, \"health\", health",
+                                     color: Self.logging) {
+                            session.setBreakpointLog(script: script.id, line: line, $0)
+                        }
+                        .padding(.leading, 13)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 2)
                 }
             }
         }
-        .frame(maxHeight: 150)
+        .frame(maxHeight: 170)
     }
 
     static let warning = Color(red: 0.98, green: 0.62, blue: 0.3)
     static let conditional = Color(red: 0.92, green: 0.52, blue: 0.16)
+    static let logging = Color(red: 0.36, green: 0.66, blue: 0.95)
     static let valueColor = Color(red: 0.72, green: 0.85, blue: 1)
 
-    /// A breakpoint's condition: a Luau expression, set on Return or on leaving the field.
-    private struct ConditionField: View {
-        let condition: String
+    /// A breakpoint's condition or log message: Luau, set on Return or on leaving the field.
+    private struct SettingField: View {
+        let text: String
+        let placeholder: String
+        let help: String
+        let color: Color
         let commit: (String) -> Void
-        @State private var text = ""
+        @State private var editing = ""
         @FocusState private var focused: Bool
 
         var body: some View {
-            TextField("Condition — stops always when empty", text: $text)
+            TextField(placeholder, text: $editing)
                 .textFieldStyle(.plain)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(DebuggerPanel.conditional)
+                .foregroundStyle(color)
                 .focused($focused)
-                .onSubmit { commit(text) }
-                .onAppear { text = condition }
-                .onChange(of: condition) { new in if !focused { text = new } }
-                .onChange(of: focused) { isFocused in if !isFocused { commit(text) } }
-                .help("Stop here only when this Luau expression is true — say, health < 20")
+                .onSubmit { commit(editing) }
+                .onAppear { editing = text }
+                .onChange(of: text) { new in if !focused { editing = new } }
+                .onChange(of: focused) { isFocused in if !isFocused { commit(editing) } }
+                .help(help)
         }
     }
 

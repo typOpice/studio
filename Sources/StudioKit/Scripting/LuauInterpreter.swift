@@ -188,8 +188,18 @@ final class LuauInterpreter {
     }
 
     func evaluate(_ expression: String, at level: Int) -> Evaluation {
+        evaluation(of: expression, at: level, studio_lua_debug_evaluate)
+    }
+
+    /// A logpoint's message: `"health", health` comes to "health 50", as print writes it.
+    func logMessage(_ expression: String, at level: Int) -> Evaluation {
+        evaluation(of: expression, at: level, studio_lua_debug_log)
+    }
+
+    private func evaluation(of expression: String, at level: Int,
+                            _ work: (OpaquePointer, Int32, UnsafePointer<CChar>) -> Int32) -> Evaluation {
         guard let vm else { return Evaluation(error: "not running") }
-        let succeeded = studio_lua_debug_evaluate(vm, Int32(level), expression) != 0
+        let succeeded = work(vm, Int32(level), expression) != 0
         var type: UnsafePointer<CChar>?, value: UnsafePointer<CChar>?, error: UnsafePointer<CChar>?
         var truthy: Int32 = 0
         studio_lua_debug_evaluation(vm, &type, &value, &error, &truthy)

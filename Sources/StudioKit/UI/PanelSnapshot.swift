@@ -301,8 +301,9 @@ enum PanelSnapshot {
             var counter = ScriptObject.blank(language: .luau)
             counter.name = "Counter"
             counter.source = DebuggerSelfTest.counting
-            counter.breakpoints = [4, 9]
+            counter.breakpoints = [4, 9, 13]
             counter.breakpointConditions = [4: "amount > 1"]
+            counter.breakpointLogs = [13: "\"total\", total"]
             model.scripts.append(counter)
             for watch in ["total", "#items", "index * 10", "items.missing.field"] { session.addWatch(watch) }
             let play = PlayController(model: model, console: ScriptConsole())
@@ -321,7 +322,7 @@ enum PanelSnapshot {
             play.start()
             for _ in 0..<5 { play.step(dt: 1.0 / 60) }
             play.stop()
-            if let caught { session.show(caught, opened: opened) }
+            if let caught { session.show(caught, opened: opened, hits: debugger.hits) }
             session.dockHeight = 330
         case "sounds", "picture":
             // A sound and a picture imported, a Sound in SoundService and one in a part,

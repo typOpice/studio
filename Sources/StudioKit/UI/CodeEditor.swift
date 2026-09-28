@@ -143,9 +143,12 @@ final class LineNumberRuler: NSRulerView {
     var breakpoints: Set<Int> = [] {
         didSet { if breakpoints != oldValue { needsDisplay = true } }
     }
-    /// Those of them with a condition, drawn in orange.
+    /// Those of them with a condition, drawn in orange, and logpoints, in blue.
     var conditional: Set<Int> = [] {
         didSet { if conditional != oldValue { needsDisplay = true } }
+    }
+    var logging: Set<Int> = [] {
+        didSet { if logging != oldValue { needsDisplay = true } }
     }
     var pausedLine: Int? {
         didSet { if pausedLine != oldValue { needsDisplay = true } }
@@ -155,6 +158,7 @@ final class LineNumberRuler: NSRulerView {
 
     static let breakpointColor = NSColor(srgbRed: 0.86, green: 0.27, blue: 0.27, alpha: 1)
     static let conditionalColor = NSColor(srgbRed: 0.92, green: 0.52, blue: 0.16, alpha: 1)
+    static let loggingColor = NSColor(srgbRed: 0.36, green: 0.66, blue: 0.95, alpha: 1)
     static let pausedColor = NSColor(srgbRed: 0.98, green: 0.80, blue: 0.35, alpha: 1)
 
     /// The line at a point in the ruler, if there's one there.
@@ -254,7 +258,8 @@ final class LineNumberRuler: NSRulerView {
                 path.line(to: NSPoint(x: tag.maxX - 5, y: tag.maxY))
                 path.line(to: NSPoint(x: tag.minX + 2, y: tag.maxY))
                 path.close()
-                (conditional.contains(number) ? Self.conditionalColor : Self.breakpointColor).setFill()
+                (logging.contains(number) ? Self.loggingColor
+                    : conditional.contains(number) ? Self.conditionalColor : Self.breakpointColor).setFill()
                 path.fill()
             }
             if number == pausedLine {
@@ -341,6 +346,7 @@ struct CodeEditor: NSViewRepresentable {
     /// line the game is stopped at, and breakpoints moving with their lines as they're edited.
     var breakpoints: [Int] = []
     var conditionalBreakpoints: Set<Int> = []
+    var loggingBreakpoints: Set<Int> = []
     var pausedLine: Int? = nil
     var onToggleBreakpoint: ((Int) -> Void)? = nil
     var onBreakpointsMoved: (([Int: Int]) -> Void)? = nil
@@ -509,6 +515,7 @@ struct CodeEditor: NSViewRepresentable {
         if let ruler = entry.scrollView.verticalRulerView as? LineNumberRuler {
             ruler.breakpoints = Set(breakpoints)
             ruler.conditional = conditionalBreakpoints
+            ruler.logging = loggingBreakpoints
             ruler.pausedLine = pausedLine
             ruler.onToggle = onToggleBreakpoint
         }

@@ -474,6 +474,14 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the host stops only for the joined player's sword purchase, sees their name in a watch, and opens the table they sent).
    No new files; the changes are in the Luau shim, ScriptDebugger, the Debugger panel and DebuggerSelfTest.
 
+47. Debugger: logpoints, hit counts, saved watches, 2026-09-28.
+   Logpoints: type a log message under a breakpoint (like  "health", health ) and instead of stopping it prints that to Output and the game carries on. Its tag turns blue. It can have a condition too.
+   Each breakpoint shows how many times its line ran, live while the game plays.
+   Watch expressions are now saved with the place.
+   Undo no longer brings back old breakpoints or watches; they aren't edits.
+   Also corrected the known-limitations notes, which still said Sky, Atmosphere, AlignPosition, VectorForce and NoCollisionConstraint were missing.
+   Tested alone and with a host and a joined player (a logpoint in the host's RemoteEvent handler prints every player's message without stopping the game).
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

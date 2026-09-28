@@ -68,6 +68,9 @@ struct ScriptObject: Identifiable, Codable, Equatable {
     /// Breakpoints that stop only when a Luau expression holds, by line (each one of
     /// `breakpoints`). Saved and kept the same way.
     var breakpointConditions: [Int: String] = [:]
+    /// Logpoints: breakpoints that print a message (a Luau expression list, as print
+    /// takes) and go on rather than stopping, by line. Saved and kept the same way.
+    var breakpointLogs: [Int: String] = [:]
 
     var isModule: Bool { kind == .module }
 
@@ -81,7 +84,7 @@ struct ScriptObject: Identifiable, Codable, Equatable {
         return script
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, language, host, source, enabled, parentID, kind, breakpoints, conditions }
+    private enum CodingKeys: String, CodingKey { case id, name, language, host, source, enabled, parentID, kind, breakpoints, conditions, logs }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -100,6 +103,9 @@ struct ScriptObject: Identifiable, Codable, Equatable {
         for (line, condition) in try c.decodeIfPresent([String: String].self, forKey: .conditions) ?? [:] {
             if let line = Int(line), breakpoints.contains(line) { breakpointConditions[line] = condition }
         }
+        for (line, message) in try c.decodeIfPresent([String: String].self, forKey: .logs) ?? [:] {
+            if let line = Int(line), breakpoints.contains(line) { breakpointLogs[line] = message }
+        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -115,6 +121,9 @@ struct ScriptObject: Identifiable, Codable, Equatable {
         if !breakpointConditions.isEmpty {
             try c.encode(Dictionary(uniqueKeysWithValues: breakpointConditions.map { (String($0.key), $0.value) }),
                          forKey: .conditions)
+        }
+        if !breakpointLogs.isEmpty {
+            try c.encode(Dictionary(uniqueKeysWithValues: breakpointLogs.map { (String($0.key), $0.value) }), forKey: .logs)
         }
         if kind != .script { try c.encode(kind, forKey: .kind) }
     }
@@ -167,10 +176,13 @@ struct SceneState: Equatable, Codable {
     var placeID: UUID?
     /// The Workspace's Terrain (Terrain.swift).
     var terrain = TerrainData()
+    /// The Debugger's watch expressions: saved with the place, but not an edit (undo
+    /// leaves them, Stop keeps them) and not sent to joined players.
+    var watches: [String] = []
 
     private enum CodingKeys: String, CodingKey {
         case parts, scripts, shaders, screenShaderID, screenShaderIDs, starterPlayer, animations, lighting, groups
-        case attachments, constraints, starterGui, assets, sounds, dataObjects, defaultGui, placeID, terrain
+        case attachments, constraints, starterGui, assets, sounds, dataObjects, defaultGui, placeID, terrain, watches
     }
 
     init(parts: [Part] = [], scripts: [ScriptObject] = [], shaders: [ShaderObject] = [],
@@ -180,8 +192,9 @@ struct SceneState: Equatable, Codable {
          groups: [SceneGroup] = [], attachments: [SceneAttachment] = [],
          constraints: [SceneConstraint] = [], starterGui: [StarterGuiObject] = [],
          assets: [SceneAsset] = [], sounds: [SceneSound] = [], dataObjects: [DataObject] = [],
-         defaultGui: Int = 0, placeID: UUID? = nil, terrain: TerrainData = TerrainData()) {
+         defaultGui: Int = 0, placeID: UUID? = nil, terrain: TerrainData = TerrainData(), watches: [String] = []) {
         self.terrain = terrain
+        self.watches = watches
         self.defaultGui = defaultGui
         self.placeID = placeID
         self.dataObjects = dataObjects
@@ -222,6 +235,7 @@ struct SceneState: Equatable, Codable {
         defaultGui = try c.decodeIfPresent(Int.self, forKey: .defaultGui) ?? 0
         placeID = try c.decodeIfPresent(UUID.self, forKey: .placeID)
         terrain = try c.decodeIfPresent(TerrainData.self, forKey: .terrain) ?? TerrainData()
+        watches = try c.decodeIfPresent([String].self, forKey: .watches) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -245,6 +259,7 @@ struct SceneState: Equatable, Codable {
         if defaultGui > 0 { try c.encode(defaultGui, forKey: .defaultGui) }
         try c.encodeIfPresent(placeID, forKey: .placeID)
         if terrain != TerrainData() { try c.encode(terrain, forKey: .terrain) }
+        if !watches.isEmpty { try c.encode(watches, forKey: .watches) }
     }
 }
 

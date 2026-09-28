@@ -678,9 +678,10 @@ bool pushFrameScope(lua_State *P, int level) {
     return true;
 }
 
-/// Evaluates `return <expression>` in a frame's scope, leaving its value on the stack.
-/// False (and the reason in the evaluation's error) if it wouldn't compile or failed.
-bool evaluateInFrame(StudioLuaImpl *self, lua_State *P, int level, const char *expression) {
+/// Evaluates `return <expression>` in a frame's scope, leaving its value on the stack
+/// (`results` of them; LUA_MULTRET for all). False (and the reason in the evaluation's
+/// error) if it wouldn't compile or failed.
+bool evaluateInFrame(StudioLuaImpl *self, lua_State *P, int level, const char *expression, int results = 1) {
     self->evaluation = StudioLuaImpl::Evaluation();
     if (!pushFrameScope(P, level)) {
         self->evaluation.error = "no such frame";
@@ -709,7 +710,7 @@ bool evaluateInFrame(StudioLuaImpl *self, lua_State *P, int level, const char *e
     // A moment to run, as describing a value gets.
     self->timing = true;
     self->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
-    int status = lua_pcall(P, 0, 1, 0);
+    int status = lua_pcall(P, 0, results, 0);
     self->timing = false;
     if (status != 0) {
         const char *message = lua_tostring(P, -1);
@@ -748,6 +749,38 @@ int studio_lua_debug_evaluate(StudioLua *vm, int level, const char *expression) 
     self->evaluation.truthy = lua_toboolean(P, -1) != 0;
     describe(self, P, -1, self->evaluation.type, self->evaluation.value);
     lua_pop(P, 1);
+    return 1;
+}
+
+int studio_lua_debug_log(StudioLua *vm, int level, const char *expression) {
+    StudioLuaImpl *self = impl(vm);
+    lua_State *P = self->paused;
+    if (P == nullptr) {
+        self->evaluation = StudioLuaImpl::Evaluation();
+        self->evaluation.error = "not paused";
+        return 0;
+    }
+    int base = lua_gettop(P);
+    if (!evaluateInFrame(self, P, level, expression, LUA_MULTRET)) {
+        return 0;
+    }
+    // As print writes them: each value's tostring, a space between.
+    std::string line;
+    int top = lua_gettop(P);
+    lua_rawcheckstack(P, 2);
+    for (int index = base + 1; index <= top; ++index) {
+        size_t length = 0;
+        const char *text = luaL_tolstring(P, index, &length);
+        if (index > base + 1) {
+            line += ' ';
+        }
+        line.append(text != nullptr ? text : "", text != nullptr ? length : 0);
+        lua_pop(P, 1);
+    }
+    lua_settop(P, base);
+    self->evaluation.type = "string";
+    self->evaluation.value = line;
+    self->evaluation.truthy = true;
     return 1;
 }
 

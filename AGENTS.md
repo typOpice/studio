@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2847 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # 2861 checks — THE test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -148,7 +148,7 @@ listed in §9.
 | `GamePickerSelfTest.swift` | The client's game picker: where it starts, the sample games and the Starter Scene with their pictures; places opened remembered (newest first, once each, not Studio's hand-over copy, kept between runs, a deleted one left out), one chosen opening on the menu, one that can't be opened saying so; the character and join screens returning where they came from; choosing, playing and choosing another game; a host choosing Mega Obby there and a joined player (from the picker) playing it |
 | `GameSoundsSelfTest.swift` | Built-in sounds: twenty effects and three loops, each mono, levelled, effects short, music without a gap at the loop, the same every time, made once, unknown names refused; a script's built-in Sound loaded with its length and playing, a scene Sound looping from the start, the README's coin; Nightfall (music and news sounds in SoundService, a groan in every zombie's head, day music then night music and a gong, groans from zombies, a bite's hit and your own hurt, a swing and a fall, your orb, dawn's chime and the day music back, the end of a run heard by you alone); Mega Obby (music, sounds in every jump pad and fading tile, your checkpoint ding, a boing from the pad, a crack, an oof); a joined player hearing the host's music and a pad the host boings for them, their checkpoint ding heard by them and not the host |
 | `PathfindingSelfTest.swift` | PathfindingService: the grid round a wall (start to goal, round the end and never through, evenly spaced and walkable, on the ground), none into a closed box, a step walked, a platform jumped onto (marked on the landing), none without jumping or too high, a gap one agent fits and a bigger doesn't, a Neon strip crossed or avoided by cost, a wall put down blocking an old path from where it meets it, a start inside the agent's own body; from Luau (CreatePath, ComputeAsync, Status, PathWaypoints, Blocked firing and CheckOcclusionAsync when a crate lands on the path, FindPathAsync, a bad start refused, PathWaypoint.new, completion); the README's example walking a character round a wall to a flag; a Nightfall zombie behind a pen's back wall going round and in to bite; the same for a joined player, seen from their game |
-| `DebuggerSelfTest.swift` | The Luau debugger: a breakpoint stopping each time its line runs, in the function and called from the script's line, with locals, upvalues and the caller's (a table shown by its entries, no compiler temporaries), the script carrying on after; a breakpoint on a line with no code landing on the next; values described (a long string cut short, an Instance by class and name, an empty table, nil); Step Over (to the next line, out to the caller, on to the breakpoint again), Step Into (into the called function), Step Out (back to the caller), Stop (no more stops, the session asked to end); a breakpoint put on and taken off while running; a LocalScript's and a ModuleScript's called from it; a character script's for the first character and the next; the world waiting while stopped and the watchdog not counting the wait; breakpoints saved (and not written when there are none), toggling not an undoable edit, kept through Stop in Studio, and moving with added or removed lines; watch expressions (locals, upvalues, globals, another call's; failing, not Luau, a runaway one cut short, the script unaffected); conditional breakpoints (holding, never holding, calling the script's functions with breakpoints of their own, failing with a note, two on one line, changed and taken away while running); tables opened (by name with paths, numbered in order, nested, empty, not a table); conditions saved, moved, dropped and kept through Stop; a host stopped in a RemoteEvent handler with a joined player's message — only for what its condition asks, the player's name in a watch, the table they sent opened — the replies reaching them after |
+| `DebuggerSelfTest.swift` | The Luau debugger: a breakpoint stopping each time its line runs, in the function and called from the script's line, with locals, upvalues and the caller's (a table shown by its entries, no compiler temporaries), the script carrying on after; a breakpoint on a line with no code landing on the next; values described (a long string cut short, an Instance by class and name, an empty table, nil); Step Over (to the next line, out to the caller, on to the breakpoint again), Step Into (into the called function), Step Out (back to the caller), Stop (no more stops, the session asked to end); a breakpoint put on and taken off while running; a LocalScript's and a ModuleScript's called from it; a character script's for the first character and the next; the world waiting while stopped and the watchdog not counting the wait; breakpoints saved (and not written when there are none), toggling not an undoable edit, kept through Stop in Studio, and moving with added or removed lines; watch expressions (locals, upvalues, globals, another call's; failing, not Luau, a runaway one cut short, the script unaffected); conditional breakpoints (holding, never holding, calling the script's functions with breakpoints of their own, failing with a note, two on one line, changed and taken away while running); tables opened (by name with paths, numbered in order, nested, empty, not a table); conditions saved, moved, dropped and kept through Stop; logpoints (printing as print does and going on, only when their condition holds, failing into the output, beside a breakpoint) and hit counts (stopping or not, shown live in Studio); watches and log messages saved with the place, not sent to joined players, kept through Stop and undo; a host stopped in a RemoteEvent handler with a joined player's message — only for what its condition asks, the player's name in a watch, the table they sent opened, a logpoint printing every player's message and both lines counting them — the replies reaching them after |
 | `EngineSelfTest.swift` | The engine over a long game, through the real audio engine rendered offline: nightfall's sounds (music stopped and started, a gong, then the first sound in a part, which once crashed the game), none knocking another off the mix, sound coming out; 200 sounds started and stopped, flat and in parts, all heard; a change of audio device (the engine started again, the music carrying on, new sounds in parts starting); Nightfall played into the night and its fighting through it, with no errors and nothing growing (parts, Sounds, Models, GUI, Luau's memory) |
 | `SceneIndexSelfTest.swift` | The scene index: 3000 random changes of every kind (parts and groups made, deleted, reparented through the array and through update(id:), moved, sent to storage and back, the parts replaced whole with the same count, shuffled, data objects and Sounds made and deleted, reparenting undone) with parts, groups, parents, children, data objects and Sounds all found as a search finds them; finding a part, a Model's pivot, moving a Model and a folder's children no dearer with 16 times the parts |
 | `SoakSelfTest.swift` | Each sample game played by `Soak.play`'s player (running, jumping, swinging, falling; the same moves every time) — Adventure Island and Mega Obby for 40 seconds, Nightfall for 60, night included: no script errors, and no parts, Models, Sounds, values, GUI objects, voices or Luau memory growing from the settled sample to the last; a host and a joined player in Nightfall for 50 seconds, both moving and fighting: no errors, and the joined player's parts and Sounds keeping the same distance from the host's (nothing the host has done with piling up) |
@@ -1512,20 +1512,27 @@ Roughly ordered by how much time they will cost you.
       the person's choice, as in Roblox.
     - A frame's `level` (in `ScriptDebugger.Frame`) is the VM's, not its place in the
       list: library frames are left out of the list but still count.
-    - Conditions are `ScriptObject.breakpointConditions`, by the line the person set
-      (saved as `"conditions"`, keys as text). `ScriptDebugger.land` maps them to where
-      each breakpoint landed: two on one line are ORed, and one without a condition
-      makes the line unconditional. A condition that fails stops, with `Pause.note`.
-    - Conditions move with their breakpoints: the editor hands `movingLines` (old line
-      to new) to `SceneModel.moveBreakpoints`. `setBreakpoints` drops the conditions of
-      lines that went. Neither is an edit (no undo), and Stop keeps them.
+    - Conditions and log messages are `ScriptObject.breakpointConditions` and
+      `breakpointLogs`, by the line the person set (saved as `"conditions"` and
+      `"logs"`, keys as text). `ScriptDebugger.land` gives each landed line a `Rule` per
+      breakpoint there. At the line, every rule counts a hit (`hits`, by the line it was
+      set on); a condition that doesn't hold skips its rule, one that fails stops with
+      `Pause.note`; a logpoint prints (`studio_lua_debug_log`: an expression list,
+      written as print writes it) and goes on; any other rule stops.
+    - Conditions and messages move with their breakpoints: the editor hands
+      `movingLines` (old line to new) to `SceneModel.moveBreakpoints`.
+      `setBreakpoints` drops those of lines that went. None of it is an edit, and undo
+      (`keepingText`) and Stop leave breakpoints, their settings and watches as they are.
     - Tables open by expression: a variable's `path` is its name, and a field's is
       `.key`, `["key"]` or `[1]` after its table's. A watch's own is `(expression)`.
       `studio_lua_debug_fields` lists up to 200 entries; `ScriptDebugger.ordered` puts
       numbered ones first, then names. Only plain tables open (`typeof` is `"table"`).
-    - Watches are the EditorSession's (not saved), handed to each play's debugger and
-      worked out into `Pause.watches` at every stop, and again when another call is
+    - Watches are the place's (`SceneState.watches`, left out of `sharedState`),
+      changed with `setWatches` outside `commit`. Each play's debugger gets them and
+      works them out into `Pause.watches` at every stop, and again when another call is
       picked.
+    - Studio shows hits live: the debugger's `onHit` makes `EditorSession` copy `hits`
+      into `breakpointHits`, at most five times a second.
 
 121. **Terrain is voxels, meshed per chunk, and collides as MeshParts nobody else sees.**
     `SceneState.terrain` (TerrainData) holds 16³-voxel chunks. Each chunk's `stamp`
@@ -1754,9 +1761,10 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
 
 - **Physics:** the character is a kinematic capsule: parts hitting it shove it (a fading
   push, by mass) and platforms carry it, but it has no real mass in Jolt; water parts
-  don't make parts float (only characters swim); a TrussPart draws as a plain box; no Motor6D, no NoCollisionConstraint, no
-  AlignPosition/AlignOrientation/VectorForce/Torque, and a servo is a speed-limited
-  controller rather than Jolt's position motor.
+  don't make parts float (only characters swim); a TrussPart draws as a plain box; no Motor6D,
+  AlignOrientation or Torque (AlignPosition, VectorForce and NoCollisionConstraint are
+  there, invariant 120), and a servo is a speed-limited controller rather than Jolt's
+  position motor.
 - **Multiplayer is LAN-only, host-run:** the host runs the scene's scripts and physics;
   joiners apply its `SceneDelta`s. Host scripts see joined players (invariant 77); only
   the host forwards writes (a joiner's LocalScripts can't change other players). Host
@@ -1838,7 +1846,8 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   occlusion are slightly grainy (Quality trades rays for grain); 16 point lights per
   frame (nearest the camera); conventional shadows cover ~260 studs around the camera
   target; point-light shadows are ray-traced only; parts more than half transparent
-  cast no shadow; no spot/surface lights, no Sky object, no Atmosphere; Wren has no
+  cast no shadow; no spot/surface lights; Sky, Atmosphere and Clouds are drawn but
+  don't light the world (no sky-coloured ambient from the skybox); Wren has no
   Lighting API yet.
 - **Animations are R6 rotations with a root offset.** No IK, no per-limb translation,
   no animation events besides markers, no `Animate` script replacing the built-in
@@ -1855,11 +1864,13 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
 - **Nightfall's zombies** steer by walls read once at the start: a wall added later is
   pathed round only if the straight line is already blocked by an old one, and walked
   through otherwise. They don't climb. With every way blocked they stand still.
-- **The debugger** is Luau's only (no Wren). No breakpoints in the library's own code,
-  no hit counts or logpoints, and watches aren't saved with the place. A table opens
-  to its first 200 entries; an Instance doesn't open (its properties aren't listed).
-  Watches and conditions run for up to 0.2 s each, and can change things if they call
-  functions that do. While stopped, a network host sends nothing, so its players see
+- **The debugger** is Luau's only (no Wren). No breakpoints in the library's own code;
+  a logpoint always goes on (it can't print and stop), and its hit count isn't a
+  condition ("stop on the 5th hit" is `count == 5` with a counter of your own). A table
+  opens to its first 200 entries; an Instance doesn't open (its properties aren't
+  listed). Watches, conditions and log messages run for up to 0.2 s each, and can change
+  things if they call functions that do. Watches and breakpoints are saved with the
+  place only when something else makes it save. While stopped, a network host sends nothing, so its players see
   the world stand still. A line with only `end` on it can't be stopped at.
 - **Pathfinding** sees the world as 2-stud squares, so a gap must be a little wider than
   the agent. No climbing (TrussParts), no swimming, no jumping across gaps (only up),
