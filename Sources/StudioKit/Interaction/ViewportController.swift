@@ -300,4 +300,18 @@ final class ViewportController: ViewportSource {
         let back = -camera.forward
         model.addRig(at: feet, facing: atan2(-back.x, -back.z))
     }
+
+    /// A Toolbox model in front of the camera, on the ground (or whatever's under it).
+    func insert(_ item: ToolboxModel) {
+        var ground = camera.target + camera.forward * 10
+        // On top of whatever is there (a locked baseplate too), or at 0.
+        let ray = Ray(origin: Vec3(ground.x, 1000, ground.z), direction: Vec3(0, -1, 0))
+        let hits = (model.parts + model.terrainParts).filter(\.inWorld).compactMap { Picking.intersect(ray: ray, part: $0) }
+        ground.y = hits.min().map { 1000 - $0 } ?? 0
+        if model.snapEnabled {
+            ground.x = snapValue(ground.x, to: model.moveSnap)
+            ground.z = snapValue(ground.z, to: model.moveSnap)
+        }
+        model.insert(item, at: ground)
+    }
 }

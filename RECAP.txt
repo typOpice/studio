@@ -497,6 +497,14 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the joined player sees a crate the host dropped in a pond floating).
    New file: FloatSelfTest.swift.
 
+50. Cars: VehicleSeat and Insert > Car, 2026-09-28.
+   Insert > Car puts a drivable car in front of the camera. Play, walk into its seat, and drive: W and S go forward and back, A and D steer, Space gets out. Your speed shows at the bottom of the screen.
+   It's built the Roblox way: a VehicleSeat, wheels on hinges, and a script called Drive inside the car that turns the seat's Throttle and Steer into what the wheels do. Scripts can drive a car too, with nobody in it.
+   In a network game, a joined player can drive the host's car and everyone sees it go.
+   Also fixed: inserting a saved model renamed the parts inside it, so its scripts couldn't find them.
+   Tested alone and with a host and a joined player.
+   New files: Model/ToolboxModels.swift, Model/SceneModel+Insert.swift, CarSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

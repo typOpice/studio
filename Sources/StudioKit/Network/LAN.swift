@@ -151,8 +151,10 @@ struct PlayerState: Codable, Equatable {
     /// How the body is moving, and where the Humanoid is asked to go.
     var velocity = Vec3.zero
     var moveDirection = Vec3.zero
-    /// The Seat they sit in, if any.
+    /// The Seat they sit in, if any, and — a VehicleSeat — how their keys drive it.
     var seat: UUID?
+    var throttle: Float = 0
+    var steer: Float = 0
 }
 
 enum LANError: Error, Equatable {

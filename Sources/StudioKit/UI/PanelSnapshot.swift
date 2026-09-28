@@ -379,6 +379,14 @@ enum PanelSnapshot {
             if let beam = model.join(.beam, a, b) {
                 model.updateConstraint(id: beam) { $0.look.texture = "builtin://Glow"; $0.look.lightEmission = 1 }
             }
+        case "car":
+            // Insert › Car, picked, seen from the front-left.
+            session.showWorld()
+            model.insert(.car, at: Vec3(0, 0, -4))
+            session.viewport.camera.target = Vec3(0, 2, -4)
+            session.viewport.camera.distance = 22
+            session.viewport.camera.yaw = -0.7
+            session.viewport.camera.pitch = 0.35
         case "motor":
             // The Physics tab, and a windmill's sail on a Motor6D made with its tool, picked.
             session.showWorld()

@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2912 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2942 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -515,7 +515,8 @@ touches nothing.
 - **Seats:** tick **Seat** on a part (or `Instance.new("Seat")`) and a character touching
   it sits down, legs out, until **Space**. Scripts get `seat.Occupant` (the Humanoid),
   `seat.Disabled`, `humanoid.Sit` (set it false to stand), `humanoid.SeatPart` and
-  `humanoid.Seated:Connect(function(active, seatPart) … end)`.
+  `humanoid.Seated:Connect(function(active, seatPart) … end)`. Tick **VehicleSeat** under
+  it for a seat that drives (see Cars, below).
 - **Trusses:** Insert › **Truss** makes a TrussPart; walk into it to climb (forward goes
   up, back goes down, nothing holds on), **Space** jumps off, and climbing past the top
   steps onto it.
@@ -640,6 +641,32 @@ while true do
 	task.wait(4)
 	align.Position = low
 	task.wait(4)
+end
+```
+
+### Cars: VehicleSeat
+
+**Insert › Car** puts a car in front of the camera: a body with a **VehicleSeat**, back
+wheels on motor hinges, front wheels steered by servo hinges, and a script called
+**Drive** inside it. Play, walk into the seat, and drive: **W** and **S** go forward and
+back, **A** and **D** steer, **Space** gets out. The speed shows at the bottom of the
+screen. In a network game a joined player drives the host's car the same way; the host
+runs it, and everyone sees it go.
+
+A VehicleSeat doesn't move anything by itself, as in Roblox. Its driver's keys set its
+`Throttle` and `Steer` (−1, 0 or 1) and `ThrottleFloat` and `SteerFloat`; a script turns
+those into what the wheels do, going by its `MaxSpeed`, `Torque` and `TurnSpeed`.
+`HeadsUpDisplay` shows the driver their speed, and `Occupant` is who's driving. A script
+can set Throttle and Steer too, to drive a car with nobody in it. The car's own Drive
+script is a good place to start your own.
+
+```lua
+-- A Script: the car drives round in circles on its own, until someone gets in.
+local seat = workspace:WaitForChild("Car"):WaitForChild("VehicleSeat")
+while seat.Occupant == nil do
+	seat.ThrottleFloat = 0.5
+	seat.SteerFloat = 1
+	task.wait(0.5)
 end
 ```
 

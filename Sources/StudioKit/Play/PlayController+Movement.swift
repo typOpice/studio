@@ -89,6 +89,20 @@ extension PlayController {
 
     // MARK: - Seats
 
+    /// Joined drivers' keys (in their PlayerState) drive their seats here; a seat its
+    /// driver got out of stops.
+    func updateVehicleControls() {
+        var driven: Set<UUID> = []
+        if let seat = seatPart { driven.insert(seat) }
+        for remote in remotePlayers where !remote.dead {
+            guard let seat = remote.seat, model.part(id: seat)?.seat?.vehicle != nil else { continue }
+            driven.insert(seat)
+            vehicleControls[seat] = VehicleControl(throttle: remote.throttle, steer: remote.steer)
+        }
+        for seat in drivenSeats.subtracting(driven) { vehicleControls[seat] = nil }
+        drivenSeats = driven
+    }
+
     /// Whether anyone — this player or another — is in a seat.
     func occupant(of seat: UUID) -> Int? {
         if seatPart == seat { return characterGeneration }
@@ -144,4 +158,10 @@ extension PlayController {
             holdInSeat()
         }
     }
+}
+
+/// A VehicleSeat's controls: −1 (back, left) to 1 (forward, right).
+struct VehicleControl: Equatable {
+    var throttle: Float = 0
+    var steer: Float = 0
 }

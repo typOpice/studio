@@ -74,6 +74,10 @@ final class ScriptRuntime {
     var navigationSyncedAt = -1.0
     /// Luau's debugger, when the session is being debugged (Studio's Play); joins each new VM.
     var debugger: ScriptDebugger?
+    /// Each VehicleSeat's Throttle and Steer (−1 to 1): its driver's keys (the
+    /// ControlScript), a joined driver's (PlayController.updateVehicleControls), or a
+    /// script's. Not the part's: nothing saved, nothing sent.
+    var vehicleControls: [UUID: VehicleControl] = [:]
     /// The Stats service's numbers (`stats.get`): the play session's, as
     /// [frame, scripts, physics, draw ms, memory MB, parts, instances].
     var statsSource: (() -> ScriptValue)?

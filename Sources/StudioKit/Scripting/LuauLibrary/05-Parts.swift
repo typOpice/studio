@@ -514,12 +514,18 @@ function partMethods.IsA(self, className)
 	checkSelf(self, "Instance", "IsA")
 	local shape = invoke("part.get", partIdOf[self], "shape")
 	local mesh = invoke("part.get", partIdOf[self], "ismeshpart")
+	-- A Seat is a kind of Part; a VehicleSeat, only a BasePart (as in Roblox).
+	local vehicle = invoke("part.get", partIdOf[self], "isvehicleseat")
 	if className == "WedgePart" then
 		return shape == "wedge" and not mesh
 	elseif className == "MeshPart" then
 		return mesh == true
+	elseif className == "VehicleSeat" then
+		return vehicle == true
+	elseif className == "Seat" then
+		return invoke("part.get", partIdOf[self], "isseat") == true and not vehicle
 	end
-	return className == "Part" and shape ~= "wedge" and not mesh
+	return className == "Part" and shape ~= "wedge" and not mesh and not vehicle
 		or className == "BasePart" or className == "PVInstance" or className == "Instance"
 end
 
@@ -567,6 +573,9 @@ PartMeta.__index = function(part, key)
 	if property ~= nil and property.meshOnly and not invoke("part.get", id, "ismeshpart") then
 		property = nil
 	end
+	if property ~= nil and property.vehicleOnly and not invoke("part.get", id, "isvehicleseat") then
+		property = nil
+	end
 	if property ~= nil and property.motion ~= nil then
 		if not invoke("part.exists", id) then
 			raise("attempt to use a part that has been destroyed", 2)
@@ -590,6 +599,8 @@ PartMeta.__index = function(part, key)
 		local shape = invoke("part.get", id, "shape")
 		if invoke("part.get", id, "ismeshpart") then
 			return "MeshPart"
+		elseif invoke("part.get", id, "isvehicleseat") then
+			return "VehicleSeat"
 		elseif invoke("part.get", id, "isseat") then
 			return "Seat"
 		end
@@ -637,6 +648,9 @@ PartMeta.__newindex = function(part, key, value)
 	end
 	local property = partProperties[key]
 	if property ~= nil and property.meshOnly and not invoke("part.get", id, "ismeshpart") then
+		property = nil
+	end
+	if property ~= nil and property.vehicleOnly and not invoke("part.get", id, "isvehicleseat") then
 		property = nil
 	end
 	if property == nil then

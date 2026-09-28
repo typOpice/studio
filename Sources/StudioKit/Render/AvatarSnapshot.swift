@@ -923,4 +923,52 @@ enum AvatarSnapshot {
         print("Wrote \(url.path): car at \(model.parts[1].position) after \(seconds) s")
         return true
     }
+
+    /// A Toolbox model on a lawn, settled by a moment's physics, seen from the front-left.
+    static func renderToolbox(_ item: ToolboxModel, to url: URL, width: Int = 1200, height: Int = 800) -> Bool {
+        guard let device = MTLCreateSystemDefaultDevice() else { return false }
+        let model = SceneModel()
+        model.scripts = []
+        model.shaders = []
+        model.groups = []
+        model.animations = []
+        model.attachments = []
+        model.constraints = []
+        var lawn = Part()
+        lawn.name = "Lawn"
+        // A little above the grid, so the two don't flicker.
+        lawn.position = Vec3(0, -0.48, 0)
+        lawn.size = Vec3(200, 1, 200)
+        lawn.color = Vec3(0.36, 0.55, 0.34)
+        model.parts = [lawn]
+        model.insert(item, at: Vec3(0, 0.02, 0))
+        let world = PhysicsWorld()
+        for _ in 0..<30 {
+            world.sync(model.parts, constraints: model.constraints, attachments: model.attachments)
+            let result = world.step(dt: 1.0 / 60)
+            var parts = model.parts
+            let index = Dictionary(uniqueKeysWithValues: parts.enumerated().map { ($1.id, $0) })
+            for (id, pose) in result.moved { if let i = index[id] { parts[i].pose = pose } }
+            model.parts = parts
+        }
+        model.selection = []
+        let inside = model.parts.dropFirst()
+        let low = inside.reduce(Vec3(repeating: .greatestFiniteMagnitude)) { simd_min($0, $1.position - $1.size / 2) }
+        let high = inside.reduce(Vec3(repeating: -.greatestFiniteMagnitude)) { simd_max($0, $1.position + $1.size / 2) }
+        var camera = Camera()
+        camera.target = (low + high) / 2
+        camera.distance = max(simd_length(high - low) * 1.6, 8)
+        camera.yaw = -0.75
+        camera.pitch = 0.3
+        let source = Source(model: model, avatars: [], camera: camera)
+        let view = MTKView(frame: CGRect(x: 0, y: 0, width: width, height: height), device: device)
+        guard let renderer = Renderer(device: device, view: view, source: source),
+              let image = renderer.snapshot(width: width, height: height),
+              let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
+        else { return false }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return false }
+        print("Wrote \(url.path): \(item.rawValue)")
+        return true
+    }
 }

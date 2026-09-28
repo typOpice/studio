@@ -92,6 +92,37 @@ partProperties.Disabled = {
 	end,
 }
 
+-- A VehicleSeat's: its driver's keys (Throttle and Steer, −1, 0 or 1, and their
+-- Float forms), and what a script driving the wheels goes by.
+do
+	local function number(value)
+		if type(value) ~= "number" or value ~= value then
+			return nil, "number expected, got " .. typeof(value)
+		end
+		return value
+	end
+	local function whole(value)
+		if type(value) ~= "number" or value ~= value then
+			return nil, "int expected, got " .. typeof(value)
+		end
+		return math.clamp(math.round(value), -1, 1)
+	end
+	local function flag(value)
+		if type(value) ~= "boolean" then
+			return nil, "bool expected, got " .. typeof(value)
+		end
+		return value
+	end
+	partProperties.Throttle = { host = "throttle", vehicleOnly = true, write = whole }
+	partProperties.Steer = { host = "steer", vehicleOnly = true, write = whole }
+	partProperties.ThrottleFloat = { host = "throttlefloat", vehicleOnly = true, write = number }
+	partProperties.SteerFloat = { host = "steerfloat", vehicleOnly = true, write = number }
+	partProperties.MaxSpeed = { host = "maxspeed", vehicleOnly = true, write = number }
+	partProperties.Torque = { host = "vehicletorque", vehicleOnly = true, write = number }
+	partProperties.TurnSpeed = { host = "turnspeed", vehicleOnly = true, write = number }
+	partProperties.HeadsUpDisplay = { host = "headsupdisplay", vehicleOnly = true, write = flag }
+end
+
 local humanoidSignalNames = {
 	"Died", "HealthChanged", "StateChanged", "Jumping", "FreeFalling", "Running", "MoveToFinished", "Touched",
 	"Seated",

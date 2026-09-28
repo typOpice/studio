@@ -66,6 +66,31 @@ extension PlaceBuilding {
         return attachment.id
     }
 
+    /// Welds two parts: they move as one.
+    mutating func weld(_ a: UUID, _ b: UUID, in parent: UUID? = nil) {
+        var weld = SceneConstraint(kind: .weld)
+        weld.part0 = a
+        weld.part1 = b
+        weld.parentID = parent ?? a
+        state.constraints.append(weld)
+    }
+
+    /// A joint between two parts, from an attachment on each (at a point and axis in its
+    /// part's own frame), kept in `parent`.
+    @discardableResult
+    mutating func joint(_ kind: SceneConstraint.Kind, _ name: String, in parent: UUID,
+                        _ a: UUID, at pointA: Vec3, axis axisA: Vec3,
+                        _ b: UUID, at pointB: Vec3, axis axisB: Vec3,
+                        _ set: (inout SceneConstraint) -> Void = { _ in }) -> UUID {
+        var joint = SceneConstraint(kind: kind, name: name)
+        joint.parentID = parent
+        joint.attachment0 = attachment(on: a, at: pointA, axis: axisA, name: name + "0")
+        joint.attachment1 = attachment(on: b, at: pointB, axis: axisB, name: name + "1")
+        set(&joint)
+        state.constraints.append(joint)
+        return joint.id
+    }
+
     /// A Beam or Trail between two attachments.
     mutating func ribbon(_ kind: SceneConstraint.Kind, _ a0: UUID, _ a1: UUID, in parent: UUID, name: String? = nil,
                          _ look: RibbonLook) {

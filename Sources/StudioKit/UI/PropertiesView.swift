@@ -260,6 +260,22 @@ struct PropertiesView: View {
                 .help("Off: touching it fires no Touched or TouchEnded events.")
             Toggle("Seat", isOn: binding(part.seat != nil) { $0.seat = $1 ? ($0.seat ?? SeatSettings()) : nil })
                 .help("A character touching it sits down; Space gets up.")
+            if part.seat != nil {
+                Toggle("VehicleSeat", isOn: binding(part.seat?.vehicle != nil) { part, on in
+                    let vehicle = part.seat?.vehicle ?? VehicleSeatSettings()
+                    part.seat?.vehicle = on ? vehicle : nil
+                })
+                .help("Its driver's keys set its Throttle and Steer, for a script to turn the wheels.")
+                .padding(.leading, 14)
+            }
+            if let vehicle = part.seat?.vehicle {
+                vehicleNumber("MaxSpeed", vehicle.maxSpeed, 0...1000) { $0.maxSpeed = $1 }
+                vehicleNumber("Torque", vehicle.torque, 0...100_000) { $0.torque = $1 }
+                vehicleNumber("TurnSpeed", vehicle.turnSpeed, 0...100) { $0.turnSpeed = $1 }
+                Toggle("HeadsUpDisplay", isOn: binding(vehicle.headsUpDisplay) { $0.seat?.vehicle?.headsUpDisplay = $1 })
+                    .help("Shows the driver their speed.")
+                    .padding(.leading, 14)
+            }
             Toggle("ClickDetector", isOn: binding(part.clickDetector != nil) {
                 $0.clickDetector = $1 ? ($0.clickDetector ?? ClickDetector()) : nil
             })
@@ -277,6 +293,26 @@ struct PropertiesView: View {
         .toggleStyle(.checkbox)
         .font(.system(size: 11))
         .foregroundStyle(Theme.text)
+    }
+
+    private func vehicleNumber(_ label: String, _ value: Float, _ range: ClosedRange<Float>,
+                               _ set: @escaping (inout VehicleSeatSettings, Float) -> Void) -> some View {
+        HStack {
+            Text(label).foregroundStyle(Theme.textDim)
+            Spacer()
+            NumericField(label: "", tint: .clear, range: range, value: value) { newValue in
+                model.commit("Changed property") {
+                    model.updateSelected { part in
+                        if var vehicle = part.seat?.vehicle {
+                            set(&vehicle, newValue)
+                            part.seat?.vehicle = vehicle
+                        }
+                    }
+                }
+            }
+            .frame(width: 84)
+        }
+        .padding(.leading, 14)
     }
 
     private func binding(_ value: Bool, _ setter: @escaping (inout Part, Bool) -> Void) -> Binding<Bool> {

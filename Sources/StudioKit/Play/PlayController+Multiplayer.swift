@@ -53,7 +53,8 @@ extension PlayController {
     /// Players in a network game stand in this machine's physics too: parts land on them
     /// and stop against them. The dead lie down, and those who left are taken out.
     func moveRemoteCapsules(dt: Float) {
-        let standing = remotePlayers.filter { !$0.dead }
+        // Seated, they ride with their seat: a capsule there would only shove it.
+        let standing = remotePlayers.filter { !$0.dead && $0.seat == nil }
         for remote in standing {
             // Placed, not swept: their reports come in steps, and a capsule swept to each
             // would slam into whatever it met. Their walking pushes as ours does, in
@@ -87,7 +88,9 @@ extension PlayController {
                     yaw: character.facingYaw, joints: currentJoints, dead: humanoid.isDead,
                     generation: characterGeneration, health: humanoid.health, maxHealth: humanoid.maxHealth,
                     walkSpeed: humanoid.walkSpeed, jumpPower: humanoid.jumpPower, state: humanoid.state.rawValue,
-                    velocity: character.velocity, moveDirection: humanoid.moveDirection, seat: seatPart)
+                    velocity: character.velocity, moveDirection: humanoid.moveDirection, seat: seatPart,
+                    throttle: seatPart.flatMap { vehicleControls[$0]?.throttle } ?? 0,
+                    steer: seatPart.flatMap { vehicleControls[$0]?.steer } ?? 0)
     }
 
     // MARK: - Other players' characters, for this game's scripts

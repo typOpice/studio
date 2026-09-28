@@ -86,14 +86,63 @@ enum CoreScripts {
     \treturn if UserInputService:IsKeyDown(keyCode) then 1 else 0
     end
 
+    -- A VehicleSeat's heads-up display: the driver's speed, while they drive one with
+    -- HeadsUpDisplay on.
+    local speedometer = nil
+    local function showSpeed(seat)
+    \tif seat == nil or not seat.HeadsUpDisplay then
+    \t\tif speedometer ~= nil and speedometer.Parent.Enabled then
+    \t\t\tspeedometer.Parent.Enabled = false
+    \t\tend
+    \t\treturn
+    \tend
+    \tif speedometer == nil then
+    \t\tlocal screen = Instance.new("ScreenGui")
+    \t\tscreen.Name = "VehicleHud"
+    \t\tspeedometer = Instance.new("TextLabel")
+    \t\tspeedometer.Name = "Speed"
+    \t\tspeedometer.Size = UDim2.new(0, 180, 0, 34)
+    \t\tspeedometer.Position = UDim2.new(0.5, -90, 1, -120)
+    \t\tspeedometer.BackgroundColor3 = Color3.new(0, 0, 0)
+    \t\tspeedometer.BackgroundTransparency = 0.45
+    \t\tspeedometer.TextColor3 = Color3.new(1, 1, 1)
+    \t\tspeedometer.TextSize = 20
+    \t\tspeedometer.Parent = screen
+    \t\tscreen.Parent = player.PlayerGui
+    \tend
+    \tspeedometer.Parent.Enabled = true
+    \tlocal text = string.format("%d studs/s", math.round(seat.AssemblyLinearVelocity.Magnitude))
+    \tif speedometer.Text ~= text then
+    \t\tspeedometer.Text = text
+    \tend
+    end
+
     -- Every frame, WASD becomes a direction relative to the camera.
     RunService.RenderStepped:Connect(function()
     \tlocal humanoid = currentHumanoid()
     \tif humanoid == nil then
+    \t\tshowSpeed(nil)
     \t\treturn
     \tend
     \tlocal forward = held(Enum.KeyCode.W) - held(Enum.KeyCode.S)
     \tlocal right = held(Enum.KeyCode.D) - held(Enum.KeyCode.A)
+
+    \t-- In a VehicleSeat the keys drive it (its Throttle and Steer), and Space gets out.
+    \tlocal seat = humanoid.SeatPart
+    \tlocal driving = seat ~= nil and seat:IsA("VehicleSeat")
+    \tshowSpeed(if driving then seat else nil)
+    \tif driving then
+    \t\tif seat.ThrottleFloat ~= forward then
+    \t\t\tseat.ThrottleFloat = forward
+    \t\tend
+    \t\tif seat.SteerFloat ~= right then
+    \t\t\tseat.SteerFloat = right
+    \t\tend
+    \t\tif UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+    \t\t\thumanoid.Jump = true
+    \t\tend
+    \t\treturn
+    \tend
 
     \tif humanoid:GetState() == Enum.HumanoidStateType.Flying then
     \t\tlocal up = held(Enum.KeyCode.Space) - held(Enum.KeyCode.C)

@@ -84,6 +84,21 @@ extension ScriptRuntime {
         case "shape": return .string(part.shape.rawValue)
         case "isseat": return .bool(part.seat != nil)
         case "seatdisabled": return part.seat.map { .bool($0.disabled) } ?? .nothing
+        case "isvehicleseat": return .bool(part.seat?.vehicle != nil)
+        case "maxspeed": return part.seat?.vehicle.map { .number(Double($0.maxSpeed)) } ?? .nothing
+        case "vehicletorque": return part.seat?.vehicle.map { .number(Double($0.torque)) } ?? .nothing
+        case "turnspeed": return part.seat?.vehicle.map { .number(Double($0.turnSpeed)) } ?? .nothing
+        case "headsupdisplay": return part.seat?.vehicle.map { .bool($0.headsUpDisplay) } ?? .nothing
+        case "throttle", "steer", "throttlefloat", "steerfloat":
+            // Its driver's keys (or a script's), kept here: Run mode has them too.
+            guard part.seat?.vehicle != nil else { return .nothing }
+            let control = vehicleControls[part.id] ?? VehicleControl()
+            switch property {
+            case "throttle": return .number(Double(control.throttle.rounded()))
+            case "steer": return .number(Double(control.steer.rounded()))
+            case "throttlefloat": return .number(Double(control.throttle))
+            default: return .number(Double(control.steer))
+            }
         case "ismeshpart": return .bool(part.mesh != nil)
         case "meshid": return part.mesh.map { .string($0.meshId) } ?? .nothing
         case "textureid": return part.mesh.map { .string($0.textureId) } ?? .nothing
@@ -119,6 +134,18 @@ extension ScriptRuntime {
     }
 
     func write(_ id: UUID, _ property: String, _ value: ScriptValue) {
+        // A VehicleSeat's Throttle and Steer are the play session's, not the part's.
+        if ["throttle", "steer", "throttlefloat", "steerfloat"].contains(property) {
+            guard model.part(id: id)?.seat?.vehicle != nil, let number = value.asFloat, number.isFinite else { return }
+            var control = vehicleControls[id] ?? VehicleControl()
+            if property.hasPrefix("throttle") {
+                control.throttle = min(max(number, -1), 1)
+            } else {
+                control.steer = min(max(number, -1), 1)
+            }
+            vehicleControls[id] = control
+            return
+        }
         // A MeshId names an imported 3D model: found now, kept by its id.
         let meshAsset = property == "meshid" ? value.asString.flatMap(model.asset(named:)).flatMap { $0.kind == .mesh ? $0.id : nil } : nil
         model.update(id: id) { part in
@@ -146,6 +173,20 @@ extension ScriptRuntime {
                 }
             case "seatdisabled":
                 if let on = value.asBool, part.seat != nil { part.seat?.disabled = on }
+            case "isvehicleseat":
+                if let on = value.asBool {
+                    var seat = part.seat ?? SeatSettings()
+                    seat.vehicle = on ? (seat.vehicle ?? VehicleSeatSettings()) : nil
+                    if on || part.seat != nil { part.seat = seat }
+                }
+            case "maxspeed":
+                if let v = value.asFloat, v.isFinite, part.seat?.vehicle != nil { part.seat?.vehicle?.maxSpeed = max(v, 0) }
+            case "vehicletorque":
+                if let v = value.asFloat, v.isFinite, part.seat?.vehicle != nil { part.seat?.vehicle?.torque = max(v, 0) }
+            case "turnspeed":
+                if let v = value.asFloat, v.isFinite, part.seat?.vehicle != nil { part.seat?.vehicle?.turnSpeed = max(v, 0) }
+            case "headsupdisplay":
+                if let on = value.asBool, part.seat?.vehicle != nil { part.seat?.vehicle?.headsUpDisplay = on }
             case "material":
                 if let raw = value.asString, let material = PartMaterial(rawValue: raw.lowercased()) {
                     part.material = material

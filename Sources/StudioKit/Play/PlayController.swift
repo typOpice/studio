@@ -320,6 +320,13 @@ final class PlayController: ViewportSource, PlayerBridge {
     var standingOn: (id: UUID, pose: Pose)?
     /// The Seat the character sits in, and when it may sit again after getting up.
     var seatPart: UUID?
+    /// Each VehicleSeat's Throttle and Steer: the script runtime's (ScriptRuntime.vehicleControls).
+    var vehicleControls: [UUID: VehicleControl] {
+        get { scripts.vehicleControls }
+        set { scripts.vehicleControls = newValue }
+    }
+    /// Seats someone sat in last frame: when they get up, the seat's controls go back to 0.
+    var drivenSeats: Set<UUID> = []
     var seatDelayUntil: Double = 0
     /// UserInputService.MouseBehavior: "Default", or "LockCenter" to hold the pointer.
     var mouseBehavior = "Default" {
@@ -401,6 +408,7 @@ final class PlayController: ViewportSource, PlayerBridge {
         }
         clock += Double(dt)
         noteDataChanges()
+        updateVehicleControls()
         guard hasPlayer else {
             timed(&scriptTime) { scripts.update(dt: Double(dt)) }
             timed(&physicsTime) {
@@ -540,8 +548,9 @@ final class PlayController: ViewportSource, PlayerBridge {
         // Parts float in the Terrain's water and in water parts, player or not (Run mode).
         physics.terrainWater = model.terrain.isEmpty ? nil : { [terrain = model.terrain] in terrain.waterSurface(at: $0) }
         physics.sync(partsOutOfHands + model.terrainParts, constraints: model.constraints, attachments: model.attachments)
-        // The capsule stands in for a living character; a dead one lies on the ground.
-        if humanoid.isDead || !hasPlayer {
+        // The capsule stands in for a living character; a dead one lies on the ground,
+        // and a seated one rides with its seat (in a car, it would only shove it).
+        if humanoid.isDead || !hasPlayer || isSeated {
             physics.removeCharacter()
         } else {
             physics.moveCharacter(feet: character.position, radius: CharacterController.capsuleRadius,

@@ -189,10 +189,23 @@ struct Part: Identifiable, Equatable, Codable {
     }
 }
 
-/// What makes a part a Seat.
+/// What makes a part a Seat (or, with `vehicle`, a VehicleSeat).
 struct SeatSettings: Codable, Equatable {
     /// Seat.Disabled: nobody sits down on it.
     var disabled = false
+    var vehicle: VehicleSeatSettings?
+}
+
+/// A VehicleSeat's own properties, as Roblox's: the seat doesn't move anything itself —
+/// its driver's keys set its Throttle and Steer (the play session's, not saved), and a
+/// script turns those into what the wheels do, going by these.
+struct VehicleSeatSettings: Codable, Equatable {
+    /// Studs a second at full throttle.
+    var maxSpeed: Float = 25
+    var torque: Float = 10
+    var turnSpeed: Float = 1
+    /// Shows the driver their speed.
+    var headsUpDisplay = true
 }
 
 /// Roblox's ClickDetector, kept on the part it is in.

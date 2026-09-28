@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2912 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # 2942 checks — THE test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -155,6 +155,7 @@ listed in §9.
 | `NPCSelfTest.swift` | NPCs: Insert › Rig (the seven parts, a Humanoid, one undo step, standing on the spot, saved and reopened); MoveTo at the WalkSpeed, facing the way it goes with legs swinging, MoveDirection, WalkToPoint and the Running state, MoveToFinished(true) within a stud and standing on the ground; a wall stopping it and MoveToFinished(false) after eight seconds; a kerb stepped up, moved by a script (PivotTo) then walking off a ledge, Jump up and down; the README's PathfindingService example round a wall to a flag; TakeDamage and HealthChanged, MaxHealth lowering Health, Died once at no health, falling apart; Instance.new("Humanoid") in a script's Model walking at its own WalkSpeed, FindFirstChildOfClass, a wrong type refused; the player bumping into an NPC; Adventure Island's Postie Pat round, every stop reached; a host's NPC walking and dying in a joined player's game, their script hearing Died, the parts let go there too |
 | `TerrainSelfTest.swift` | Terrain: FillBall (full, part-full, empty), Air carving, a turned FillBlock, FillCylinder, FillWedge's slope, FillRegion, ReplaceMaterial, the seven brushes, Generate (materials, the same from a seed), saved small and read back, a place without it saving as before; meshes (a flat top at its height, whole across chunks, Precise collision parts, water at its level, only the changed chunk remade, the chunks round a corner edit); played on (standing on it and a hill, swimming with no floor at 0, a block landing, Raycast hitting it as workspace.Terrain with its material and normal, its water unless IgnoreWater, filtered out, a path round a hill); from Luau (workspace.Terrain found by name and class, every Fill, Region3, ReplaceMaterial, Read/WriteVoxels, material colours, water, cells, Clouds in it, five wrong values refused); drawn; painted with a brush in Studio (a stroke one undo step, the preview, a join tool putting it down); the Hills and Lake template (a player lands on it); the README's island as written; a host's terrain and a script's edits in a joined player's game |
 | `ForceSelfTest.swift` | AlignPosition, VectorForce and NoCollisionConstraint: a Force of the block's weight holding it up (none, it falls; twice, it rises), RelativeTo Attachment0 turning with the part, off the middle turning it unless ApplyAtCenterOfMass; pulled to Attachment1 and held against gravity, not with too little MaxForce, no faster than MaxVelocity, at once with RigidityEnabled and slower at Responsiveness 5, OneAttachment to Position, following a moving target; falling through a shelf it mustn't collide with and resting on it when disabled; Studio (the Align Position and No Collision tools, Add VectorForce's hover, undo, saved with MaxVelocity's no-limit, a hinge saving as before); from Luau (all three, their enums, five wrong values refused, math.huge); the README's lift as written; a host's AlignPosition lifting a crate in a joined player's game |
+| `CarSelfTest.swift` | Cars: Insert › Car's Model (a body, a VehicleSeat, four wheels, two knuckles; motors, servos, axles, welds and no-collisions; its Drive script; on the ground where it was put), a second car keeping its parts' names, one undo step each, a loose part still renamed; driving with the real ControlScript (W to MaxSpeed with the driver riding along, the speedometer, stopping when let go, S backwards, D and A turning, Space getting out and the controls going back to 0); VehicleSeat from Luau (its class, properties and defaults, whole-number Throttle, wrong values refused, a Part having no Throttle, a script driving a car nobody's in, in Run mode); saving (and a Seat from before); the README's circling car as written; a joined player driving the host's car (their keys reaching the host's script, the car going and them riding in it, stopping when they get out) |
 | `FloatSelfTest.swift` | Floating: in a water part, plastic about 0.7 under and still, wood about 0.35 under, metal on the bottom, staying where it fell; a welded wood-and-metal raft floating on their weight together; a plank dropped on its side settling flat; a crate sent skimming slowed by the water; nothing afloat on dry land; a crate and a log in the Terrain's water; a script turning a crate to metal (sinks) and to wood (back up); Adventure Island's driftwood and beach ball afloat on the lake; a host's crate floating in its pond in a joined player's game |
 | `MotorSelfTest.swift` | Motor6D, AlignOrientation and Torque: an arm swung on an anchored base to DesiredAngle (MaxVelocity a frame at most) and held there against gravity, turned by Transform, pulled to where C0 and C1 say, two unanchored parts falling and landing together, let go when disabled; a floating block turned to face as another does (not moved), to a CFrame in OneAttachment mode, slowly with little MaxTorque, no faster than MaxAngularVelocity, at once with RigidityEnabled, only its axis with PrimaryAxisOnly; a Torque spinning a block about its direction (twice as hard, twice as fast), about its attachment's axis, and Studio's turning a crate where it rests; Studio (the Motor6D tool holding the part where it is, the Align Orientation tool, Add Torque, saved and reopened, a weld saving as before); from Luau (all three, IsA JointInstance, CFrame properties, the new enum, wrong values refused, CurrentAngle read as it turns and set); the README's windmill and vane as written; a host's Motor6D turning a windmill in a joined player's game |
 | `SkySelfTest.swift` | Lighting's Sky, Atmosphere and Clouds: none in a new place (a default sun, moon and stars) and it saving as before, added with undo, saved and reopened, what the shaders get; drawn — stars at night and none at StarCount 0, the sun's disc and not with CelestialBodiesShown off, clouds whitening the sky and going when disabled, a far wall fading into the Atmosphere's colour, a skybox's sides where they belong and the right way up, the day's sky again without all six; from Luau (made loose then put in Lighting, found by name and class, children, the Roblox types, Offset kept in range, five wrong values refused, Clone, out and back, Destroy); the README's dusk fog as written; a host's Atmosphere and Clouds in a joined player's sky and scripts |
@@ -332,6 +333,8 @@ Sources/StudioKit/
   UI/TerrainUI.swift             the dock's Terrain Editor
   Scripting/ScriptRuntime+Forces.swift  `force.*`: the own properties of AlignPosition, VectorForce, AlignOrientation, Torque, Motor6D
   Model/SkyObjects.swift         Lighting's Sky, Atmosphere and Clouds (SkySettings and the rest)
+  Model/ToolboxModels.swift      ready-made models built in code (the car), as ModelFiles
+  Model/SceneModel+Insert.swift  inserting a ModelFile (a saved model or a Toolbox one), re-identified
   Scripting/ScriptRuntime+Sky.swift  `sky.*`: making, reading, moving them; SkyObject; loose ones
   UI/SkyUI.swift                 SkyObjectsEditor: their sections in Lighting's Properties
   Model/RibbonLook.swift         a Beam's or Trail's looks (SceneConstraint.ribbon), addTrail
@@ -1502,6 +1505,25 @@ Roughly ordered by how much time they will cost you.
     - A body skips putting its parts while nothing moved (`lastPut`), since each change
       is sent to every joined player.
 
+125. **A VehicleSeat's Throttle and Steer are the script runtime's, not the part's.**
+    `SeatSettings.vehicle` holds what's saved (MaxSpeed, Torque, TurnSpeed,
+    HeadsUpDisplay). The controls live in `ScriptRuntime.vehicleControls` (so Run mode
+    has them), read and written through `part.get/set` ("throttle", "throttlefloat"…).
+    - The ControlScript (a core LocalScript) writes them while its humanoid sits in a
+      VehicleSeat, instead of walking, and shows the speedometer (a ScreenGui it makes).
+      A place with its own ControlScript does neither.
+    - A joined driver's go to the host in `PlayerState.throttle/steer`;
+      `PlayController.updateVehicleControls` copies them each frame and clears a seat
+      its driver left (`drivenSeats`). A script's own setting of an empty seat stays.
+    - A seated character has no capsule in the physics (`simulateParts`,
+      `moveRemoteCapsules`): it would shove the car it sits in.
+    - Toolbox models (`ToolboxModel.file`) go in through `SceneModel.insert(_:at:)`, as
+      saved models do. Parts inside a Model keep their names there (its scripts find
+      them by name); only loose parts are renamed to be unique.
+    - The car's steering works through heavy (metal) knuckles, and its wheels don't
+      collide with its body (NoCollisionConstraints): a light knuckle made the solver's
+      steering soft, and a steered wheel met the body.
+
 124. **Parts float by Jolt's buoyancy, against the water found once a frame.**
     `PhysicsWorld.findWater` looks for water under each awake moving body (not water
     parts themselves) at its middle and at its lowest reach (`Assembly.reach`): water
@@ -1804,7 +1826,8 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   very stiff spring rather than rigid, its two parts stay two bodies, and characters'
   limbs aren't Motor6Ds (scripts can't reach them); AlignOrientation has no
   AlignType, LookAtPosition or separate PrimaryAxis/SecondaryAxis (its CFrame says it
-  all); no LinearVelocity, AngularVelocity, VehicleSeat or the legacy BodyMovers.
+  all); no LinearVelocity, AngularVelocity or the legacy BodyMovers; a car's wheels are
+  cylinders with plain friction (no tyre model, no suspension: it's rigid).
 - **Multiplayer is LAN-only, host-run:** the host runs the scene's scripts and physics;
   joiners apply its `SceneDelta`s. Host scripts see joined players (invariant 77); only
   the host forwards writes (a joiner's LocalScripts can't change other players). Host
@@ -1877,7 +1900,8 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
 - **The player:** one local player; the character's parts are not in `workspace`; no
   `HumanoidDescription` beyond what it wears and its body colours; the body parts cannot be resized; states are
   Running/Jumping/Freefall/Landed/Flying/Dead/Seated/Climbing/Swimming (no Ragdoll,
-  PlatformStanding, Physics); seats are parts only (no VehicleSeat); climbing is on
+  PlatformStanding, Physics); seats are parts (a VehicleSeat drives only through a
+  script, and only the ControlScript's keys and scripts set it); climbing is on
   TrussParts only, not on ladders built of parts. StarterPlayer scripts are Luau-only.
 - **Touches:** limbs are upright capsules, a part's touches come from Jolt's contacts
   (so two anchored parts never touch each other), and Wren has no `Touched` yet

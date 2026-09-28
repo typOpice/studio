@@ -209,6 +209,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         add(to: insertMenu, "MeshPart from 3D Model…", #selector(insertMeshPart), "")
         insertMenu.addItem(.separator())
         add(to: insertMenu, "Rig (a character with a Humanoid)", #selector(insertRig), "")
+        add(to: insertMenu, "Car (a VehicleSeat to drive)", #selector(insertCar), "")
         insertItem.submenu = insertMenu
         mainMenu.addItem(insertItem)
 
@@ -411,6 +412,7 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
     @objc private func insertCylinder() { session.viewport.insertPart(shape: .cylinder, atScreenPoint: nil) }
     @objc private func insertWedge() { session.viewport.insertPart(shape: .wedge, atScreenPoint: nil) }
     @objc private func insertRig() { session.viewport.insertRig() }
+    @objc private func insertCar() { session.viewport.insert(.car) }
     @objc private func insertTruss() { session.viewport.insertPart(shape: .truss, atScreenPoint: nil) }
     @objc private func insertMeshPart() {
         guard !session.isPlaying else { return }
@@ -730,6 +732,13 @@ public enum StudioEditor {
             let technology: LightingTechnology = arguments.dropFirst().first?.lowercased().hasPrefix("ray") == true
                 ? .rayTraced : .conventional
             exit(AvatarSnapshot.renderMeshes(to: URL(fileURLWithPath: path), technology: technology) ? 0 : 1)
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-toolbox") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let item = arguments.first.flatMap { name in ToolboxModel.allCases.first { $0.rawValue.lowercased() == name.lowercased() } }
+                ?? .car
+            let path = arguments.count > 1 ? arguments[1] : "\(item.rawValue.lowercased()).png"
+            exit(MainActor.assumeIsolated { AvatarSnapshot.renderToolbox(item, to: URL(fileURLWithPath: path)) } ? 0 : 1)
         }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-car") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])
