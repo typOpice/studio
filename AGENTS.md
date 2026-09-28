@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2977 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # 2993 checks — THE test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -155,6 +155,7 @@ listed in §9.
 | `NPCSelfTest.swift` | NPCs: Insert › Rig (the seven parts, a Humanoid, one undo step, standing on the spot, saved and reopened); MoveTo at the WalkSpeed, facing the way it goes with legs swinging, MoveDirection, WalkToPoint and the Running state, MoveToFinished(true) within a stud and standing on the ground; a wall stopping it and MoveToFinished(false) after eight seconds; a kerb stepped up, moved by a script (PivotTo) then walking off a ledge, Jump up and down; the README's PathfindingService example round a wall to a flag; TakeDamage and HealthChanged, MaxHealth lowering Health, Died once at no health, falling apart; Instance.new("Humanoid") in a script's Model walking at its own WalkSpeed, FindFirstChildOfClass, a wrong type refused; the player bumping into an NPC; Adventure Island's Postie Pat round, every stop reached; a host's NPC walking and dying in a joined player's game, their script hearing Died, the parts let go there too |
 | `TerrainSelfTest.swift` | Terrain: FillBall (full, part-full, empty), Air carving, a turned FillBlock, FillCylinder, FillWedge's slope, FillRegion, ReplaceMaterial, the seven brushes, Generate (materials, the same from a seed), saved small and read back, a place without it saving as before; meshes (a flat top at its height, whole across chunks, Precise collision parts, water at its level, only the changed chunk remade, the chunks round a corner edit); played on (standing on it and a hill, swimming with no floor at 0, a block landing, Raycast hitting it as workspace.Terrain with its material and normal, its water unless IgnoreWater, filtered out, a path round a hill); from Luau (workspace.Terrain found by name and class, every Fill, Region3, ReplaceMaterial, Read/WriteVoxels, material colours, water, cells, Clouds in it, five wrong values refused); drawn; painted with a brush in Studio (a stroke one undo step, the preview, a join tool putting it down); the Hills and Lake template (a player lands on it); the README's island as written; a host's terrain and a script's edits in a joined player's game |
 | `ForceSelfTest.swift` | AlignPosition, VectorForce and NoCollisionConstraint: a Force of the block's weight holding it up (none, it falls; twice, it rises), RelativeTo Attachment0 turning with the part, off the middle turning it unless ApplyAtCenterOfMass; pulled to Attachment1 and held against gravity, not with too little MaxForce, no faster than MaxVelocity, at once with RigidityEnabled and slower at Responsiveness 5, OneAttachment to Position, following a moving target; falling through a shelf it mustn't collide with and resting on it when disabled; Studio (the Align Position and No Collision tools, Add VectorForce's hover, undo, saved with MaxVelocity's no-limit, a hinge saving as before); from Luau (all three, their enums, five wrong values refused, math.huge); the README's lift as written; a host's AlignPosition lifting a crate in a joined player's game |
+| `AnimateSelfTest.swift` | Animate: the default core script loading the built-in animations as tracks (idle standing still, Walk swinging the legs, a jump's arms up); a place's own Animate replacing it (an empty or disabled one leaving the character still, a copy with its own walk playing it, Edit a Copy walking as the default does); a built-in track a script loads (Core, looped), plays at Action priority over the rest and stops, firing Ended once faded; Humanoid.Climbing and Swimming; a joined player seeing the host walk with the place's own walk |
 | `ToolboxSelfTest.swift` | The Toolbox: each of its eight models going in as a Model in front of Studio's camera, standing on the Platform, selected, one step to undo; the car, boat, door and windmill bringing their scripts; a picture of each, drawn by one renderer; the boat floating high on a pond, driving forward and turning right at about TurnSpeed; the door shut in its frame, swinging open when clicked and shut again; the windmill's sails turning at 1.2 rad/s in Run mode; the campfire's fire, smoke and shadowing light, the lamp's light, the tree, the rig's Humanoid; a joined player's click opening the host's door, which they see open |
 | `CarSelfTest.swift` | Cars: Insert › Car's Model (a body, a VehicleSeat, four wheels, two knuckles; motors, servos, axles, welds and no-collisions; its Drive script; on the ground where it was put), a second car keeping its parts' names, one undo step each, a loose part still renamed; driving with the real ControlScript (W to MaxSpeed with the driver riding along, the speedometer, stopping when let go, S backwards, D and A turning, Space getting out and the controls going back to 0); VehicleSeat from Luau (its class, properties and defaults, whole-number Throttle, wrong values refused, a Part having no Throttle, a script driving a car nobody's in, in Run mode); saving (and a Seat from before); the README's circling car as written; a joined player driving the host's car (their keys reaching the host's script, the car going and them riding in it, stopping when they get out) |
 | `FloatSelfTest.swift` | Floating: in a water part, plastic about 0.7 under and still, wood about 0.35 under, metal on the bottom, staying where it fell; a welded wood-and-metal raft floating on their weight together; a plank dropped on its side settling flat; a crate sent skimming slowed by the water; nothing afloat on dry land; a crate and a log in the Terrain's water; a script turning a crate to metal (sinks) and to wood (back up); Adventure Island's driftwood and beach ball afloat on the lake; a host's crate floating in its pond in a joined player's game |
@@ -246,7 +247,7 @@ Sources/StudioKit/
   Play/PlayController+Multiplayer.swift  other players: drawn, named, walked into, in the physics
   Play/Humanoid.swift            Humanoid state, state machine and events — no physics
   Play/PlayerHost.swift          every player./humanoid./root./body./input. host call
-  Play/CoreScripts.swift         the default ControlScript, Health, ChatScript and BackpackScript, in Luau
+  Play/CoreScripts.swift         the default ControlScript, Health, ChatScript, BackpackScript and Animate, in Luau
   Play/PlayController+Tools.swift  Tools in play: StarterPack copies, Backpack, hand, clicks,
                                  dropping and picking up; `backpack.*` host calls
   Model/SceneModel+Tools.swift   where each Tool is (ToolPlace) and parking its parts
@@ -1507,6 +1508,25 @@ Roughly ordered by how much time they will cost you.
     - A body skips putting its parts while nothing moved (`lastPut`), since each change
       is sent to every joined player.
 
+128. **The character animates only because its Animate script plays tracks.**
+    `currentJoints` is the `AnimationPlayer`'s tracks over a still body; the Animate core
+    script (CoreScripts, StarterCharacterScripts) plays built-in ones on the Humanoid's
+    StateChanged and Running, as Roblox's does. So:
+    - A built-in animation (`BuiltinAnimation`, "builtin://Walk"…) is a track with a
+      fixed id, looped, Core priority and no keys; `AnimationPlayer.apply` draws its
+      whole pose from `PlayController.builtinPose`, which is `AvatarAnimator.target` for
+      its state, live (the walk's stride follows the speed). `animationSource` finds a
+      track's animation among the scene's and the built-in ones — use it, not
+      `model.animation(id:)`, wherever a track is looked up.
+    - `AvatarAnimator` still runs every frame: it keeps the time and stride the built-in
+      poses use, and it's the dead body's pose.
+    - A held tool's arm goes on after the Core tracks and under the rest (`afterCore`),
+      so the walk doesn't swing it and a game's own tracks still can.
+    - A place's own "Animate" in StarterCharacterScripts replaces the core one, enabled
+      or not (as a ControlScript does). State changes reach it a frame later.
+    - Running, Climbing and Swimming fire with the speed when it changes (`reportSpeed`).
+      A track fires Ended when it's stopped and faded to nothing.
+
 127. **The navigation grid swims, climbs and leaps; the characters it's for do too.**
     - **Water** isn't solid, so it's no span: `update` keeps the water parts, and
       `terrainWater` is the Terrain's. `standing` looks for water just above each floor:
@@ -1952,8 +1972,9 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   don't light the world (no sky-coloured ambient from the skybox); Wren has no
   Lighting API yet.
 - **Animations are R6 rotations with a root offset.** No IK, no per-limb translation,
-  no animation events besides markers, no `Animate` script replacing the built-in
-  walk/jump (a higher-priority looped track can override them), and no Wren API.
+  no Wren API. The built-in animations are procedural (`builtin://…`), not keyframes a
+  script can read or edit; the default Animate has no emotes (/e dance) or tool poses
+  beyond holding one out. NPC Rigs swing their limbs by themselves (no Animate).
 - **Split view is two panes only:** the world and the one tab in front, side by side
   (⌘\); there is no tiling of several tabs.
 - **Script and shader text edits are not in the scene undo stack** — the text view owns

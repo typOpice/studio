@@ -329,7 +329,8 @@ enum AnimationSelfTest {
               "\(session.currentJoints.rightShoulder)")
         check("markers reach scripts both ways", lines.contains("reached Hello") && lines.contains("marker Hello"),
               "\(lines)")
-        check("IsPlaying and GetPlayingAnimationTracks see it", lines.contains("playing true 1"), "\(lines)")
+        // Two playing: the wave and the Animate script's Idle, as Roblox lists them.
+        check("IsPlaying and GetPlayingAnimationTracks see it", lines.contains("playing true 2"), "\(lines)")
         check("Instance.new(\"Animation\") with an AnimationId works", lines.contains("by id 1.6 Animation"), "\(lines)")
         check("LoadAnimation explains a missing Animation",
               lines.contains { $0.hasPrefix("false") && $0.contains("requires an Animation object") }, "\(lines)")

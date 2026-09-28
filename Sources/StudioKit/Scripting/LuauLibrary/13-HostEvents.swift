@@ -35,7 +35,7 @@ local function dispatch(event)
 		return
 	end
 	if kind == "Track" then
-		-- ["Track", handle, "Stopped" | "DidLoop" | "Marker", markerName?]
+		-- ["Track", handle, "Stopped" | "DidLoop" | "Ended" | "Marker", markerName?]
 		local record = tracks[event[2]]
 		if record == nil then
 			return

@@ -46,7 +46,16 @@ enum CoreScripts {
         return script
     }()
 
-    static let all: [ScriptObject] = [controlScript, healthScript, chatScript, backpackScript]
+    static let animateScript: ScriptObject = {
+        var script = ScriptObject.blank(language: .luau)
+        script.id = UUID(uuidString: "00000000-0000-0000-0000-00000000C005")!
+        script.name = "Animate"
+        script.host = .starterCharacter
+        script.source = animateScriptSource
+        return script
+    }()
+
+    static let all: [ScriptObject] = [controlScript, healthScript, chatScript, backpackScript, animateScript]
 
     static func script(id: UUID) -> ScriptObject? { all.first { $0.id == id } }
 
@@ -56,6 +65,77 @@ enum CoreScripts {
             !scripts.contains { $0.host == core.host && $0.name == core.name }
         }
     }
+
+    static let animateScriptSource = """
+    -- Animate: the character's animations, played as its Humanoid's state changes.
+    --
+    -- The built-in animations are tracks like any other: "builtin://Walk" and the rest,
+    -- at Core priority, under anything else a game plays. To change them, select this in
+    -- StarterPlayer and choose "Edit a Copy", then load your own instead — an animation
+    -- made in the Animation Editor, by its name. A LocalScript called Animate in
+    -- StarterCharacterScripts replaces this one; a disabled one leaves the character
+    -- standing still.
+
+    local character = script.Parent
+    local humanoid = character:WaitForChild("Humanoid")
+
+    local function load(id)
+    	local animation = Instance.new("Animation")
+    	animation.AnimationId = id
+    	return humanoid:LoadAnimation(animation)
+    end
+
+    local tracks = {
+    	Idle = load("builtin://Idle"),
+    	Walk = load("builtin://Walk"),
+    	Jump = load("builtin://Jump"),
+    	Fall = load("builtin://Fall"),
+    	Climb = load("builtin://Climb"),
+    	Swim = load("builtin://Swim"),
+    	Sit = load("builtin://Sit"),
+    	Fly = load("builtin://Fly"),
+    }
+    local FADE = 0.15
+
+    local playing = nil
+    local function play(name)
+    	local track = tracks[name]
+    	if track == playing then
+    		return
+    	end
+    	if playing ~= nil then
+    		playing:Stop(FADE)
+    	end
+    	playing = track
+    	track:Play(FADE)
+    end
+
+    local speed = 0
+    local byState = {
+    	[Enum.HumanoidStateType.Jumping] = "Jump",
+    	[Enum.HumanoidStateType.Freefall] = "Fall",
+    	[Enum.HumanoidStateType.Climbing] = "Climb",
+    	[Enum.HumanoidStateType.Swimming] = "Swim",
+    	[Enum.HumanoidStateType.Seated] = "Sit",
+    	[Enum.HumanoidStateType.Flying] = "Fly",
+    }
+    local function pick(state)
+    	if byState[state] then
+    		play(byState[state])
+    	elseif state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.Landed then
+    		play(if speed > 0.3 then "Walk" else "Idle")
+    	end
+    end
+
+    humanoid.StateChanged:Connect(function(_, state)
+    	pick(state)
+    end)
+    humanoid.Running:Connect(function(newSpeed)
+    	speed = newSpeed
+    	pick(humanoid:GetState())
+    end)
+    pick(humanoid:GetState())
+    """
 
     static let controlScriptSource = """
     -- ControlScript: the default character controls.

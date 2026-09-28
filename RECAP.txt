@@ -518,6 +518,13 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Also fixed: pressing Space at the water's surface now leaps out, so players and NPCs can climb onto a bank as high as the water; an NPC's Jump is no longer lost if it can't jump that very frame; and paths could not go near the Terrain's lakes and steep slopes.
    Tested alone and with a host and a joined player (the joined player sees the host's NPC cross a pond, jump a gap and climb a truss to the goal).
 
+53. Animate scripts: replacing the built-in walk and jump, 2026-09-28.
+   Characters now animate the Roblox way: a LocalScript called Animate (in StarterPlayer > StarterCharacterScripts) plays the walk, jump, fall, climb, swim and sit animations as the character's state changes. They look the same as before.
+   To change them, select Animate in StarterPlayer, choose Edit a Copy, and load your own animation from the Animation Editor instead, for example a walk of your own. Every character then walks your way, and other players see it. A disabled Animate leaves characters standing still.
+   Scripts can also play the built-in animations themselves ("builtin://Walk" and so on), and there are new events: Humanoid.Climbing, Humanoid.Swimming, and AnimationTrack.Ended.
+   Tested alone and with a host and a joined player (the joined player sees the host walk with the place's own walk).
+   New file: AnimateSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

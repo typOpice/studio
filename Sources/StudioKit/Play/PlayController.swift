@@ -338,14 +338,25 @@ final class PlayController: ViewportSource, PlayerBridge {
         }
     }
 
-    /// The built-in animations with any playing custom ones on top. A dead body is
-    /// left to fall as it does.
+    /// Whatever tracks are playing — the Animate script's built-in ones, a game's own on
+    /// top — over a body standing still. A dead body is left to fall as it does.
     var currentJoints: AvatarJoints {
         guard !humanoid.isDead else { return animator.joints }
-        var joints = animator.joints
-        // Holding a tool, the right arm is out in front, as in Roblox.
-        if isHoldingTool { joints.rightShoulder = Vec3(.pi / 2, 0, 0) }
-        return animationPlayer.apply(to: joints, animation: model.animation(id:))
+        return animationPlayer.apply(to: AvatarJoints(), animation: animationSource, builtin: builtinPose) { joints in
+            // Holding a tool, the right arm is out in front, as in Roblox (over the walk).
+            if self.isHoldingTool { joints.rightShoulder = Vec3(.pi / 2, 0, 0) }
+        }
+    }
+
+    /// A track's animation: one made in the Animation Editor, or a built-in one.
+    func animationSource(_ id: UUID) -> AnimationObject? {
+        model.animation(id: id) ?? BuiltinAnimation.withID(id)?.object
+    }
+
+    /// A built-in animation's pose now: the walk striding at the character's speed.
+    func builtinPose(_ kind: BuiltinAnimation) -> AvatarJoints {
+        animator.target(state: kind.state, speed: kind == .idle ? 0 : animator.smoothedSpeed,
+                        verticalVelocity: character.velocity.y)
     }
 
     /// `["Track", handle, "Stopped" | "DidLoop" | "Marker", markerName?]`
@@ -354,6 +365,7 @@ final class PlayController: ViewportSource, PlayerBridge {
         switch event {
         case .stopped: values.append(.string("Stopped"))
         case .didLoop: values.append(.string("DidLoop"))
+        case .ended: values.append(.string("Ended"))
         case .marker(let name): values += [.string("Marker"), .string(name)]
         }
         pendingEvents.append(.list(values))
@@ -429,7 +441,7 @@ final class PlayController: ViewportSource, PlayerBridge {
         }
         animator.update(dt: dt, state: humanoid.state, horizontalSpeed: character.horizontalSpeed,
                         verticalVelocity: character.velocity.y)
-        for (handle, event) in animationPlayer.step(dt: dt, animation: model.animation(id:)) {
+        for (handle, event) in animationPlayer.step(dt: dt, animation: animationSource) {
             queueTrackEvent(handle, event)
         }
         positionHeldTools()
@@ -608,11 +620,15 @@ final class PlayController: ViewportSource, PlayerBridge {
         guard !humanoid.isDead, humanoid.state != .flying else { return }
         if isSeated { return }
         if character.swimming {
+            if humanoid.state != .swimming { lastReportedRunSpeed = -1 }
             humanoid.enter(.swimming)
+            reportSpeed(character.horizontalSpeed) { .swimming(speed: $0) }
             return
         }
         if character.climbing {
+            if humanoid.state != .climbing { lastReportedRunSpeed = -1 }
             humanoid.enter(.climbing)
+            reportSpeed(abs(character.velocity.y)) { .climbing(speed: $0) }
             return
         }
         // Out of the water, or off the truss.
@@ -629,14 +645,19 @@ final class PlayController: ViewportSource, PlayerBridge {
             default:
                 break
             }
-            if abs(speed - lastReportedRunSpeed) > 0.5 || (speed == 0 && lastReportedRunSpeed != 0) {
-                lastReportedRunSpeed = speed
-                humanoid.record(.running(speed: speed))
-            }
+            reportSpeed(speed) { .running(speed: $0) }
         } else if humanoid.state == .running || humanoid.state == .landed
                     || (humanoid.state == .jumping && character.velocity.y <= 0) {
             humanoid.enter(.freefall)
         }
+    }
+
+    /// Running, Climbing and Swimming fire with the speed when it changes (by half a
+    /// stud a second), and when it comes to a stop.
+    private func reportSpeed(_ speed: Float, _ event: (Float) -> HumanoidEvent) {
+        guard abs(speed - lastReportedRunSpeed) > 0.5 || (speed == 0 && lastReportedRunSpeed != 0) else { return }
+        lastReportedRunSpeed = speed
+        humanoid.record(event(speed))
     }
 
     private func handleLifecycle(dt: Float) {
@@ -694,6 +715,8 @@ final class PlayController: ViewportSource, PlayerBridge {
         case .jumping: return [.string("Jumping"), .bool(true)]
         case .freeFalling: return [.string("FreeFalling"), .bool(true)]
         case .running(let speed): return [.string("Running"), .number(Double(speed))]
+        case .climbing(let speed): return [.string("Climbing"), .number(Double(speed))]
+        case .swimming(let speed): return [.string("Swimming"), .number(Double(speed))]
         case .died: return [.string("Died")]
         case .healthChanged(let health): return [.string("HealthChanged"), .number(Double(health))]
         case .moveToFinished(let reached): return [.string("MoveToFinished"), .bool(reached)]

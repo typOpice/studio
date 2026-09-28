@@ -26,6 +26,8 @@ enum AnimationTrackEvent: Equatable {
     case stopped
     case didLoop
     case marker(String)
+    /// Stopped and faded all the way out.
+    case ended
 }
 
 /// Plays custom animations over the built-in ones. Tracks are layered by priority
@@ -103,7 +105,11 @@ struct AnimationPlayer {
         var events: [(Int, AnimationTrackEvent)] = []
         for handle in tracks.keys.sorted() {
             guard var track = tracks[handle] else { continue }
-            // Fade.
+            // Fade: a stopped track that fades to nothing has ended.
+            let showing = track.weight > 0
+            defer {
+                if showing, !track.isPlaying, track.weight <= 0 { events.append((handle, .ended)) }
+            }
             if track.weight != track.targetWeight {
                 let step = track.fadeRate.isFinite ? track.fadeRate * dt : .infinity
                 track.weight = track.weight < track.targetWeight
@@ -161,19 +167,33 @@ struct AnimationPlayer {
         return events
     }
 
-    /// Layers every visible track over `base`.
-    func apply(to base: AvatarJoints, animation: (UUID) -> AnimationObject?) -> AvatarJoints {
+    /// Layers every visible track over `base`: a built-in one's whole pose (`builtin`), a
+    /// custom one's keyed joints. `afterCore` changes the pose once the Core tracks are
+    /// down (a held tool's arm), under everything else.
+    func apply(to base: AvatarJoints, animation: (UUID) -> AnimationObject?,
+               builtin: (BuiltinAnimation) -> AvatarJoints = { _ in AvatarJoints() },
+               afterCore: ((inout AvatarJoints) -> Void)? = nil) -> AvatarJoints {
         var joints = base
         let visible = tracks.values.filter { $0.weight > 0 }
             .sorted { ($0.priority, $0.order) < ($1.priority, $1.order) }
+        var coreDone = false
         for track in visible {
-            guard let source = animation(track.animationID) else { continue }
+            if !coreDone, track.priority > .core {
+                afterCore?(&joints)
+                coreDone = true
+            }
             let weight = min(track.weight, 1)
+            if let kind = BuiltinAnimation.withID(track.animationID) {
+                joints = AvatarJoints.mix(joints, builtin(kind), weight)
+                continue
+            }
+            guard let source = animation(track.animationID) else { continue }
             let time = min(max(track.time.isFinite ? track.time : source.length, 0), source.length)
             for (joint, pose) in source.sample(at: time) {
                 Self.blend(&joints, joint, pose, weight)
             }
         }
+        if !coreDone { afterCore?(&joints) }
         return joints
     }
 

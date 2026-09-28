@@ -207,3 +207,50 @@ struct AvatarAnimator {
         return pose
     }
 }
+
+/// The built-in animations as tracks a script can load ("builtin://Walk" and the rest):
+/// the poses `AvatarAnimator` makes for each state, live — the walk's stride follows the
+/// character's speed. The default Animate core script plays them as the Humanoid's
+/// state changes; a game's own Animate can play them, or its own, instead.
+enum BuiltinAnimation: String, CaseIterable {
+    case idle = "Idle", walk = "Walk", jump = "Jump", fall = "Fall", climb = "Climb", swim = "Swim"
+    case sit = "Sit", fly = "Fly"
+
+    var reference: String { "builtin://" + rawValue }
+
+    /// A stable id, so a track names it as it names a custom animation.
+    var id: UUID {
+        let index = Self.allCases.firstIndex(of: self)! + 1
+        return UUID(uuidString: String(format: "00000000-0000-0000-0000-0000000A%04X", index))!
+    }
+
+    var state: HumanoidStateType {
+        switch self {
+        case .idle, .walk: return .running
+        case .jump: return .jumping
+        case .fall: return .freefall
+        case .climb: return .climbing
+        case .swim: return .swimming
+        case .sit: return .seated
+        case .fly: return .flying
+        }
+    }
+
+    /// As a track sees it: looped, Core priority (under everything a game plays), no keys.
+    var object: AnimationObject {
+        var animation = AnimationObject(name: rawValue)
+        animation.id = id
+        animation.length = 1
+        animation.looped = true
+        animation.priority = .core
+        return animation
+    }
+
+    static func named(_ reference: String) -> BuiltinAnimation? {
+        guard reference.lowercased().hasPrefix("builtin://") else { return nil }
+        let name = reference.dropFirst("builtin://".count).lowercased()
+        return allCases.first { $0.rawValue.lowercased() == name }
+    }
+
+    static func withID(_ id: UUID) -> BuiltinAnimation? { allCases.first { $0.id == id } }
+}

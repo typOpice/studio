@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2977 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2993 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -468,12 +468,24 @@ end)
 
 An AnimationTrack has `:Play(fadeTime, weight, speed)`, `:Stop(fadeTime)`,
 `:AdjustSpeed`, `:AdjustWeight`, `:GetMarkerReachedSignal(name)`, `IsPlaying`,
-`Length`, `Looped`, `Speed`, `TimePosition`, `Priority`, and `Stopped`, `DidLoop` and
-`KeyframeReached`. `humanoid:LoadAnimation` works too, as does
-`Instance.new("Animation")` with `AnimationId` set to an animation's name. A track
-moves only the joints its animation keys, so a wave plays over the walk; where two
-tracks key the same joint, the higher **priority** wins (the built-in walk, jump and
+`Length`, `Looped`, `Speed`, `TimePosition`, `Priority`, and `Stopped`, `DidLoop`,
+`KeyframeReached` and `Ended` (once it has faded out). `humanoid:LoadAnimation` works
+too, as does `Instance.new("Animation")` with `AnimationId` set to an animation's name.
+A track moves only the joints its animation keys, so a wave plays over the walk; where
+two tracks key the same joint, the higher **priority** wins (the built-in walk, jump and
 fall are below all of them). Tracks belong to one character and stop at respawn.
+
+**Replacing the walk.** The character's own animations come from the **Animate** script,
+a LocalScript every character gets (in StarterPlayer › StarterCharacterScripts, like
+Roblox's). It plays the built-in animations — `builtin://Idle`, `builtin://Walk`,
+`builtin://Jump`, `builtin://Fall`, `builtin://Climb`, `builtin://Swim`, `builtin://Sit`
+and `builtin://Fly`, tracks like any other at Core priority — as the Humanoid's
+`StateChanged` and `Running` fire. Select it in StarterPlayer and choose **Edit a Copy**,
+then load your own animation instead of one of them — `Walk = load("Stomp")` for a walk
+you made — and every character walks your way (and other players see it). An Animate
+of your own replaces the default, whatever it does; a disabled one leaves the character
+standing still. Any script can load the built-in animations too, and the Humanoid also
+has `Climbing` and `Swimming` (with the speed) for them.
 
 ### Touching the world
 

@@ -24,6 +24,8 @@ enum HumanoidEvent: Equatable {
     case jumping
     case freeFalling
     case running(speed: Float)
+    case climbing(speed: Float)
+    case swimming(speed: Float)
     case died
     case healthChanged(Float)
     case moveToFinished(reached: Bool)

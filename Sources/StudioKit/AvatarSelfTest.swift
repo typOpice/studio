@@ -174,7 +174,8 @@ enum AvatarSelfTest {
         session.key("Space", pressed: false)
         check("in play, a jump raises the avatar's arms", session.avatars[0].joints.leftShoulder.x > 1.5,
               "\(session.avatars[0].joints.leftShoulder) \(session.humanoid.state)")
-        check("the renderer gets the animator's pose", session.avatars[0].joints == session.animator.joints)
+        // The pose is the Animate script's tracks (built-in ones), not the animator's own.
+        check("the renderer gets the character's pose", session.avatars[0].joints == session.currentJoints)
         session.stop()
     }
 }

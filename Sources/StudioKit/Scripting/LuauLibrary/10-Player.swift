@@ -125,7 +125,7 @@ end
 
 local humanoidSignalNames = {
 	"Died", "HealthChanged", "StateChanged", "Jumping", "FreeFalling", "Running", "MoveToFinished", "Touched",
-	"Seated",
+	"Seated", "Climbing", "Swimming",
 }
 
 local bodyPartNames = { "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" }

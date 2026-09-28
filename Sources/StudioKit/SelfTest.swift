@@ -36,7 +36,7 @@ enum SelfTest {
                 "Particles": ParticleSelfTest.run,
                 "Ribbons": RibbonSelfTest.run,
                 "Sky": SkySelfTest.run,
-                "Forces": ForceSelfTest.run, "Motors": MotorSelfTest.run, "Floating": FloatSelfTest.run, "Cars": CarSelfTest.run, "Toolbox": ToolboxSelfTest.run,
+                "Forces": ForceSelfTest.run, "Motors": MotorSelfTest.run, "Floating": FloatSelfTest.run, "Cars": CarSelfTest.run, "Toolbox": ToolboxSelfTest.run, "Animate": AnimateSelfTest.run,
                 "Terrain": TerrainSelfTest.run,
             ]
             guard let suite = suites[CommandLine.arguments[flag + 1]] else {
@@ -115,6 +115,7 @@ enum SelfTest {
         FloatSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         CarSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         ToolboxSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        AnimateSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         TerrainSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LANSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
 

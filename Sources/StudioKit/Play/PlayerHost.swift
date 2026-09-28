@@ -377,7 +377,7 @@ extension PlayController {
             // By id (from the Animations service) or by name (an assigned AnimationId).
             guard current, arguments.count >= 2, let key = arguments[1].asString,
                   let animation = model.animations.first(where: { $0.id.uuidString == key })
-                    ?? model.animation(named: key) else { return .nothing }
+                    ?? model.animation(named: key) ?? BuiltinAnimation.named(key)?.object else { return .nothing }
             return .number(Double(animationPlayer.load(animation, generation: characterGeneration)))
 
         case "track.play":
@@ -396,7 +396,7 @@ extension PlayController {
         case "track.get":
             guard let handle = trackHandle(arguments), let track = animationPlayer.track(handle),
                   arguments.count >= 2 else { return .nothing }
-            let animation = model.animation(id: track.animationID)
+            let animation = animationSource(track.animationID)
             switch (arguments[1].asString ?? "").lowercased() {
             case "isplaying": return .bool(track.isPlaying)
             case "length": return scalar(animation?.length ?? 0)
@@ -421,7 +421,7 @@ extension PlayController {
                 if let speed = value.asFloat { animationPlayer.update(handle) { $0.speed = speed } }
             case "timeposition":
                 if let time = value.asFloat, let track = animationPlayer.track(handle),
-                   let length = model.animation(id: track.animationID)?.length {
+                   let length = animationSource(track.animationID)?.length {
                     animationPlayer.update(handle) { $0.time = min(max(time, 0), length) }
                 }
             case "priority":
