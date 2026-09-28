@@ -681,7 +681,7 @@ void studio_jolt_drive_motor(StudioJoltWorld *world, uint32_t id, const float *p
 }
 
 float studio_jolt_float(StudioJoltWorld *world, uint32_t id, float surface, float buoyancy,
-                        float linearDrag, float angularDrag, float settle, float slow, float dt) {
+                        float linearDrag, float angularDrag, float settle, float slow, float spin, float dt) {
     float share = 0;
     {
         BodyLockWrite lock(world->system.GetBodyLockInterface(), BodyID(id));
@@ -697,6 +697,7 @@ float studio_jolt_float(StudioJoltWorld *world, uint32_t id, float surface, floa
         Vec3 v = body.GetLinearVelocity();
         float up = std::max(0.0f, 1 - settle * share * dt), across = std::max(0.0f, 1 - slow * share * dt);
         body.SetLinearVelocity(Vec3(v.GetX() * across, v.GetY() * up, v.GetZ() * across));
+        body.SetAngularVelocity(body.GetAngularVelocity() * std::max(0.0f, 1 - spin * share * dt));
     }
     world->bodies().ActivateBody(BodyID(id));
     return share;

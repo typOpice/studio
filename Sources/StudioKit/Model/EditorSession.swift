@@ -5,7 +5,7 @@ import AppKit
 /// What the bottom panel shows: the console, or the Animation Editor's timeline.
 /// Scripts and shaders are not here — they open in tabs beside the world.
 enum DockTab: String, CaseIterable, Identifiable {
-    case output, animation, debugger, terrain
+    case output, animation, debugger, terrain, toolbox
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum DockTab: String, CaseIterable, Identifiable {
         case .animation: return "Animation"
         case .debugger: return "Debugger"
         case .terrain: return "Terrain"
+        case .toolbox: return "Toolbox"
         }
     }
 
@@ -24,6 +25,7 @@ enum DockTab: String, CaseIterable, Identifiable {
         case .animation: return "figure.walk"
         case .debugger: return "ladybug"
         case .terrain: return "mountain.2"
+        case .toolbox: return "shippingbox"
         }
     }
 }

@@ -93,9 +93,9 @@ final class PhysicsWorld {
     private var floating: [(body: UInt32, surface: Float, buoyancy: Float)] = []
     /// Water's density (a part's is PhysicsWorld.density), and how it slows what's in it:
     /// Jolt's drag, and a share of the speed a second (up and down more, so floating
-    /// things settle; sideways less, so boats still go).
+    /// things settle; sideways less, so boats still go) and of the spin.
     static let waterDensity: Float = 1
-    static let waterDrag: (linear: Float, angular: Float, settle: Float, slow: Float) = (0.5, 0.05, 6, 1.5)
+    static let waterDrag: (linear: Float, angular: Float, settle: Float, slow: Float, spin: Float) = (0.5, 0.05, 6, 1.5, 1.5)
     private var accumulator: Float = 0
     private var touchCounts: [[UUID]: Int] = [:]
 
@@ -942,7 +942,7 @@ final class PhysicsWorld {
             applyForces(dt: Self.timeStep)
             for (body, surface, buoyancy) in floating {
                 studio_jolt_float(world, body, surface, buoyancy, Self.waterDrag.linear, Self.waterDrag.angular,
-                                  Self.waterDrag.settle, Self.waterDrag.slow, Self.timeStep)
+                                  Self.waterDrag.settle, Self.waterDrag.slow, Self.waterDrag.spin, Self.timeStep)
             }
             studio_jolt_step(world, Self.timeStep, Self.collisionSteps)
             accumulator -= Self.timeStep

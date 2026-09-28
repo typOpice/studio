@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2942 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2961 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -643,6 +643,26 @@ while true do
 	task.wait(4)
 end
 ```
+
+### The Toolbox
+
+**Home › Toolbox** (or **Insert › Toolbox…**) opens the Toolbox along the bottom:
+ready-made models, each with a picture. Click one and it's put in front of the camera,
+standing on whatever is there, selected; **⌘Z** takes it away again.
+
+| Model | What it is |
+| --- | --- |
+| **Car** | Sit in it and drive (see Cars, below) |
+| **Boat** | Wood, so it floats; drive it from its seat as you would the car. A VectorForce pushes it and a Torque turns it |
+| **Door** | Click it in play to open it, and again to shut it: a Motor6D along its edge swings it |
+| **Windmill** | Its sails keep turning on a Motor6D |
+| **Campfire** | Fire and smoke particles, and a warm light that casts shadows |
+| **Street Lamp** | A lamp on a pole, lighting the way at night |
+| **Tree** | A trunk and leaves |
+| **Rig** | A character with a Humanoid, as Insert › Rig makes |
+
+They're made of the same parts, joints and scripts you'd make yourself: open one in the
+Explorer to see how it works, and change what you like.
 
 ### Cars: VehicleSeat
 

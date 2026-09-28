@@ -505,6 +505,13 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player.
    New files: Model/ToolboxModels.swift, Model/SceneModel+Insert.swift, CarSelfTest.swift.
 
+51. The Toolbox, 2026-09-28.
+   Home > Toolbox opens a Toolbox along the bottom of Studio, like Roblox's, with ready-made models and a picture of each: a car, a boat, a door, a windmill, a campfire, a street lamp, a tree and a rig. Click one and it appears in front of the camera, standing on whatever is there. Cmd-Z takes it away.
+   They work straight away: drive the car and the boat (the boat floats), click the door to open it, and the windmill's sails turn. They're made of ordinary parts, joints and scripts, so you can open them in the Explorer and change them.
+   Also fixed: in Run mode, scripts couldn't read the physics (a part's velocity, a joint's angle); now they can.
+   Tested alone and with a host and a joined player (the joined player clicks the host's door and sees it open).
+   New files: UI/ToolboxView.swift, ToolboxSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

@@ -97,7 +97,7 @@ enum CarSelfTest {
               && model.constraints.isEmpty && model.scripts.isEmpty)
 
         // A loose part still gets a name of its own.
-        var file = ToolboxModel.car.file
+        var file = ToolboxModel.car.file!
         var loose = Part()
         loose.name = "Ground"
         file.state.parts.append(loose)

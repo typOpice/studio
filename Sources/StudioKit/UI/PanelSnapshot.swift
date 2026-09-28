@@ -379,6 +379,12 @@ enum PanelSnapshot {
             if let beam = model.join(.beam, a, b) {
                 model.updateConstraint(id: beam) { $0.look.texture = "builtin://Glow"; $0.look.lightEmission = 1 }
             }
+        case "toolbox":
+            // The Toolbox tab open, its pictures drawn.
+            session.showWorld()
+            ToolboxPictures.shared.loadNow()
+            session.showDock(.toolbox)
+            session.dockHeight = 330
         case "car":
             // Insert › Car, picked, seen from the front-left.
             session.showWorld()

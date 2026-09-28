@@ -48,6 +48,9 @@ final class ScriptRuntime {
     var clock: () -> Double = { 0 }
     /// With no player (Studio's Run mode), where this frame's events come from.
     var eventSource: (() -> [ScriptValue])?
+    /// Run mode's physics (velocities, impulses, joints' angles): the play session's,
+    /// though it has no player.
+    var physicsSource: ((String, [ScriptValue]) -> ScriptValue)?
     /// LogService:GetLogHistory — the play session's lines so far, as [message, type, time].
     var logSource: (() -> [ScriptValue])?
 
@@ -349,6 +352,7 @@ final class ScriptRuntime {
         if PlayerHost.namespaces.contains(namespace) {
             // Run mode has no player but still has events: touches, Sounds ending.
             if player == nil, name == "player.events", let eventSource { return .list(eventSource()) }
+            if player == nil, namespace == "physics", let physicsSource { return physicsSource(name, arguments) }
             return player?.playerInvoke(name, arguments) ?? PlayerHost.withoutPlayer(name, arguments)
         }
         switch namespace {

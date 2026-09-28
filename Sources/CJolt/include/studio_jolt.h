@@ -132,10 +132,10 @@ void studio_jolt_drive_motor(StudioJoltWorld *world, uint32_t joint, const float
 /// Water's lift and drag on a body for the next step: the water's surface is flat at
 /// `surface` (y), and `buoyancy` is the water's density over the body's (above 1 floats).
 /// Besides Jolt's drag (which grows with the square of speed), the water takes
-/// `settle` of the body's up-and-down speed a second and `slow` of its sideways speed,
-/// as much of it as is under. Returns the share of the body under water.
+/// `settle` of the body's up-and-down speed a second, `slow` of its sideways speed and
+/// `spin` of its turning, as much of it as is under. Returns the share under water.
 float studio_jolt_float(StudioJoltWorld *world, uint32_t body, float surface, float buoyancy,
-                        float linearDrag, float angularDrag, float settle, float slow, float dt);
+                        float linearDrag, float angularDrag, float settle, float slow, float spin, float dt);
 /// A dynamic body's inertia (in the world, as it's turned now) times a vector: the
 /// angular impulse that changes its spin by `spin`. Zero for a body that doesn't move.
 void studio_jolt_inertia_times(StudioJoltWorld *world, uint32_t body, const float *spin, float *out);

@@ -142,6 +142,8 @@ final class PlayController: ViewportSource, PlayerBridge {
                 defer { self.pendingEvents.removeAll() }
                 return self.pendingEvents
             }
+            // The physics runs in Run mode too: scripts read it as they would in play.
+            scripts.physicsSource = { [weak self] name, arguments in self?.playerInvoke(name, arguments) ?? .nothing }
         }
     }
 
