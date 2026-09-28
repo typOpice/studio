@@ -537,6 +537,8 @@ final class PlayController: ViewportSource, PlayerBridge {
         guard !worldFromHost else { return }
         physics.gravity = gravity
         physics.groundPlane = character.solidBaseplate
+        // Parts float in the Terrain's water and in water parts, player or not (Run mode).
+        physics.terrainWater = model.terrain.isEmpty ? nil : { [terrain = model.terrain] in terrain.waterSurface(at: $0) }
         physics.sync(partsOutOfHands + model.terrainParts, constraints: model.constraints, attachments: model.attachments)
         // The capsule stands in for a living character; a dead one lies on the ground.
         if humanoid.isDead || !hasPlayer {

@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2897 headless checks covering shader compilation, uniform struct layout, mesh winding,
+2912 headless checks covering shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -521,7 +521,10 @@ touches nothing.
   steps onto it.
 - **Water:** give a part the **Water** material and it's something to swim in, not stand
   on: characters float with their heads out, **Space** swims up, and they walk out onto
-  land. (Parts don't float yet.)
+  land. Unanchored parts float in it by how heavy they are for their size: wood rides
+  high, plastic about two-thirds under, metal sinks; welded together, they float on
+  their weight together. The water slows whatever moves in it, and settles bobbing.
+  Adventure Island's lake has driftwood and a beach ball on it.
 - **Moving platforms and knocks:** a part moved by a script, a tween or physics carries
   whoever stands on it, turning them as it turns; a moving wall pushes them along; a
   crate thrown at them knocks them back, harder the heavier it is.
@@ -1144,7 +1147,7 @@ The Workspace's **Terrain** is ground made of voxels (4-stud cubes), each filled
 material by some amount, so its surfaces are smooth: hills, cliffs, caves and beaches.
 There are 13 materials: Grass, LeafyGrass, Sand, Ground, Mud, Rock, Slate, Basalt,
 Sandstone, Snow, Ice, Asphalt and Water. Characters walk and climb on it, swim in its
-water, and parts land on it. Raycasts and PathfindingService see it. A place with
+water, and parts land on it (and float in its water). Raycasts and PathfindingService see it. A place with
 terrain has no invisible floor at 0, as in Roblox.
 
 **Home › Terrain** (or the dock's Terrain tab) opens the Terrain Editor:

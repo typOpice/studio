@@ -396,6 +396,12 @@ enum AdventureIsland {
             part("PierSteps", Vec3(54.5, 2, 92), Vec3(4, 4, 5), rgb(140, 100, 64), shape: .wedge, material: .wood,
                  rotation: Vec3(0, -90, 0), in: lake)
             part("Islet", Vec3(94, 2.5, 102), Vec3(9, 5, 9), rgb(210, 190, 140), shape: .cylinder, in: lake)
+            // Driftwood and a beach ball, lighter than water, so they float.
+            for (index, spot) in [Vec3(76, 5, 84), Vec3(92, 5, 80)].enumerated() {
+                loosen(part("Driftwood", spot, Vec3(1.4, 7, 1.4), rgb(120, 86, 56), shape: .cylinder, material: .wood,
+                            rotation: Vec3(0, Float(index) * 60 + 20, 90), in: lake))
+            }
+            loosen(part("BeachBall", Vec3(80, 6, 104), Vec3(3, 3, 3), rgb(240, 90, 80), shape: .sphere, in: lake))
             part("PalmTrunk", Vec3(96, 8, 103), Vec3(0.8, 7, 0.8), rgb(140, 100, 64), shape: .cylinder,
                  rotation: Vec3(0, 0, 8), in: lake)
             part("PalmLeaves", Vec3(96.6, 11.6, 103), Vec3(6, 1.2, 6), rgb(60, 160, 70), shape: .sphere, in: lake)

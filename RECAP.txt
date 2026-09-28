@@ -490,6 +490,13 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the joined player sees the host's Motor6D turn a windmill's sail).
    New file: MotorSelfTest.swift.
 
+49. Floating in water, 2026-09-28.
+   Unanchored parts now float in water parts and in the Terrain's water, by how heavy they are for their size, as in Roblox: wood rides high, plastic floats about two-thirds under, metal sinks. Welded parts float on their weight together, so a wooden raft can carry something heavy.
+   Water slows whatever moves through it and settles bobbing.
+   Adventure Island's lake now has driftwood and a beach ball floating on it.
+   Tested alone and with a host and a joined player (the joined player sees a crate the host dropped in a pond floating).
+   New file: FloatSelfTest.swift.
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app

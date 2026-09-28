@@ -52,6 +52,11 @@ extension PlaceBuilding {
         return part.id
     }
 
+    /// A part left to the physics (unanchored).
+    mutating func loosen(_ id: UUID) {
+        if let index = state.parts.firstIndex(where: { $0.id == id }) { state.parts[index].anchored = false }
+    }
+
     /// An attachment on a part, at a point (and axis) in the part's own space.
     @discardableResult
     mutating func attachment(on part: UUID, at local: Vec3, axis: Vec3 = Vec3(1, 0, 0), name: String = "Attachment") -> UUID {

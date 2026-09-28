@@ -680,6 +680,28 @@ void studio_jolt_drive_motor(StudioJoltWorld *world, uint32_t id, const float *p
     world->bodies().ActivateConstraint(found->second.constraint);
 }
 
+float studio_jolt_float(StudioJoltWorld *world, uint32_t id, float surface, float buoyancy,
+                        float linearDrag, float angularDrag, float settle, float slow, float dt) {
+    float share = 0;
+    {
+        BodyLockWrite lock(world->system.GetBodyLockInterface(), BodyID(id));
+        if (!lock.Succeeded() || !lock.GetBody().IsDynamic()) return 0;
+        Body &body = lock.GetBody();
+        float total = 0, submerged = 0;
+        Vec3 centre;
+        body.GetSubmergedVolume(RVec3(0, surface, 0), Vec3::sAxisY(), total, submerged, centre);
+        if (total <= 0 || submerged <= 0) return 0;
+        body.ApplyBuoyancyImpulse(total, submerged, centre, buoyancy, linearDrag, angularDrag, Vec3::sZero(),
+                                  world->system.GetGravity(), dt);
+        share = std::min(submerged / total, 1.0f);
+        Vec3 v = body.GetLinearVelocity();
+        float up = std::max(0.0f, 1 - settle * share * dt), across = std::max(0.0f, 1 - slow * share * dt);
+        body.SetLinearVelocity(Vec3(v.GetX() * across, v.GetY() * up, v.GetZ() * across));
+    }
+    world->bodies().ActivateBody(BodyID(id));
+    return share;
+}
+
 void studio_jolt_inertia_times(StudioJoltWorld *world, uint32_t id, const float *spin, float *out) {
     out[0] = out[1] = out[2] = 0;
     BodyLockRead lock(world->system.GetBodyLockInterface(), BodyID(id));

@@ -24,6 +24,12 @@ final class PhysicsWorld {
         var mass: Float
         /// What it was built from; a different one means rebuild.
         var fingerprint: Int
+        /// How far its parts reach from where the body is, and how much room they take:
+        /// where to look for water under it, and how well it floats.
+        var reach: Float = 0
+        var volume: Float = 0
+        /// All water parts: nothing to float.
+        var isWater = false
     }
 
     /// What scripts and tests read about a part's motion.
@@ -80,6 +86,16 @@ final class PhysicsWorld {
         let target: (body: UInt32?, point: Vec3, frame: simd_quatf)?
     }
     private var recentlyAwake: Set<UInt32> = []
+    /// The Terrain's water: its surface above a point in it, if the point is in any.
+    var terrainWater: ((Vec3) -> Float?)?
+    /// The water parts, as of the last sync, and the bodies in water this frame.
+    private var waterParts: [Part] = []
+    private var floating: [(body: UInt32, surface: Float, buoyancy: Float)] = []
+    /// Water's density (a part's is PhysicsWorld.density), and how it slows what's in it:
+    /// Jolt's drag, and a share of the speed a second (up and down more, so floating
+    /// things settle; sideways less, so boats still go).
+    static let waterDensity: Float = 1
+    static let waterDrag: (linear: Float, angular: Float, settle: Float, slow: Float) = (0.5, 0.05, 6, 1.5)
     private var accumulator: Float = 0
     private var touchCounts: [[UUID]: Int] = [:]
 
@@ -227,6 +243,7 @@ final class PhysicsWorld {
     /// has moved is teleported (with its assembly), and joints follow their attachments.
     func sync(_ parts: [Part], constraints: [SceneConstraint] = [], attachments: [SceneAttachment] = []) {
         let visible = Dictionary(uniqueKeysWithValues: parts.filter(\.inWorld).map { ($0.id, $0) })
+        waterParts = parts.filter { $0.inWorld && $0.material == .water }
 
         // Which parts are welded together: union-find over the enabled welds.
         var leader: [UUID: UUID] = [:]
@@ -364,9 +381,12 @@ final class PhysicsWorld {
                                               mass, friction, restitution, ghost ? 0 : 1)
         guard handle != STUDIO_JOLT_NO_BODY else { return nil }
 
+        let reach = members.map { simd_length(frame.inverse.applying($0.pose).position) + simd_length($0.size) / 2 }.max() ?? 0
+        let volume = members.map { Self.massProperties(of: $0).volume }.reduce(0, +)
         assemblies[handle] = Assembly(handle: handle,
                                       members: members.map { ($0.id, frame.inverse.applying($0.pose)) },
-                                      colliders: built, isStatic: isStatic, mass: mass, fingerprint: fingerprint)
+                                      colliders: built, isStatic: isStatic, mass: mass, fingerprint: fingerprint,
+                                      reach: reach, volume: volume, isWater: members.allSatisfy { $0.material == .water })
         for (part, m) in zip(members, masses) {
             assemblyOf[part.id] = handle
             written[part.id] = part.pose
@@ -750,6 +770,38 @@ final class PhysicsWorld {
         turn(record.body, by: turning)
     }
 
+    // MARK: - Water
+
+    /// The surface of the water a point is in (the Terrain's, or a water part's), if any.
+    func waterSurface(at point: Vec3) -> Float? {
+        var surface: Float?
+        for part in waterParts {
+            let local = part.orientation.inverse.act(point - part.position)
+            let h = part.size * 0.5
+            guard abs(local.x) <= h.x, abs(local.y) <= h.y, abs(local.z) <= h.z else { continue }
+            let top = part.position.y + abs(part.orientation.act(Vec3(0, h.y, 0)).y)
+            surface = max(surface ?? top, top)
+        }
+        if let terrainWater, let top = terrainWater(point) { surface = max(surface ?? top, top) }
+        return surface
+    }
+
+    /// Once a frame: which moving bodies are in water — at their middle, or as low as
+    /// they reach — and how well each floats (water's density over its own).
+    private func findWater() {
+        floating = []
+        guard terrainWater != nil || !waterParts.isEmpty else { return }
+        for handle in recentlyAwake {
+            guard let assembly = assemblies[handle], !assembly.isStatic, !assembly.isWater, assembly.mass > 0 else { continue }
+            let middle = pose(of: handle).position
+            guard let surface = waterSurface(at: middle) ?? waterSurface(at: middle - Vec3(0, assembly.reach, 0)) else { continue }
+            floating.append((handle, surface, Self.waterDensity * assembly.volume / assembly.mass))
+        }
+    }
+
+    /// Bodies in water this frame (for tests).
+    var floatingCount: Int { floating.count }
+
     /// A hinge's angle (radians), a slider's position (studs) or a Motor6D's CurrentAngle
     /// (radians), as simulated.
     func jointValue(_ constraintID: UUID) -> Float? {
@@ -883,10 +935,15 @@ final class PhysicsWorld {
     /// and those that fell out of the world.
     func step(dt: Float) -> (moved: [(UUID, Pose)], fallen: [UUID]) {
         driveMotors(dt: min(max(dt, 0), 0.1))
+        findWater()
         accumulator += min(max(dt, 0), 0.1)
         var steps = 0
         while accumulator >= Self.timeStep && steps < Self.maxSteps {
             applyForces(dt: Self.timeStep)
+            for (body, surface, buoyancy) in floating {
+                studio_jolt_float(world, body, surface, buoyancy, Self.waterDrag.linear, Self.waterDrag.angular,
+                                  Self.waterDrag.settle, Self.waterDrag.slow, Self.timeStep)
+            }
             studio_jolt_step(world, Self.timeStep, Self.collisionSteps)
             accumulator -= Self.timeStep
             steps += 1
