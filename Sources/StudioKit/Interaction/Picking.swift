@@ -4,9 +4,9 @@ enum Picking {
 
     /// Nearest part under the ray, tested against each shape's actual volume in local
     /// space — a MeshPart's exact triangles, whatever it collides as.
-    static func pick(ray: Ray, in parts: [Part]) -> (part: Part, distance: Float)? {
+    static func pick(ray: Ray, in parts: [Part], includeNegative: Bool = false) -> (part: Part, distance: Float)? {
         var best: (Part, Float)?
-        for part in parts where part.inWorld && !part.locked {
+        for part in parts where (part.inWorld || (includeNegative && part.negative && part.visible && !part.parked)) && !part.locked {
             guard let t = intersect(ray: ray, part: part, exact: true) else { continue }
             if best == nil || t < best!.1 { best = (part, t) }
         }
@@ -19,7 +19,7 @@ enum Picking {
         let inverse = part.modelMatrix.inverse
         let local = ray.transformed(by: inverse)
         // The local ray direction is unnormalized, so `t` stays in world-space units.
-        if let mesh = part.mesh, let geometry = MeshLibrary.shared.geometry(for: part) {
+        if let mesh = part.collisionMesh, let geometry = MeshLibrary.shared.geometry(for: part) {
             if exact || mesh.collisionFidelity == .precise {
                 return geometry.triangles.raycast(origin: local.origin, direction: local.direction)
             }

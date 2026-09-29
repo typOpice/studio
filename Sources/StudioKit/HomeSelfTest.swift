@@ -44,8 +44,8 @@ enum HomeSelfTest {
 
     private static func testTemplates(_ check: Checker) {
         print("\nHome: the templates")
-        check("five to start from and three sample games", PlaceTemplate.starters == [.baseplate, .obby, .starter, .terrain, .empty]
-              && PlaceTemplate.samples == [.adventure, .nightfall, .megaObby] && PlaceTemplate.allCases.count == 8)
+        check("five to start from and four sample games", PlaceTemplate.starters == [.baseplate, .obby, .starter, .terrain, .empty]
+              && PlaceTemplate.samples == [.adventure, .nightfall, .megaObby, .racing] && PlaceTemplate.allCases.count == 9)
         check("the sample games say what's in them", PlaceTemplate.samples.allSatisfy { $0.tags.count >= 4 })
         check("each has a title, a line about it and a symbol", PlaceTemplate.allCases.allSatisfy {
             !$0.title.isEmpty && !$0.summary.isEmpty && NSImage(systemSymbolName: $0.symbol, accessibilityDescription: nil) != nil

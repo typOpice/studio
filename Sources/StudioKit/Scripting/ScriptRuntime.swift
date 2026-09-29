@@ -17,6 +17,9 @@ import simd
 /// served on import; `Runtime.onUpdate` callbacks run each frame, and an error in
 /// one stops Wren's updates. Wren has no watchdog.
 final class ScriptRuntime {
+    var isViewportHost = false
+    /// Nodes entering Workspace start attached scripts at the next frame boundary.
+    var pendingWorldScriptStarts: Set<UUID> = []
     private var interpreter: LuauInterpreter?
     /// What the Luau VM holds, in bytes (`--soak` watches it).
     var luauMemory: Int { interpreter?.memoryUsed ?? 0 }
@@ -86,8 +89,9 @@ final class ScriptRuntime {
     var statsSource: (() -> ScriptValue)?
     /// The play session's NPCs, for `npc.*` (ScriptRuntime+NPC).
     var npcSource: (() -> NPCSystem?)?
-    /// ParticleEmitters scripts have made (or cloned, or taken out of a part) and not yet
-    /// put in one.
+    /// Lights made or unparented by scripts, until they enter a part.
+    var looseLights: [UUID: PointLight] = [:]
+    /// ParticleEmitters scripts have made, cloned or unparented.
     var looseEmitters: [UUID: ParticleEmitter] = [:]
     /// Skies, Atmospheres and Clouds scripts have made (or taken out of Lighting) and not
     /// yet put there.
@@ -307,6 +311,8 @@ final class ScriptRuntime {
     }
 
     func stop() {
+        looseLights.removeAll()
+        pendingWorldScriptStarts.removeAll()
         running = false
         interpreter = nil
         wren = nil
@@ -314,6 +320,7 @@ final class ScriptRuntime {
 
     func update(dt: Double) {
         guard running else { return }
+        startPendingWorldScripts()
         if let vm = interpreter, !vm.callGlobal("__studio_tick", argument: dt) {
             luauFailed = true
             console.error(vm.lastError)
@@ -346,6 +353,11 @@ final class ScriptRuntime {
     /// the part of its name before the dot — `part.get` to `partsCall` — each in its own
     /// `ScriptRuntime+….swift` file. The player's own namespaces go to the play session.
     func invoke(_ name: String, _ arguments: [ScriptValue]) -> ScriptValue {
+        if name == "gui.scoped", arguments.count >= 2, let call = arguments[1].asString {
+            let body = { self.invoke(call, Array(arguments.dropFirst(2))) }
+            return (player as? PlayController)?.withGuiInvocation(local: arguments[0].asBool == true, body) ?? body()
+        }
+        if let routed = viewportRoute(name, arguments) { return routed }
         let namespace = name.split(separator: ".", maxSplits: 1).first.map(String.init) ?? name
         // Everything about the player and its character is answered by the play
         // session (PlayerHost.swift); with no session there is no character.

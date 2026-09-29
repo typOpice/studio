@@ -43,8 +43,8 @@ struct GuiPreviewGeometry: Equatable {
     let origin: CGPoint
     let scale: CGFloat
 
-    init(view: CGSize, device: GuiDevice) {
-        guard let size = device.size, view.width > 2 * Self.margin, view.height > 2 * Self.margin else {
+    init(view: CGSize, device: GuiDevice, canvas: CGSize? = nil) {
+        guard let size = canvas ?? device.size, view.width > 2 * Self.margin, view.height > 2 * Self.margin else {
             screen = view
             origin = .zero
             scale = 1
@@ -142,12 +142,26 @@ final class GuiEditController: ObservableObject {
 
     // MARK: - What is where
 
-    var screen: CGSize { store.lastScreen }
+    var surfaceRoot: Int? {
+        guard let id = model.selectedGui, let root = model.screenGui(containing: id), root.kind == .surfaceGui else { return nil }
+        return copies[root.id]
+    }
+
+    var surfaceSize: CGSize? {
+        guard let id = surfaceRoot, let object = store.object(id) else { return nil }
+        if let part = store.surfacePart(object, in: model) { return SurfaceFace(part: part, face: object.face).canvas(object) }
+        return CGSize(width: CGFloat(object.surfaceCanvasSize.x), height: CGFloat(object.surfaceCanvasSize.y))
+    }
+
+    var screen: CGSize { surfaceSize ?? store.lastScreen }
 
     var selectedTemplate: StarterGuiObject? { model.selectedGui.flatMap(model.guiObject(id:)) }
     var selectedCopy: Int? { model.selectedGui.flatMap { copies[$0] } }
 
-    func placed() -> [GuiStore.Placed] { store.layout(in: screen) }
+    func placed() -> [GuiStore.Placed] {
+        if let root = surfaceRoot { return store.layout(root: root, in: screen) }
+        return store.layout(in: screen)
+    }
 
     /// What shows of an object: its frame, less what a clipping ancestor cuts off.
     static func visible(_ item: GuiStore.Placed) -> CGRect {

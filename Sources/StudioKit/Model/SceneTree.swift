@@ -298,7 +298,12 @@ extension SceneModel {
     func removeSubtrees(_ ids: [UUID]) {
         var doomed = Set(ids)
         for id in ids { doomed.formUnion(descendants(of: id).map(\.id)) }
+        let guis = Set(starterGui.filter { $0.worldParent.map(doomed.contains) ?? false }.flatMap { guiSubtree($0.id) })
+        starterGui.removeAll { guis.contains($0.id) }
+        scripts.removeAll { $0.host == .starterGui && ($0.parentID.map(guis.contains) ?? false) }
+        if let selectedGui, guis.contains(selectedGui) { self.selectedGui = nil }
         parts.removeAll { doomed.contains($0.id) }
+        if let id = selectedLight, light(id) == nil { selectedLight = nil }
         groups.removeAll { doomed.contains($0.id) }
         scripts.removeAll { $0.parentID.map(doomed.contains) ?? false }
         sounds.removeAll { $0.parentID.map(doomed.contains) ?? false }
@@ -333,8 +338,10 @@ extension SceneModel {
             case .part(let original):
                 guard var copy = part(id: original) else { continue }
                 copy.id = remap[original]!
+                copy.lights = copy.lights.map { var light = $0; light.id = UUID(); return light }
                 copy.parentID = original == id ? parent : copy.parentID.flatMap { remap[$0] }
                 copy.position += offset
+                copy.solid = copy.solid?.reidentified()
                 parts.append(copy)
             case .group(let original):
                 guard var copy = group(id: original) else { continue }
@@ -392,6 +399,7 @@ extension SceneModel {
             copy.attachment1 = constraint.attachment1.flatMap { remap[$0] }
             constraints.append(copy)
         }
+        cloneWorldGui(remap: remap)
         return remap[id]
     }
 

@@ -21,6 +21,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         let clothedBlend: MTLRenderPipelineState
         /// The Workspace's Terrain.
         let terrain: MTLRenderPipelineState
+        let solid: MTLRenderPipelineState
+        let solidBlend: MTLRenderPipelineState
     }
     private var litPipelines: [Bool: LitPipelines] = [:]
     /// This frame's variant.
@@ -40,6 +42,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// Where the world's Trails have been, as this view has seen, and what draws Beams and Trails.
     let trails = TrailSystem()
     private var ribbonDrawer: RibbonRenderer?
+    private var worldGuiDrawer: WorldGuiRenderer?
+    var worldGuiCanvasCount: Int { worldGuiDrawer?.cachedCanvasCount ?? 0 }
 
     // Lighting.
     static let shadowMapSize = 2048
@@ -65,6 +69,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var shapeMeshes: [PartShape: Mesh] = [:]
     /// Imported meshes on the GPU, and MeshParts' pictures, by asset.
     private var assetMeshes: [UUID: Mesh] = [:]
+    private var solidMeshes: [UUID: Mesh] = [:]
     private var assetTextures: [UUID: (size: Int, texture: MTLTexture?)] = [:]
     /// Terrain chunks on the GPU: a mesh per material, and its water; made again when the
     /// chunk's mesh is.
@@ -241,7 +246,9 @@ final class Renderer: NSObject, MTKViewDelegate {
                 clothedBlend: try makePipeline(vertex: "scene_vertex_textured", fragment: "scene_fragment_clothed",
                                                blending: true, rayTraced: rayTraced),
                 terrain: try makePipeline(vertex: "terrain_vertex", fragment: "terrain_fragment", blending: false,
-                                          rayTraced: rayTraced))
+                                          rayTraced: rayTraced),
+                solid: try makePipeline(vertex: "solid_vertex", fragment: "solid_fragment", blending: false, rayTraced: rayTraced),
+                solidBlend: try makePipeline(vertex: "solid_vertex", fragment: "solid_fragment", blending: true, rayTraced: rayTraced))
         }
         lit = litPipelines[false]
         flatPipeline = try makePipeline(vertex: "scene_vertex", fragment: "flat_fragment", blending: false)
@@ -364,6 +371,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         frame.cameraPosition = Vec4(camera.position, 1)
         frame.lightDirection = Vec4(model.lighting.lightDirection, 0)
         frame.timing = Vec4(Float(now - startTime), delta, 0, 0)
+        prepareWorldGui(camera: camera, viewProjection: frame.viewProjection)
         prepareLighting(buffer, model: model, camera: camera, viewProjection: frame.viewProjection)
 
         // Screen effects only cost anything when one is switched on and compiled:
@@ -494,9 +502,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.setCullMode(.back)
         }
 
-        let visible = model.parts.filter(\.inWorld)
-        let opaque = visible.filter { $0.transparency <= 0.001 }
-        let transparent = visible.filter { $0.transparency > 0.001 }
+        let visible = model.parts.filter { $0.inWorld || (source.editorOverlay != nil && $0.negative && $0.visible && !$0.parked) }
+        let opaque = visible.filter { $0.transparency <= 0.001 && !$0.negative }
+        let transparent = visible.filter { $0.transparency > 0.001 || $0.negative }
             .sorted { length_squared($0.position - camera.position) > length_squared($1.position - camera.position) }
 
         encoder.setDepthStencilState(depthDefault)
@@ -550,6 +558,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         particleDrawer?.draw(encoder, system: particles, model: model, camera: camera, frame: &frame,
                              depth: depthNoWrite) { texture(named: $0, model: model) }
+        worldGuiDrawer?.draw(encoder, depth: depthNoWrite, onTop: depthAlways)
     }
 
     /// Selection boxes and the manipulation gizmo, always drawn last and never
@@ -639,6 +648,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         frame.viewProjection = camera.viewProjection(aspect: Float(width) / Float(height))
         frame.cameraPosition = Vec4(camera.position, 1)
         frame.lightDirection = Vec4(source.model.lighting.lightDirection, 0)
+        prepareWorldGui(camera: camera, viewProjection: frame.viewProjection)
         prepareLighting(buffer, model: source.model, camera: camera, viewProjection: frame.viewProjection)
         if let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) {
             encodeScene(encoder, model: source.model, camera: camera, frame: &frame)
@@ -690,6 +700,18 @@ final class Renderer: NSObject, MTKViewDelegate {
         // avoids depending on multisample depth-resolve support.
         pass.depthAttachment.storeAction = .store
         return pass
+    }
+
+    private func prepareWorldGui(camera: Camera, viewProjection: float4x4) {
+        if source.worldGui != nil && worldGuiDrawer == nil {
+            do {
+                worldGuiDrawer = try WorldGuiRenderer(device: device, color: colorFormat, depth: depthFormat, samples: sampleCount)
+            } catch {
+                source.shaderConsole.error("SurfaceGui renderer: \(error.localizedDescription)")
+                return
+            }
+        }
+        worldGuiDrawer?.prepare(store: source.worldGui, model: source.model, camera: camera, viewProjection: viewProjection)
     }
 
     private func makeOffscreenTextures(width: Int, height: Int) -> Bool {
@@ -754,11 +776,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         // Point lights: the nearest to the camera, if there are too many.
         var lights: [PointLightData] = []
         for part in model.parts where part.inWorld {
-            guard let light = part.light, light.enabled, light.brightness > 0, light.range > 0 else { continue }
-            lights.append(PointLightData(
-                positionRange: Vec4(part.position, min(light.range, PointLight.maximumRange)),
-                colorBrightness: Vec4(light.color, light.brightness),
-                options: Vec4(light.shadows ? 1 : 0, 0, 0, 0)))
+            for light in part.lights where light.enabled && light.brightness > 0 && light.range > 0 {
+                lights.append(PointLightData(part: part, light: light))
+            }
         }
         if lights.count > PointLight.maximumPerFrame {
             func distance(_ light: PointLightData) -> Float {
@@ -859,10 +879,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         var instances: [RayTracingScene.Instance] = []
         for part in model.parts where part.inWorld && part.transparency < 0.5 {
             let shading = part.material.shading
-            let name = assetMesh(for: part) != nil ? "mesh:\(part.mesh?.asset?.uuidString ?? "")" : part.shape.rawValue
+            let name = assetMesh(for: part) != nil ? "mesh:\(part.collisionMesh?.asset?.uuidString ?? "")" : part.shape.rawValue
             instances.append(.init(mesh: name, transform: part.modelMatrix, color: part.color,
                                    shading: Vec4(shading.x, shading.y, shading.z, 0),
-                                   mask: part.light?.enabled == true ? RayTracingScene.maskLightHousing
+                                   mask: part.lights.contains(where: { $0.enabled }) ? RayTracingScene.maskLightHousing
                                                                      : RayTracingScene.maskSolid))
         }
         let meshNames = ["Torso": "avatar.torso", "Head": "avatar.head"]
@@ -974,7 +994,21 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// A MeshPart's mesh on the GPU, made the first time it's drawn — and handed to the
     /// ray tracer too; nil for other parts, and for a mesh whose file is missing.
     private func assetMesh(for part: Part) -> Mesh? {
-        part.mesh?.asset.flatMap(assetMesh)
+        if part.solid != nil || part.solidDeformation != nil { _ = MeshLibrary.shared.geometry(for: part) }
+        return part.collisionMesh?.asset.flatMap(assetMesh)
+    }
+
+    private func coloredSolid(_ part: Part) -> Mesh? {
+        guard let solid = part.solid, !part.usePartColor, !part.negative,
+              let geometry = MeshLibrary.shared.geometry(for: part),
+              solid.mesh.colors.count == geometry.positions.count else { return nil }
+        if let mesh = solidMeshes[solid.mesh.id] { return mesh }
+        let vertices = geometry.positions.indices.map {
+            TerrainVertex(position: geometry.positions[$0], normal: geometry.normals[$0], color: Vec4(solid.mesh.colors[$0], 1))
+        }
+        let mesh = Mesh(device: device, bytes: vertices, indices: geometry.indices)
+        solidMeshes[solid.mesh.id] = mesh
+        return mesh
     }
 
     private func assetMesh(_ asset: UUID) -> Mesh? {
@@ -1011,7 +1045,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     private func drawPart(_ encoder: MTLRenderCommandEncoder, part: Part,
                           model: SceneModel, fallback: MTLRenderPipelineState, cull: MTLCullMode) {
         let imported = assetMesh(for: part)
-        guard let mesh = imported ?? shapeMeshes[part.shape] else { return }
+        guard var mesh = imported ?? shapeMeshes[part.shape] else { return }
 
         // A part with a shader that has compiled draws with it; anything else — no
         // shader, disabled, still compiling, broken — falls back to the built-in pass.
@@ -1022,6 +1056,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             pipeline = userPipeline
             var params = ShaderUniforms(shader.parameters.map(\.value))
             encoder.setFragmentBytes(&params, length: MemoryLayout<ShaderUniforms>.stride, index: 3)
+        } else if let colored = coloredSolid(part), let lit {
+            pipeline = fallback === lit.opaque ? lit.solid : lit.solidBlend
+            mesh = colored
         } else if imported?.uvBuffer != nil, let picture = texture(for: part, model: model), let lit {
             pipeline = fallback === lit.opaque ? lit.textured : lit.texturedBlend
             encoder.setFragmentTexture(picture, index: 3)
@@ -1034,7 +1071,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         var draw = DrawUniforms()
         draw.model = part.modelMatrix
         draw.normalMatrix = Mat.normalMatrix(draw.model)
-        draw.color = Vec4(part.color, 1 - part.transparency)
+        draw.color = part.negative ? Vec4(1, 0.15, 0.25, 0.45) : Vec4(part.color, 1 - part.transparency)
         let shading = part.material.shading
         draw.shading = Vec4(shading.x, shading.y, shading.z, 0)
         submit(encoder, mesh: mesh, uniforms: &draw)

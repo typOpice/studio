@@ -25,6 +25,8 @@ struct PropertiesView: View {
                 DataObjectInspector(model: model, object: object)
             } else if model.selection.isEmpty, let id = model.selectedSound, let sound = model.sound(id: id) {
                 SoundInspector(model: model, sound: sound)
+            } else if model.selection.isEmpty, let id = model.selectedLight, let light = model.light(id) {
+                LightInspector(model: model, light: light)
             } else if model.selection.isEmpty, let ref = model.selectedEmitter, let emitter = model.emitter(ref) {
                 EmitterInspector(model: model, ref: ref, emitter: emitter)
             } else if model.selection.isEmpty, let id = model.selectedAsset, let asset = model.asset(id: id) {
@@ -50,7 +52,10 @@ struct PropertiesView: View {
                         Divider().overlay(Theme.stroke)
                         appearanceSection(part)
                         Divider().overlay(Theme.stroke)
-                        if part.mesh != nil {
+                        if part.solid != nil {
+                            SolidSection(model: model, part: part)
+                            Divider().overlay(Theme.stroke)
+                        } else if part.mesh != nil {
                             MeshSection(model: model, part: part)
                             Divider().overlay(Theme.stroke)
                         }
@@ -100,9 +105,9 @@ struct PropertiesView: View {
                     .background(RoundedRectangle(cornerRadius: 5).fill(Theme.panelAlt))
                     .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.stroke, lineWidth: 1))
             }
-            if part.mesh != nil {
+            if part.mesh != nil || part.negative {
                 LabeledRow("Class") {
-                    Text("MeshPart").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                    Text(part.negative ? "NegateOperation" : part.solid != nil ? "UnionOperation" : "MeshPart").font(.system(size: 11)).foregroundStyle(Theme.textDim)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {

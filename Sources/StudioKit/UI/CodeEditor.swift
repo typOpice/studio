@@ -342,6 +342,7 @@ struct CodeEditor: NSViewRepresentable {
     var focusOnAppear: Bool = false
     /// A line to select and scroll to; each new request is acted on once.
     var reveal: CodeReveal? = nil
+    var diagnostics: [LuauDiagnostic] = []
     /// The debugger's: breakpoints in the gutter (and what clicking a number does), the
     /// line the game is stopped at, and breakpoints moving with their lines as they're edited.
     var breakpoints: [Int] = []
@@ -383,6 +384,7 @@ struct CodeEditor: NSViewRepresentable {
         Self.setLineNumbers(showsLineNumbers, on: entry)
         coordinator.lastReveal = reveal?.token
         applyDebugger(to: entry, coordinator: coordinator)
+        Self.applyDiagnostics(diagnostics, to: textView)
 
         let container = NSView()
         entry.scrollView.frame = container.bounds
@@ -501,10 +503,28 @@ struct CodeEditor: NSViewRepresentable {
         }
         Self.setLineNumbers(showsLineNumbers, on: entry)
         applyDebugger(to: entry, coordinator: coordinator)
+        Self.applyDiagnostics(diagnostics, to: textView)
         if let reveal, reveal.token != coordinator.lastReveal {
             coordinator.lastReveal = reveal.token
             textView.window?.makeFirstResponder(textView)
             textView.reveal(line: reveal.line)
+        }
+    }
+
+    /// Layout-only attributes never edit the source, caret, text undo, or syntax colors.
+    static func applyDiagnostics(_ diagnostics: [LuauDiagnostic], to textView: NSTextView) {
+        guard let layout = textView.layoutManager else { return }
+        let whole = NSRange(location: 0, length: (textView.string as NSString).length)
+        for key in [NSAttributedString.Key.underlineStyle, .underlineColor, .toolTip] {
+            layout.removeTemporaryAttribute(key, forCharacterRange: whole)
+        }
+        for diagnostic in diagnostics {
+            var range = diagnostic.range(in: textView.string)
+            if range.length == 0 && range.location < whole.length { range.length = 1 }
+            guard range.length > 0, NSMaxRange(range) <= whole.length else { continue }
+            layout.addTemporaryAttributes([.underlineStyle: NSUnderlineStyle.patternDot.rawValue | NSUnderlineStyle.single.rawValue,
+                                           .underlineColor: NSColor.systemRed, .toolTip: diagnostic.message],
+                                          forCharacterRange: range)
         }
     }
 
@@ -612,6 +632,7 @@ struct CodeEditor: NSViewRepresentable {
                   let textView = notification.object as? NSTextView else { return }
 
             CodeEditor.highlight(textView, language: language)
+            CodeEditor.applyDiagnostics([], to: textView)
             onChange(textView.string)
             if let moved = movedBreakpoints {
                 movedBreakpoints = nil

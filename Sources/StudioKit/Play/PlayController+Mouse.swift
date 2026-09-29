@@ -16,8 +16,21 @@ extension PlayController {
 
     /// The part the mouse is over and the point on it. Tools in hands are not targets.
     func mouseTarget() -> (part: Part, point: Vec3)? {
-        guard let ray = mouseRay(), let hit = Picking.pick(ray: ray, in: partsOutOfHands) else { return nil }
+        let parts: [Part]
+        if mouseFilter == "w" { return nil }
+        if let id = mouseFilter.flatMap(UUID.init(uuidString:)) {
+            parts = partsOutOfHands.filter { $0.id != id && !model.isDescendant($0.id, of: id) }
+        } else {
+            parts = partsOutOfHands
+        }
+        guard let ray = mouseRay(), let hit = Picking.pick(ray: ray, in: parts) else { return nil }
         return (hit.part, ray.origin + ray.direction * hit.distance)
+    }
+
+    func mousePointerMoved(to point: SIMD2<Float>?, delta: SIMD2<Float> = .zero) {
+        let moved = point.map { $0 != pointer } ?? (delta != .zero)
+        if let point { pointer = point }
+        if moved { pendingEvents.append(.list([.string("MouseMove")])) }
     }
 
     /// Whether a player's character is near enough a part to click its ClickDetector.
@@ -100,8 +113,11 @@ extension PlayController {
             hit = renderCamera.target
         }
         let point = mouseCaptured ? viewSize / 2 : pointer ?? viewSize / 2
+        let ray = mouseRay() ?? Ray(origin: renderCamera.position, direction: renderCamera.forward)
         return .list([.number(Double(hit.x)), .number(Double(hit.y)), .number(Double(hit.z)), .string(target),
                       .number(Double(point.x)), .number(Double(point.y)),
-                      .number(Double(viewSize.x)), .number(Double(viewSize.y))])
+                      .number(Double(viewSize.x)), .number(Double(viewSize.y)),
+                      .triple(ray.origin.x, ray.origin.y, ray.origin.z),
+                      .triple(ray.direction.x, ray.direction.y, ray.direction.z)])
     }
 }

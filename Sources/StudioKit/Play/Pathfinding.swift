@@ -91,7 +91,7 @@ final class NavigationGrid {
         for part in solid {
             seen.insert(part.id)
             let signature = Signature(position: part.position, size: part.size, orientation: part.orientation,
-                                      shape: part.shape, material: part.material, mesh: part.mesh?.asset)
+                                      shape: part.shape, material: part.material, mesh: part.collisionMesh?.asset)
             if let known = footprints[part.id], known.signature == signature { continue }
             erase(part.id)
             draw(part, signature)
@@ -436,8 +436,9 @@ final class NavigationGrid {
                     guard canStep(from: node.floor, into: side1, agent) != nil,
                           canStep(from: node.floor, into: side2, agent) != nil else { continue }
                 }
-                guard var (floor, jump, material) = canStep(from: node.floor, into: index, agent) else { continue }
-                let weight = cost(of: material, agent)
+                guard let step = canStep(from: node.floor, into: index, agent) else { continue }
+                var (floor, jump) = (step.0, step.1)
+                let weight = cost(of: step.2, agent)
                 guard weight.isFinite else { continue }
                 let next = Node(cell: index, floor: floor)
                 // Out of the water onto land: a swimmer climbs out with a jump.

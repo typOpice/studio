@@ -94,6 +94,7 @@ local partProperties = {
 	},
 	CollisionFidelity = {
 		host = "collisionfidelity",
+		solidAllowed = true,
 		meshOnly = true,
 		read = function(raw)
 			return Enum.CollisionFidelity[raw]
@@ -238,7 +239,8 @@ local partProperties = {
 
 local partMethods = {}
 -- A part's PointLight, if it has one; assigned with PointLight below.
-local pointLightOf
+local lights = {}
+local previewKit = {}
 -- The mouse and ClickDetectors, filled in with PointLight's neighbours in part 6.
 local mouseKit = {}
 -- Sounds, filled in with the services in part 14.
@@ -266,6 +268,8 @@ local wrapAttachment, wrapConstraint
 
 -- Folders, Value objects, remotes and ModuleScripts, filled in by part 15.
 local dataKit = {}
+-- GUI wrappers are filled by part 9, but parts can contain world interfaces.
+local gui = {}
 
 -- The tree. The host hands back tokens — "p:<id>" a part, "g:<id>" a Model or
 -- Folder, "w" the Workspace, "v:<id>" a data object, "m:<id>" a ModuleScript — and
@@ -284,7 +288,11 @@ local function wrapToken(token)
 	end
 	local id = string.sub(token, 3)
 	local kind = string.sub(token, 1, 1)
-	if kind == "p" then
+	if kind == "u" then
+		return previewKit.wrapGui(tonumber(id))
+	elseif kind == "k" then
+		return previewKit.wrapCamera(id)
+	elseif kind == "p" then
 		return wrapPart(id)
 	elseif kind == "a" then
 		return wrapAttachment(id)
@@ -292,12 +300,16 @@ local function wrapToken(token)
 		return wrapConstraint(id)
 	elseif kind == "s" then
 		return soundKit.wrap(id)
+	elseif kind == "l" then
+		return lights.wrap(id)
 	elseif kind == "e" then
 		return emitterKit.wrap(id)
 	elseif kind == "v" then
 		return dataKit.wrap(id)
 	elseif kind == "m" then
 		return dataKit.wrapModule(id)
+	elseif kind == "u" then
+		return gui.wrap(tonumber(id))
 	end
 	return wrapGroup(id)
 end
@@ -328,6 +340,13 @@ end
 -- Sets Parent the Roblox way: to the Workspace, a Model, a Folder or a part.
 local function assignParent(object, value, destroy)
 	local id = nodeId(object)
+	if previewKit.guiId and previewKit.guiId(value) then
+		local parent = previewKit.guiId(value)
+		if invoke("gui.class", parent) ~= "ViewportFrame" or not invoke("viewport.parent", id, parent) then
+			raise("Parts and Models can only be parented to a ViewportFrame", 3)
+		end
+		return
+	end
 	if value == nil then
 		destroy(id)
 		return
@@ -512,6 +531,10 @@ end
 
 function partMethods.IsA(self, className)
 	checkSelf(self, "Instance", "IsA")
+	local solid = invoke("part.get", partIdOf[self], "solidclass")
+	if solid ~= "" then
+		return className == solid or className == "PartOperation" or className == "BasePart" or className == "PVInstance" or className == "Instance"
+	end
 	local shape = invoke("part.get", partIdOf[self], "shape")
 	local mesh = invoke("part.get", partIdOf[self], "ismeshpart")
 	-- A Seat is a kind of Part; a VehicleSeat, only a BasePart (as in Roblox).
@@ -540,10 +563,6 @@ end
 function partMethods.GetChildren(self)
 	checkSelf(self, "Instance", "GetChildren")
 	local children = treeMethods.GetChildren(self)
-	local light = pointLightOf(partIdOf[self])
-	if light then
-		table.insert(children, light)
-	end
 	local detector = mouseKit.detectorOf(partIdOf[self])
 	if detector then
 		table.insert(children, detector)
@@ -553,12 +572,7 @@ end
 
 function partMethods.FindFirstChild(self, name, recursive)
 	checkSelf(self, "Instance", "FindFirstChild")
-	if name == "PointLight" then
-		local light = pointLightOf(partIdOf[self])
-		if light then
-			return light
-		end
-	elseif name == "ClickDetector" then
+	if name == "ClickDetector" then
 		local detector = mouseKit.detectorOf(partIdOf[self])
 		if detector then
 			return detector
@@ -570,7 +584,9 @@ end
 PartMeta.__index = function(part, key)
 	local id = partIdOf[part]
 	local property = partProperties[key]
-	if property ~= nil and property.meshOnly and not invoke("part.get", id, "ismeshpart") then
+	if property ~= nil and property.solidOnly and invoke("part.get", id, "solidclass") ~= "UnionOperation" then property = nil end
+	if property ~= nil and property.meshOnly and not invoke("part.get", id, "ismeshpart")
+		and not (property.solidAllowed and invoke("part.get", id, "solidclass") == "UnionOperation") then
 		property = nil
 	end
 	if property ~= nil and property.vehicleOnly and not invoke("part.get", id, "isvehicleseat") then
@@ -596,6 +612,8 @@ PartMeta.__index = function(part, key)
 		return raw
 	end
 	if key == "ClassName" then
+		local solid = invoke("part.get", id, "solidclass")
+		if solid ~= "" then return solid end
 		local shape = invoke("part.get", id, "shape")
 		if invoke("part.get", id, "ismeshpart") then
 			return "MeshPart"
@@ -614,12 +632,7 @@ PartMeta.__index = function(part, key)
 	if method ~= nil then
 		return method
 	end
-	if key == "PointLight" then
-		local light = pointLightOf(id)
-		if light ~= nil then
-			return light
-		end
-	elseif key == "ClickDetector" then
+	if key == "ClickDetector" then
 		local detector = mouseKit.detectorOf(id)
 		if detector ~= nil then
 			return detector
@@ -647,7 +660,9 @@ PartMeta.__newindex = function(part, key, value)
 		raise(string.format("Unable to assign property %s. Property is read only", key), 2)
 	end
 	local property = partProperties[key]
-	if property ~= nil and property.meshOnly and not invoke("part.get", id, "ismeshpart") then
+	if property ~= nil and property.solidOnly and invoke("part.get", id, "solidclass") ~= "UnionOperation" then property = nil end
+	if property ~= nil and property.meshOnly and not invoke("part.get", id, "ismeshpart")
+		and not (property.solidAllowed and invoke("part.get", id, "solidclass") == "UnionOperation") then
 		property = nil
 	end
 	if property ~= nil and property.vehicleOnly and not invoke("part.get", id, "isvehicleseat") then

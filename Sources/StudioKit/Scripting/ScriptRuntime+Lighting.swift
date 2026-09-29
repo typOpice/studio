@@ -45,54 +45,93 @@ extension ScriptRuntime {
             model.update(id: id) { if $0.clickDetector != nil { $0.clickDetector!.maxActivationDistance = max(distance, 0) } }
             return .nothing
 
-        // MARK: point lights, one per part
-        case "light.has":
-            return .bool(part(arguments.first ?? .nothing)?.light != nil)
-
         case "light.create":
-            guard let id = partID(arguments.first ?? .nothing) else { return .bool(false) }
-            model.update(id: id) { if $0.light == nil { $0.light = PointLight() } }
-            return .bool(true)
-
-        case "light.destroy":
-            guard let id = partID(arguments.first ?? .nothing) else { return .nothing }
-            model.update(id: id) { $0.light = nil }
-            return .nothing
+            let kind = arguments.first?.asString.flatMap(PointLight.Kind.init(rawValue:)) ?? .point
+            let light = PointLight(kind: kind)
+            looseLights[light.id] = light
+            return .string(light.id.uuidString)
 
         case "light.get":
-            guard arguments.count >= 2, let light = part(arguments[0])?.light else { return .nothing }
-            switch (arguments[1].asString ?? "").lowercased() {
-            case "enabled": return .bool(light.enabled)
-            case "color": return .triple(light.color.x, light.color.y, light.color.z)
-            case "brightness": return .number(Double(light.brightness))
-            case "range": return .number(Double(light.range))
-            case "shadows": return .bool(light.shadows)
-            default: return .nothing
+            guard arguments.count >= 2, let id = uuid(arguments.first), let light = findLight(id) else { return .nothing }
+            if arguments[1].asString == "parent" {
+                return model.lightParent(id).map { .string("p:" + $0.uuidString) } ?? .nothing
             }
+            return Self.lightProperty(light, arguments[1].asString ?? "")
 
         case "light.set":
-            guard arguments.count >= 3, let id = partID(arguments[0]) else { return .nothing }
-            let value = arguments[2]
-            let property = (arguments[1].asString ?? "").lowercased()
-            model.update(id: id) { part in
-                guard part.light != nil else { return }
-                switch property {
-                case "enabled": if let b = value.asBool { part.light!.enabled = b }
-                case "color":
-                    if let (r, g, b) = value.asTriple {
-                        part.light!.color = Vec3(min(max(r, 0), 1), min(max(g, 0), 1), min(max(b, 0), 1))
-                    }
-                case "brightness": if let v = value.asFloat { part.light!.brightness = min(max(v, 0), 100) }
-                case "range": if let v = value.asFloat { part.light!.range = min(max(v, 0), PointLight.maximumRange) }
-                case "shadows": if let b = value.asBool { part.light!.shadows = b }
-                default: break
-                }
-            }
+            guard arguments.count >= 3, let id = uuid(arguments.first), var light = findLight(id),
+                  Self.setLightProperty(&light, arguments[1].asString ?? "", arguments[2]) else { return .bool(false) }
+            if model.lightParent(id) != nil { model.updateLight(id) { $0 = light } }
+            else { looseLights[id] = light }
+            return .bool(true)
+
+        case "light.parent":
+            guard let id = uuid(arguments.first), let light = findLight(id) else { return .bool(false) }
+            let parent = arguments.count > 1 ? uuid(arguments[1]) : nil
+            guard parent == nil || model.part(id: parent!) != nil else { return .bool(false) }
+            _ = takeLight(id)
+            if let parent { model.update(id: parent) { $0.lights.append(light) } }
+            else { looseLights[id] = light }
+            return .bool(true)
+
+        case "light.clone":
+            guard let id = uuid(arguments.first), var copy = findLight(id) else { return .nothing }
+            copy.id = UUID()
+            looseLights[copy.id] = copy
+            return .string(copy.id.uuidString)
+
+        case "light.destroy":
+            if let id = uuid(arguments.first) { _ = takeLight(id) }
             return .nothing
 
         default:
             return unknownCall(name)
         }
+    }
+
+    private func findLight(_ id: UUID) -> PointLight? { model.light(id) ?? looseLights[id] }
+
+    private func takeLight(_ id: UUID) -> PointLight? {
+        if let parent = model.lightParent(id), let light = model.light(id) {
+            model.update(id: parent) { $0.lights.removeAll { $0.id == id } }
+            return light
+        }
+        return looseLights.removeValue(forKey: id)
+    }
+
+    static func lightProperty(_ light: PointLight, _ property: String) -> ScriptValue {
+        switch property {
+        case "name": return .string(light.name)
+        case "class": return .string(light.kind.rawValue)
+        case "enabled": return .bool(light.enabled)
+        case "color": return .triple(light.color.x, light.color.y, light.color.z)
+        case "brightness": return .number(Double(light.brightness))
+        case "range": return .number(Double(light.range))
+        case "shadows": return .bool(light.shadows)
+        case "angle": return .number(Double(light.angle))
+        case "face": return .string(light.face.rawValue)
+        default: return .nothing
+        }
+    }
+
+    static func setLightProperty(_ light: inout PointLight, _ property: String, _ value: ScriptValue) -> Bool {
+        func number() -> Float? { value.asFloat.flatMap { $0.isFinite ? $0 : nil } }
+        switch property {
+        case "name": guard let v = value.asString else { return false }; light.name = v
+        case "enabled": guard let v = value.asBool else { return false }; light.enabled = v
+        case "shadows": guard let v = value.asBool else { return false }; light.shadows = v
+        case "brightness": guard let v = number() else { return false }; light.brightness = min(max(v, 0), 100)
+        case "range": guard let v = number() else { return false }; light.range = min(max(v, 0), PointLight.maximumRange)
+        case "angle": guard light.kind != .point, let v = number() else { return false }; light.angle = min(max(v, 0), 180)
+        case "face":
+            guard light.kind != .point, let face = value.asString.flatMap(ParticleEmitter.Face.init(rawValue:)) else { return false }
+            light.face = face
+        case "color":
+            guard let (r, g, b) = value.asTriple, r.isFinite, g.isFinite, b.isFinite else { return false }
+            light.color = simd_clamp(Vec3(r, g, b), Vec3.zero, Vec3(repeating: 1))
+        default: return false
+        }
+        return true
     }
 
     func lightingProperty(_ name: String) -> ScriptValue {

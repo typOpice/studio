@@ -219,6 +219,27 @@ struct ScriptDocumentView: View {
     @ObservedObject var session: EditorSession
     let script: ScriptObject
     let document: EditorDocument
+    @ObservedObject private var analysis: LuauAnalysisService
+
+    init(model: SceneModel, session: EditorSession, script: ScriptObject, document: EditorDocument) {
+        self.model = model
+        self.session = session
+        self.script = script
+        self.document = document
+        self.analysis = session.analysis
+    }
+
+    private var snapshot: LuauAnalysisSnapshot {
+        // SwiftUI can deliver a change from a previously rendered value while a
+        // keystroke is publishing. Always snapshot the current model, not that value.
+        LuauAnalysisSnapshot(source: model.script(id: script.id)?.source ?? script.source,
+                             scene: model.luauScene(editing: script.id), sceneID: model.placeID)
+    }
+
+    private func requestAnalysis() {
+        if script.language == .luau { analysis.request(snapshot, for: document.id) }
+        else { analysis.forget(document.id) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -238,6 +259,7 @@ struct ScriptDocumentView: View {
                        showsLineNumbers: true,
                        focusOnAppear: true,
                        reveal: session.revealRequest(for: document),
+                       diagnostics: script.language == .luau ? (analysis.diagnostics[document.id] ?? []).filter { $0.node == snapshot.target } : [],
                        breakpoints: script.breakpoints,
                        conditionalBreakpoints: Set(script.breakpointConditions.keys),
                        loggingBreakpoints: Set(script.breakpointLogs.keys),
@@ -247,8 +269,43 @@ struct ScriptDocumentView: View {
                        onBreakpointsMoved: { [model, id = script.id] moves in model.moveBreakpoints(moves, forScript: id) }
             ) { updated in
                 model.setScriptSource(id: script.id, source: updated)
+                if script.language == .luau {
+                    analysis.request(LuauAnalysisSnapshot(source: updated, scene: model.luauScene(editing: script.id), sceneID: model.placeID), for: document.id)
+                }
+            }
+            if script.language == .luau {
+                let diagnostics = analysis.diagnostics[document.id] ?? []
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text(analysis.checking.contains(document.id) ? "Checking Luau…" : "Luau · \(diagnostics.count) issue\(diagnostics.count == 1 ? "" : "s")")
+                            .font(.system(size: 10)).foregroundStyle(Theme.textDim)
+                        Spacer()
+                    }.padding(.horizontal, 10).padding(.vertical, 5)
+                    if !diagnostics.isEmpty {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 3) {
+                                ForEach(diagnostics) { diagnostic in
+                                    Button {
+                                        _ = session.openScript(snapshot.scene.nodes.indices.contains(diagnostic.node) ? snapshot.scene.nodes[diagnostic.node].scriptID ?? script.id : script.id, line: diagnostic.line)
+                                    } label: {
+                                        HStack(alignment: .top, spacing: 7) {
+                                            Image(systemName: "exclamationmark.circle").foregroundStyle(.red)
+                                            Text("\(diagnostic.node == snapshot.target ? "" : (snapshot.scene.nodes.indices.contains(diagnostic.node) ? snapshot.scene.nodes[diagnostic.node].name + " · " : ""))Line \(diagnostic.line): \(diagnostic.message)")
+                                                .foregroundStyle(Theme.text).multilineTextAlignment(.leading)
+                                            Spacer(minLength: 0)
+                                        }.font(.system(size: 11))
+                                    }.buttonStyle(.plain)
+                                }
+                            }.padding(.horizontal, 10).padding(.bottom, 7)
+                        }.frame(maxHeight: 110)
+                    }
+                }.background(Theme.ribbon)
             }
         }
+        .onAppear { requestAnalysis() }
+        .onChange(of: snapshot) { _ in requestAnalysis() }
+        .onChange(of: script.language) { _ in requestAnalysis() }
+        .onDisappear { analysis.forget(document.id) }
     }
 
     /// Where the game is stopped in this script: the line of the call the Debugger shows.

@@ -53,12 +53,16 @@ extension PlayController {
     /// copies, each with whether it goes with the character.
     func copyStarterGui(resetting: Bool) -> [(script: ScriptObject, resets: Bool)] {
         var found: [(ScriptObject, Bool)] = []
-        for screen in model.guiChildren(of: nil) where screen.kind == .screenGui {
-            let resets = screen.object().resetOnSpawn
+        for screen in model.guiChildren(of: nil) where screen.kind.isLayer {
+            if !hasPlayer && screen.worldParent == nil { continue }
+            if resetting && screen.worldParent != nil { continue }
+            let resets = screen.worldParent == nil && screen.object().resetOnSpawn
             if resetting && !resets { continue }
             let copies = gui.copy(screen, from: model.starterGui, into: GuiStore.playerGui)
             guiCopies.merge(copies) { _, new in new }
-            for template in copies.keys { found += model.guiScripts(in: template).map { ($0, resets) } }
+            if hasPlayer {
+                for template in copies.keys { found += model.guiScripts(in: template).map { ($0, resets) } }
+            }
         }
         return found
     }
@@ -66,8 +70,18 @@ extension PlayController {
     /// Starts StarterGui's LocalScripts: those in a ResetOnSpawn ScreenGui with the
     /// character, the rest for the whole game.
     func runGuiScripts(_ found: [(script: ScriptObject, resets: Bool)]) {
-        let withCharacter = found.filter(\.resets).map(\.script)
-        let forGood = found.filter { !$0.resets }.map(\.script)
+        var remaining = found
+        for root in model.starterGui where root.worldParent != nil {
+            let family = Set(model.guiSubtree(root.id))
+            let inside = remaining.filter { $0.script.parentID.map(family.contains) ?? false }.map(\.script)
+            remaining.removeAll { $0.script.parentID.map(family.contains) ?? false }
+            guard !inside.isEmpty, let id = guiCopies[root.id], worldGuiScripts[root.id] == nil else { continue }
+            let scope = -1_000_000 - id
+            worldGuiScripts[root.id] = (scope, inside)
+            scripts.runScripts(inside, scope: scope)
+        }
+        let withCharacter = remaining.filter(\.resets).map(\.script)
+        let forGood = remaining.filter { !$0.resets }.map(\.script)
         scripts.runScripts(forGood, scope: 0)
         scripts.runScripts(withCharacter, scope: characterGeneration)
         guiScripts[characterGeneration, default: []] += withCharacter
@@ -76,7 +90,7 @@ extension PlayController {
     /// A character going: its ResetOnSpawn copies go, and the scripts in them stop.
     func takeStarterGui(scope: Int) {
         if let stopping = guiScripts.removeValue(forKey: scope) { scripts.endScope(scope, scripts: stopping) }
-        for screen in model.guiChildren(of: nil) where screen.kind == .screenGui && screen.object().resetOnSpawn {
+        for screen in model.guiChildren(of: nil) where screen.kind.isLayer && screen.worldParent == nil && screen.object().resetOnSpawn {
             guard let copy = guiCopies[screen.id] else { continue }
             for template in model.guiSubtree(screen.id) { guiCopies[template] = nil }
             gui.destroy(copy)
@@ -132,10 +146,15 @@ extension PlayController {
 
     func guiCall(_ name: String, _ arguments: [ScriptValue]) -> ScriptValue {
         let id = Int(arguments.first?.asDouble ?? -1)
+        if guiInvocationLocal && ["gui.set", "gui.destroy", "gui.setParent", "gui.worldParent"].contains(name) {
+            gui.preserveSharedWorld(containing: id)
+        }
         switch name {
         case "gui.create":
             guard let kind = arguments.first?.asString.flatMap(GuiObject.Kind.init(rawValue:)) else { return .number(0) }
-            return .number(Double(gui.create(kind)))
+            let made = gui.create(kind)
+            gui.update(made) { $0.localOnly = arguments.count > 1 && arguments[1].asBool == true }
+            return .number(Double(made))
 
         case "gui.class":
             return gui.object(id).map { .string($0.kind.rawValue) } ?? .nothing
@@ -161,17 +180,40 @@ extension PlayController {
         case "gui.set":
             // A destroyed object takes writes quietly, as in Roblox; a value out of range is refused.
             guard arguments.count >= 3, gui.object(id) != nil else { return .nothing }
+            if (arguments[1].asString ?? "").lowercased() == "currentcamera" {
+                if case .nothing = arguments[2] { gui.update(id) { $0.currentCamera = nil }; return .bool(true) }
+                guard let camera = arguments[2].asString.flatMap(UUID.init(uuidString:)), gui.previewCameras[camera] != nil else { return .bool(false) }
+                gui.update(id) { $0.currentCamera = camera }
+                return .bool(true)
+            }
             if (arguments[1].asString ?? "").lowercased() == "cursorposition" {
                 gui.setCursor(id, to: Int(arguments[2].asDouble ?? -1))
                 return .bool(true)
             }
             var accepted = true
-            gui.update(id) { accepted = Self.setGuiProperty(&$0, (arguments[1].asString ?? "").lowercased(), arguments[2]) }
+            gui.update(id) {
+                let shared = $0.persistentProperties
+                accepted = Self.setGuiProperty(&$0, (arguments[1].asString ?? "").lowercased(), arguments[2])
+                if arguments.count > 3 && arguments[3].asBool == true { $0.persistentProperties = shared }
+            }
             return .bool(accepted)
 
         case "gui.parent":
             guard let object = gui.object(id) else { return .number(-1) }
+            if let part = object.worldParent { return .string("p:\(part)") }
             return .number(Double(object.parent ?? -1))
+
+        case "gui.worldParent":
+            guard arguments.count >= 2, gui.object(id)?.kind == .surfaceGui,
+                  let part = arguments[1].asString.flatMap(UUID.init(uuidString:)), model.part(id: part) != nil else { return .bool(false) }
+            gui.update(id) { $0.parent = nil; $0.worldParent = part }
+            return .bool(true)
+
+        case "gui.worldChildren":
+            guard let parent = arguments.first?.asString.flatMap(UUID.init(uuidString:)) else { return .list([]) }
+            return .list(gui.objects.values.filter { $0.worldParent == parent }.sorted { $0.id < $1.id }.map {
+                .list([.string("u:\($0.id)"), .string($0.name)])
+            })
 
         case "gui.setParent":
             guard arguments.count >= 2 else { return .bool(false) }
@@ -219,6 +261,11 @@ extension PlayController {
     static func guiProperty(_ object: GuiObject, _ key: String) -> ScriptValue {
         func numbers(_ values: [Float]) -> ScriptValue { .list(values.map { .number(Double($0)) }) }
         switch key {
+        case "currentcamera": return object.currentCamera.map { .string($0.uuidString) } ?? .nothing
+        case "ambient": return .triple(object.viewportAmbient.x, object.viewportAmbient.y, object.viewportAmbient.z)
+        case "lightcolor": return .triple(object.viewportLightColor.x, object.viewportLightColor.y, object.viewportLightColor.z)
+        case "lightdirection": return .triple(object.viewportLightDirection.x, object.viewportLightDirection.y, object.viewportLightDirection.z)
+
         case "name": return .string(object.name)
         case "position": return numbers(object.position.list)
         case "size": return numbers(object.size.list)
@@ -255,7 +302,13 @@ extension PlayController {
         case "sortorder": return .string(object.sortOrder)
         case "horizontalalignment": return .string(object.horizontalAlignment)
         case "verticalalignment": return .string(object.verticalAlignment)
-        case "canvassize": return numbers(object.canvasSize.list)
+        case "canvassize": return object.kind == .surfaceGui ? numbers([object.surfaceCanvasSize.x, object.surfaceCanvasSize.y]) : numbers(object.canvasSize.list)
+        case "face": return .string(object.face)
+        case "sizingmode": return .string(object.sizingMode)
+        case "pixelsperstud": return .number(Double(object.pixelsPerStud))
+        case "lightinfluence": return .number(Double(object.lightInfluence))
+        case "brightness": return .number(Double(object.brightness))
+        case "zoffset": return .number(Double(object.zOffset))
         case "scrollbarthickness": return .number(Double(object.scrollBarThickness))
         case "scrollingenabled": return .bool(object.scrollingEnabled)
         case "automaticcanvassize": return .string(object.automaticCanvasSize)
@@ -319,12 +372,28 @@ extension PlayController {
     /// Sets a property from a script, already checked and converted by the Luau side;
     /// false when the value is the wrong shape.
     static func setGuiProperty(_ object: inout GuiObject, _ key: String, _ value: ScriptValue) -> Bool {
+        guard applyGuiProperty(&object, key, value) else { return false }
+        object.persistentProperties[key] = SceneModel.storable(key, value)
+        return true
+    }
+
+    private static func applyGuiProperty(_ object: inout GuiObject, _ key: String, _ value: ScriptValue) -> Bool {
         func floats() -> [Float]? {
             guard case .list(let items) = value else { return nil }
             let numbers = items.compactMap(\.asFloat)
             return numbers.count == items.count ? numbers : nil
         }
         switch key {
+        case "currentcamera":
+            if case .nothing = value { object.currentCamera = nil; return true }
+            guard let id = value.asString.flatMap(UUID.init(uuidString:)) else { return false }; object.currentCamera = id
+        case "ambient", "lightcolor", "lightdirection":
+            guard let values = value.asList?.compactMap(\.asFloat), values.count == 3, values.allSatisfy(\.isFinite) else { return false }
+            let vector = Vec3(values[0], values[1], values[2])
+            if key == "lightdirection" { guard simd_length_squared(vector) > 1e-8 else { return false }; object.viewportLightDirection = simd_normalize(vector) }
+            else if key == "ambient" { object.viewportAmbient = simd_clamp(vector, .zero, Vec3(repeating: 1)) }
+            else { object.viewportLightColor = simd_clamp(vector, .zero, Vec3(repeating: 1)) }
+
         case "name": guard let v = value.asString else { return false }; object.name = v
         case "position": guard let v = floats().flatMap(UDim2.init(list:)) else { return false }; object.position = v
         case "size": guard let v = floats().flatMap(UDim2.init(list:)) else { return false }; object.size = v
@@ -384,7 +453,25 @@ extension PlayController {
         case "verticalalignment":
             guard let v = value.asString, ["Top", "Center", "Bottom"].contains(v) else { return false }
             object.verticalAlignment = v
-        case "canvassize": guard let v = floats().flatMap(UDim2.init(list:)) else { return false }; object.canvasSize = v
+        case "canvassize":
+            if object.kind == .surfaceGui {
+                guard let v = floats(), v.count == 2, v.allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 16384 }) else { return false }
+                object.surfaceCanvasSize = SIMD2(v[0], v[1])
+            } else {
+                guard let v = floats().flatMap(UDim2.init(list:)) else { return false }; object.canvasSize = v
+            }
+        case "face":
+            guard let v = value.asString, ["Front", "Back", "Left", "Right", "Top", "Bottom"].contains(v) else { return false }; object.face = v
+        case "sizingmode":
+            guard let v = value.asString, ["FixedSize", "PixelsPerStud"].contains(v) else { return false }; object.sizingMode = v
+        case "pixelsperstud":
+            guard let v = value.asFloat, v.isFinite, v > 0, v <= 1024 else { return false }; object.pixelsPerStud = v
+        case "lightinfluence":
+            guard let v = value.asFloat, v.isFinite else { return false }; object.lightInfluence = min(max(v, 0), 1)
+        case "brightness":
+            guard let v = value.asFloat, v.isFinite, v >= 0 else { return false }; object.brightness = min(v, 100)
+        case "zoffset":
+            guard let v = value.asFloat, v.isFinite else { return false }; object.zOffset = min(max(v, -100), 100)
         case "canvasposition":
             guard let v = floats(), v.count == 2 else { return false }
             object.canvasPosition = SIMD2(max(v[0], 0), max(v[1], 0))

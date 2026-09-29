@@ -9,6 +9,7 @@ final class ViewportController: ViewportSource {
     let shaderStatus: ShaderStatusStore
     let shaderConsole: ScriptConsole
     var camera = Camera()
+    var worldGui: GuiStore?
 
     var activeHandle: GizmoHandle?
     private var drag: GizmoDrag?
@@ -85,7 +86,7 @@ final class ViewportController: ViewportSource {
         // With the Animation Editor open, the rig comes first: click a body part to
         // select its joint, drag to pose it.
         if let hit = animationEditor.pickJoint(ray: r),
-           hit.distance < (Picking.pick(ray: r, in: model.parts)?.distance ?? .infinity) {
+           hit.distance < (Picking.pick(ray: r, in: model.parts, includeNegative: true)?.distance ?? .infinity) {
             animationEditor.beginPose(hit.joint, at: point, alternate: alternate)
             model.statusText = "\(hit.joint.rawValue): drag to pose · ⌥ drag to twist"
             return true
@@ -103,7 +104,7 @@ final class ViewportController: ViewportSource {
         // A weld or joint tool is armed: clicks name the two parts to join, and
         // nothing else — no dragging, no changing the selection.
         if model.joinTool != nil {
-            if let hit = Picking.pick(ray: r, in: model.parts) {
+            if let hit = Picking.pick(ray: r, in: model.parts, includeNegative: true) {
                 model.pickJoinTarget(hit.part.id)
             } else {
                 model.clearJoinPending()
@@ -122,7 +123,7 @@ final class ViewportController: ViewportSource {
             }
         }
 
-        if let hit = Picking.pick(ray: r, in: model.parts) {
+        if let hit = Picking.pick(ray: r, in: model.parts, includeNegative: true) {
             // A click selects the Model a part is in, as in Roblox Studio; ⌥-click
             // reaches the part itself.
             let target = alternate ? hit.part.id : (model.outermostModel(containing: hit.part.id) ?? hit.part.id)

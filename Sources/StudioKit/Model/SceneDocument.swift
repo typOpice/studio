@@ -90,7 +90,9 @@ final class SceneDocument: ObservableObject {
         guard !parts.isEmpty else { return nil }
         for i in parts.indices where roots.contains(parts[i].id) { parts[i].parentID = nil }
         for i in groups.indices where roots.contains(groups[i].id) { groups[i].parentID = nil }
-        let scripts = model.scripts.filter { $0.parentID.map(ids.contains) ?? false }
+        let guiIDs = Set(model.starterGui.filter { $0.worldParent.map(ids.contains) ?? false }.flatMap { model.guiSubtree($0.id) })
+        let guis = model.starterGui.filter { guiIDs.contains($0.id) }
+        let scripts = model.scripts.filter { $0.parentID.map(ids.union(guiIDs).contains) ?? false }
         let attachments = model.attachments.filter { ids.contains($0.parentID) }
         let attachmentIDs = Set(attachments.map(\.id))
         let constraints = model.constraints.filter { c in
@@ -104,6 +106,7 @@ final class SceneDocument: ObservableObject {
         let played = Set(sounds.compactMap { model.asset(named: $0.soundId)?.id })
             .union(parts.compactMap { $0.mesh?.asset })
             .union(parts.compactMap { $0.mesh.flatMap { model.asset(named: $0.textureId)?.id } })
+            .union(guis.compactMap { $0.properties["image"]?.asString.flatMap { model.asset(named: $0)?.id } })
         let sources = scripts.map(\.source)
         let assets = model.assets.filter { asset in
             played.contains(asset.id) || sources.contains { $0.contains(asset.reference) }
@@ -112,6 +115,7 @@ final class SceneDocument: ObservableObject {
         let file = ModelFile(name: name, pivot: pivot,
                              state: SceneState(parts: parts, scripts: scripts, groups: groups,
                                                attachments: attachments, constraints: constraints,
+                                               starterGui: guis,
                                                assets: assets, sounds: sounds))
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

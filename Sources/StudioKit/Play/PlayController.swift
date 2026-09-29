@@ -16,6 +16,7 @@ final class PlayHUD: ObservableObject {
     @Published var mouseLock = false
     /// Shift lock is on: the pointer is held in the middle.
     @Published var shiftLock = false
+    @Published var cursorIcon = ""
 }
 
 /// Runs a play session: the player's character, its Humanoid, input and scripts.
@@ -45,6 +46,7 @@ final class PlayController: ViewportSource, PlayerBridge {
     let physics = PhysicsWorld()
     /// This player's screen GUI — PlayerGui — made by the scripts, drawn by `GuiLayer`.
     let gui = GuiStore()
+    var guiInvocationLocal = false
     /// What the scene's Sounds sound like, from where the camera is.
     let sounds = SoundSystem()
     /// Pictures for ImageLabels, decoded once each.
@@ -163,10 +165,13 @@ final class PlayController: ViewportSource, PlayerBridge {
         applyCameraSettings()
         if hasPlayer { spawnCharacter() }
         let toolScripts = hasPlayer ? copyStarterTools(to: playerID) : []
-        let guiFound = hasPlayer ? copyStarterGui(resetting: false) : []
+        let guiFound = copyStarterGui(resetting: false)
+        let worldGuiIDs = Set(model.starterGui.filter { $0.worldParent != nil }.flatMap { model.guiSubtree($0.id) })
+        lastWorldGuiTemplates = model.starterGui.filter { worldGuiIDs.contains($0.id) }
         scripts.start()
         runToolScripts(toolScripts, scope: characterGeneration)
         runGuiScripts(guiFound)
+        synchronizeWorldGui()
     }
 
     func stop() {
@@ -310,11 +315,14 @@ final class PlayController: ViewportSource, PlayerBridge {
     /// Each StarterGui object's copy in the PlayerGui, and the LocalScripts that go with
     /// each character (ResetOnSpawn), by its scope.
     var guiCopies: [UUID: Int] = [:]
+    var lastWorldGuiTemplates: [StarterGuiObject] = []
+    var worldGuiScripts: [UUID: (scope: Int, scripts: [ScriptObject])] = [:]
     var guiScripts: [Int: [ScriptObject]] = [:]
 
     /// Where the pointer is in the view (top-left origin, points) and how big the view is;
     /// the view keeps both up to date. See PlayController+Mouse.
     var pointer: SIMD2<Float>?
+    var mouseFilter: String?
     var viewSize = SIMD2<Float>(0, 0)
     /// The ClickDetector part the mouse is over.
     var hoveredPart: UUID?
@@ -412,6 +420,9 @@ final class PlayController: ViewportSource, PlayerBridge {
     func step(dt: Float) {
         // Not while stopped at a breakpoint: the scripts are mid-run.
         guard scripts.debugger?.paused == nil else { return }
+        retireWorldGuiScripts()
+        if worldFromHost { synchronizeWorldGui() }
+        defer { if !worldFromHost { synchronizeWorldGui() } }
         let began = CACurrentMediaTime()
         var scriptTime = 0.0, physicsTime = 0.0
         defer { frameStats.note(step: CACurrentMediaTime() - began, scripts: scriptTime, physics: physicsTime) }

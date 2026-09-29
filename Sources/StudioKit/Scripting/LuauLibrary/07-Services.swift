@@ -13,12 +13,13 @@ local newAnimation
 
 -- The screen's GUI objects and chat, filled in by the GUI part: one table, declared here
 -- so Instance.new can make them.
-local gui = {}
+-- `gui` is declared with the other forward-reference kits in part 5.
 -- Accessories, Shirt, Pants and HumanoidDescription, filled in by the player part.
 local avatarKit = {}
 
 Instance = table.freeze({
 	new = function(className, parent)
+		if className == "Camera" then return previewKit.newCamera(parent) end
 		if gui.classes ~= nil and gui.classes[className] then
 			return gui.new(className, parent)
 		end
@@ -68,8 +69,8 @@ Instance = table.freeze({
 			end
 			return detector
 		end
-		if className == "PointLight" then
-			local light = lights.newPointLight()
+		if className == "PointLight" or className == "SpotLight" or className == "SurfaceLight" then
+			local light = lights.new(className)
 			if parent ~= nil then
 				lights.parentLight(light, parent)
 			end

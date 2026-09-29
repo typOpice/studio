@@ -26,7 +26,7 @@ enum GamePickerSelfTest {
         session.showGames()
         check("the client starts on it", session.screen == .games)
         check("…offering the sample games, and the Starter Scene",
-              session.games.templates == [.adventure, .nightfall, .megaObby, .starter])
+              session.games.templates == [.adventure, .nightfall, .megaObby, .racing, .starter])
         session.games.refresh(recentURLs: session.recentPlaces, drawNow: true)
         check("…each with its picture", session.games.templates.allSatisfy { session.games.pictures[$0.id] != nil },
               "\(session.games.pictures.keys.sorted())")

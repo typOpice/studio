@@ -79,7 +79,7 @@ enum Collision {
     static func contact(capsule: Capsule, part: Part) -> Contact? {
         guard part.inWorld else { return nil }
         // A MeshPart collides as its hull or its triangles; as its box, like a block.
-        if let mesh = part.mesh, mesh.collisionFidelity != .box, let geometry = MeshLibrary.shared.geometry(for: part) {
+        if let mesh = part.collisionMesh, mesh.collisionFidelity != .box, let geometry = MeshLibrary.shared.geometry(for: part) {
             return meshContact(capsule: capsule, part: part, geometry: geometry,
                                precise: mesh.collisionFidelity == .precise)
         }
@@ -191,7 +191,7 @@ enum Collision {
         let rotation = float3x3(part.orientation)
         let p = rotation.transpose * (worldPoint - part.position)
         let h = halfExtents(part)
-        if let mesh = part.mesh, mesh.collisionFidelity != .box, let geometry = MeshLibrary.shared.geometry(for: part) {
+        if let mesh = part.collisionMesh, mesh.collisionFidelity != .box, let geometry = MeshLibrary.shared.geometry(for: part) {
             let set = mesh.collisionFidelity == .precise ? geometry.triangles : geometry.hull
             let scale = simd_max(part.size, Vec3(repeating: 0.05))
             let near = set.closest(toSegment: p, p, reach: 0.5, scale: scale)

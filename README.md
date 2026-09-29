@@ -51,7 +51,7 @@ editor's **Client** button looks for the client next to itself.
 swift run StudioApp --selftest
 ```
 
-2993 headless checks covering shader compilation, uniform struct layout, mesh winding,
+The headless suite covers shader compilation, uniform struct layout, mesh winding,
 camera rays, picking, all three gizmo drags, undo, saving and reopening, model
 export, both scripting languages end to end (every call in the Luau library, the
 scheduler, the watchdog, the sandbox, Wren's modules, and both together in one
@@ -62,7 +62,7 @@ the screen GUI and chat, pictures and sounds (through a recorder, so nothing pla
 aloud), MeshParts and their collision, what characters wear, modules, remotes, raycasts and leaderstats, NPCs, the sample game, and two clients playing together over loopback.
 
 `--only <suite>` runs one suite (Adventure, Remotes, Wardrobe, Mesh, Audio, Hud, LAN,
-Gui, Player or Script) while you work on it; the whole suite still has to pass.
+Gui, Player, Script, Analysis, DirectionalLights, Solids, WorldGui or ViewportFrame) while you work on it; the whole suite still has to pass.
 
 ## The home page
 
@@ -75,7 +75,8 @@ with a button to go back to the place you were in.
   animation to learn from), **Hills and Lake** (terrain with a river and lakes) or
   **Empty**. Each opens as a new, untitled place with the
   default HUD and the Utils module.
-- **Sample games**: Adventure Island, Nightfall and Mega Obby, to play or take apart.
+- **Sample games**: Adventure Island, Nightfall, Mega Obby and Crash Circuit, to play or
+  take apart.
 - **Recent**: the places you've opened or saved, newest first, with a picture of each.
   Right-click one to show it in Finder, or **Clear Recents**. **Open…** finds any other.
 
@@ -247,6 +248,28 @@ LocalScript that draws the screen.
 
 `swift run StudioApp --render-obby out.png [start|world2|…|world6|finish] [ray]` draws it.
 
+
+## The fourth sample game: Crash Circuit
+
+A three-lap race round an oval, against the clock and three rivals. Open it from the
+home page in Studio, or the game list in the client.
+
+- **The start:** four cars on the grid and a countdown on the start arch (a SurfaceGui on
+  the arch itself). Nobody moves until Go.
+- **Driving:** W and S drive and brake, A and D steer, T puts your car back on the track
+  at the last gate you passed, Space gets out. The cars are the Toolbox's, and their
+  headlights are SpotLights.
+- **Laps:** eight gates round the track count only in order, so a short cut doesn't.
+- **Crashes:** hit a wall or another car hard enough and your car takes damage: panels
+  and wheels come off, sparks fly and it smokes. Recover it (T) and it's whole again, its
+  own pieces back in place.
+- **The screen:** your lap, your car's health and speed, the standings (Tab), and your
+  car in a little 3D preview (a ViewportFrame). Click a rival to see theirs.
+- **Rivals:** cars nobody drives are NPCs, following the track round.
+
+In a network game the host runs the race: every player drives their own car, and
+everyone sees the same countdown, laps, crashes and results. Someone joining mid-race
+gets the race as it stands.
 ## The player character
 
 The player works the way it does in Roblox: the character has a **Humanoid**, and
@@ -357,10 +380,10 @@ works too. Luau only.
 Click **Lighting** in the Explorer (the sun or moon, with the time beside it). It has two
 technologies:
 
-- **Conventional** — the sun casts soft shadows from a shadow map; parts can hold point
+- **Conventional** — the sun casts soft shadows from a shadow map; parts can hold point, spot and surface
   lights; fog and a sky that follows the time of day. Fast on any Mac.
 - **Ray Traced** — the GPU traces rays for each pixel: soft shadows whose edges blur
-  with distance, shadows from point lights, **ambient occlusion** (corners and gaps
+  with distance, shadows from local lights, **ambient occlusion** (corners and gaps
   darken) and **reflections** on metal and plastic that show the parts around them.
   **Quality** sets how many rays (more rays, less grain). Needs a Mac whose GPU can
   ray trace; others fall back to conventional, and say so.
@@ -370,8 +393,12 @@ at 6, sets at 18; the moon lights the night), GeographicLatitude, Brightness,
 ExposureCompensation, Ambient, OutdoorAmbient, ColorShift_Top, GlobalShadows,
 ShadowSoftness, FogColor/FogStart/FogEnd, and the Sky. They save with the scene.
 
-A part gets a **PointLight** from its Properties (Light › PointLight): colour,
-brightness, range, and — ray traced — shadows. The starter scene's orb has one.
+A part can hold several **PointLight**, **SpotLight**, and **SurfaceLight** children.
+Insert and select them in the Explorer, then set their name, colour, brightness,
+range, enabled state and shadows in Properties. A spot emits a cone from the chosen
+face; a surface light emits across that face's rectangle. **Face** follows the part's
+rotation and **Angle** is the full emission angle, from 0 to 180 degrees. Local-light
+shadows require ray tracing. The starter scene's orb has a point light.
 
 ```lua
 local Lighting = game:GetService("Lighting")
@@ -382,6 +409,13 @@ end)
 local lamp = Instance.new("PointLight", workspace.Tower)
 lamp.Color = Color3.fromRGB(255, 180, 90)
 lamp.Range = 16
+
+local beam = Instance.new("SpotLight", workspace.Tower)
+beam.Name = "Door light"
+beam.Face = Enum.NormalId.Front
+beam.Angle = 55
+beam.Range = 24
+beam.Brightness = 2
 ```
 
 Scripts can set every Lighting property (including `Technology =
@@ -940,6 +974,55 @@ TextChatService.TextChannels.RBXGeneral:SendAsync("hello!")
 Messages go to the host, which passes them to everyone else under the name each player
 joined with; a message is at most 200 characters.
 
+## GUI on parts and 3D previews
+
+A **SurfaceGui** places the normal GUI widgets on a part's face. Set `Adornee` or
+parent it to the part, choose `Face`, then put Frames, labels, buttons, text boxes,
+images and layouts inside it. The canvas turns with the part and is hidden by world
+geometry unless `AlwaysOnTop` is enabled. The pointer maps back into the surface for
+clicks, scrolling and typing.
+
+`CanvasSize` is a **Vector2**, in pixels. `SizingMode =
+Enum.SurfaceGuiSizingMode.PixelsPerStud` instead derives it from the part's face and
+`PixelsPerStud`; `FixedSize` uses `CanvasSize`. `LightInfluence`, `Brightness`,
+`ZOffset`, `MaxDistance`, and `Enabled` control its appearance.
+
+```lua
+local sign = Instance.new("SurfaceGui", workspace.Sign)
+sign.Face = Enum.NormalId.Front
+sign.CanvasSize = Vector2.new(600, 240)
+local label = Instance.new("TextLabel", sign)
+label.Size = UDim2.fromScale(1, 1)
+label.Text = "Welcome!"
+label.TextScaled = true
+```
+
+A **ViewportFrame** draws a small 3D scene inside a GUI rectangle. Give it a
+`CurrentCamera`, and parent the preview's Parts, MeshParts or Models to the frame.
+The camera has `CFrame`, `Focus`, and `FieldOfView`. Preview objects use the normal
+Instance hierarchy, but never enter world physics, picking, navigation, or touches.
+Moving one back to Workspace restores ordinary world ownership. A nil
+`CurrentCamera` leaves the preview empty.
+
+```lua
+local screen = Instance.new("ScreenGui", game:GetService("Players").LocalPlayer.PlayerGui)
+local view = Instance.new("ViewportFrame", screen)
+view.Size = UDim2.fromOffset(300, 220)
+view.Ambient = Color3.fromRGB(100, 100, 100)
+local camera = Instance.new("Camera", view)
+camera.CFrame = CFrame.lookAt(Vector3.new(0, 2, 7), Vector3.zero)
+camera.FieldOfView = 50
+view.CurrentCamera = camera
+local item = Instance.new("Part")
+item.Position = Vector3.zero
+item.Parent = view
+```
+
+`Ambient`, `LightColor`, and `LightDirection` light the preview; `ImageColor3` and
+`ImageTransparency` tint and fade it. Each player's GUI and preview camera stay
+local. Authored templates and their supported preview contents save with the place
+and are copied for each player. These APIs are Luau-only.
+
 ## Clicking things: ClickDetector and the Mouse
 
 The mouse works as in Roblox: in third person the pointer is free — point at things and
@@ -964,7 +1047,21 @@ detector.Parent = door
 ClickDetectors also have `MouseHoverEnter` and `MouseHoverLeave`. `Player:GetMouse()`
 gives `Hit` (a CFrame where the mouse points), `Target` (the part under it), `X`, `Y`,
 `ViewSizeX/Y`, `Button1Down/Up` and `Button2Down/Up`, and a Tool's `Equipped` hands it
-over. `UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter` holds the pointer
+over. `Move` fires when the pointer moves (including dragging and captured movement).
+`UnitRay` is a Ray through that pointer position. `TargetFilter` accepts an Instance
+or nil and excludes it and its descendants from both Mouse and ClickDetector targeting.
+Each player's filter and cursor are independent.
+
+`Icon` accepts an imported `studio://Picture` or a built-in cursor:
+`builtin://arrow`, `builtin://hand`, `builtin://crosshair`, `builtin://text`,
+`builtin://resize`, `builtin://resizehorizontal`, or `builtin://resizevertical`.
+An empty or missing image uses the arrow. Capture still hides the cursor; leaving the
+viewport, changing tabs or stopping Play restores it. There are no remote cursor downloads.
+
+`Ray.new(origin, direction)` provides `Origin`, `Direction`, `Unit`,
+`ClosestPoint(point)`, and `Distance(point)`. A zero direction stays finite.
+
+`UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter` holds the pointer
 in the middle (as in first person); `UserInputService:GetMouseLocation()` says where it is.
 
 ## Tools
@@ -1288,6 +1385,46 @@ print(statue.ClassName, statue:IsA("BasePart")) -- MeshPart true
 `MeshSize` is the model's own size, read-only. A saved Model takes its MeshParts' 3D
 models and pictures with it, and joined players get them with the world. Luau only.
 
+## Solid modeling: Union, Negate and Separate
+
+Select parts and use **Model › Solid modeling › Union** to combine their actual
+geometry. **Negate** marks a selected part as a cutter; select it with positive
+parts and Union subtracts it. Cutters have a distinct editor appearance and never
+act as game colliders. **Separate** restores a union's immediate source objects,
+including scripts and descendants; nested unions can be separated again. Moving,
+rotating or scaling a union carries those saved source poses with it. Each editor
+action is one undo step.
+
+The result is a **UnionOperation**, with exact triangle picking and a default
+Precise collision shape. An anchored doorway cut through a wall remains open;
+unanchored unions use their convex hull, like moving MeshParts. Source face colours
+are kept, or `UsePartColor` replaces them with the result's Color. Source textures
+and materials are restored on separation, but are not baked into the union faces.
+
+```lua
+-- In a server Script. These calls keep their source parts.
+local wall = workspace.Wall
+local doorway = workspace.DoorwayCutter
+local result = wall:SubtractAsync({doorway}, Enum.CollisionFidelity.PreciseConvexDecomposition)
+result.Name = "Wall with doorway"
+result.Anchored = true
+wall:Destroy()
+doorway:Destroy()
+```
+
+`UnionAsync(parts, collisionFidelity?)` and `SubtractAsync(parts,
+collisionFidelity?)` use the same geometry engine and return a new UnionOperation.
+They run on the host; LocalScripts are refused. `UnionOperation` and
+`NegateOperation` report `IsA("PartOperation")` and expose the usual BasePart APIs.
+
+Closed primitive shapes and outward, closed manifold MeshParts are supported.
+Open or non-manifold inputs, empty results and operations beyond the work budget
+produce an error without changing the source objects or undo history. Limits are
+32 operands, 20,000 input triangles per part, and 40,000 output triangles, plus a
+bounded splitting and stitching budget. Editor work runs in the background and
+commits only if its input scene still matches. Saved places and models retain both
+the result and its source tree; joined players receive the same geometry. Luau-only.
+
 ## Exploring a scene (the client)
 
 | Action | Input |
@@ -1441,7 +1578,7 @@ Every one runs cleanly as it is, and so does every line it suggests trying.
 | Welds and joints | `WeldConstraint` (`Part0`, `Part1`, `Enabled`, `Active`), `HingeConstraint` and `PrismaticConstraint` (`ActuatorType`, `AngularVelocity`/`Velocity`, `MotorMaxTorque`/`MotorMaxForce`, `TargetAngle`/`TargetPosition`, `AngularSpeed`/`Speed`, `Servo…`, `LimitsEnabled`, limits, `CurrentAngle`/`CurrentPosition`), `BallSocketConstraint`, `RopeConstraint` (`Length`), `SpringConstraint` (`FreeLength`, `Stiffness`, `Damping`), `AlignPosition` (`Mode`, `Position`, `MaxForce`, `MaxVelocity`, `Responsiveness`, `RigidityEnabled`), `VectorForce` (`Force`, `RelativeTo`, `ApplyAtCenterOfMass`), `NoCollisionConstraint`, `Attachment` (`Position`, `Axis`, `WorldPosition`, `CFrame`), `Enum.ActuatorType`, `Enum.PositionAlignmentMode`, `Enum.ActuatorRelativeTo` |
 | The tree | `Model` (`PrimaryPart`, `:GetPivot`, `:PivotTo`, `:MoveTo`, `:GetBoundingBox`), `Folder`; on everything: `:GetChildren`, `:GetDescendants`, `:FindFirstChild(name, recursive)`, `:WaitForChild`, `:FindFirstChildOfClass`, `:IsDescendantOf`, `:FindFirstAncestor…`, `:GetFullName`, `:ClearAllChildren`, children by name (`workspace.Car.Seat`) |
 | `CFrame` | `new` (every form), `lookAt`, `Angles`, `fromEulerAnglesXYZ/YXZ`, `fromOrientation`, `fromAxisAngle`, `fromMatrix`, `identity`; `*`, `+`, `-`; `Position`, `LookVector`, `RightVector`, `UpVector`, `Rotation`; `:Inverse`, `:Lerp`, `:ToWorldSpace`, `:ToObjectSpace`, `:PointTo…Space`, `:VectorTo…Space`, `:GetComponents`, `:ToEulerAnglesXYZ/YXZ`, `:ToOrientation`, `:ToAxisAngle`, `:FuzzyEq` |
-| `Instance.new` | `"Part"`, `"WedgePart"`, `"MeshPart"`, `"Model"`, `"Folder"`, `"PointLight"`, `"Animation"`, `"Attachment"`, `"WeldConstraint"` and the five joint classes, `"IntValue"`, `"NumberValue"`, `"StringValue"`, `"BoolValue"`, `"RemoteEvent"`, `"RemoteFunction"`, `"Accessory"`, `"Shirt"`, `"Pants"`, `"HumanoidDescription"`, `"Sound"`, the GUI classes — with Roblox's defaults |
+| `Instance.new` | `"Part"`, `"WedgePart"`, `"MeshPart"`, `"Model"`, `"Folder"`, `"PointLight"`, `"SpotLight"`, `"SurfaceLight"`, `"Camera"`, `"Animation"`, `"Attachment"`, `"WeldConstraint"` and the five joint classes, `"IntValue"`, `"NumberValue"`, `"StringValue"`, `"BoolValue"`, `"RemoteEvent"`, `"RemoteFunction"`, `"Accessory"`, `"Shirt"`, `"Pants"`, `"HumanoidDescription"`, `"Sound"`, the GUI classes — with Roblox's defaults |
 | Working together | `require` and ModuleScripts; `ReplicatedStorage`, `ServerStorage`, `ServerScriptService`; `RemoteEvent`, `UnreliableRemoteEvent`, `RemoteFunction`, `BindableEvent`, `BindableFunction`; Value objects; `RunService:IsServer/IsClient`; `workspace:Raycast` and `RaycastParams` (see *Scripts working together*) |
 | `Vector3`, `Color3` | the Roblox constructors, properties, operators and methods — float32, as in Roblox |
 | `Enum` | `Material`, `PartType`, `EasingStyle`, `EasingDirection`, `PlaybackState`, `KeyCode`, `UserInputType`, `UserInputState`, `HumanoidStateType`, `CameraMode`, `TextXAlignment` |
@@ -1450,7 +1587,7 @@ Every one runs cleanly as it is, and so does every line it suggests trying.
 | The player | `Players.LocalPlayer` — `Character`, `CharacterAdded`, `CharacterRemoving`, `:LoadCharacter()`, `CameraMode`, `CameraMin/MaxZoomDistance`; `Players.RespawnTime`, `Players:GetPlayerFromCharacter` |
 | `Humanoid` | `WalkSpeed`, `JumpPower`, `JumpHeight`, `UseJumpPower`, `Health`, `MaxHealth`, `MaxSlopeAngle`, `AutoRotate`, `Jump`, `MoveDirection`; `:Move`, `:MoveTo`, `:TakeDamage`, `:GetState`, `:ChangeState`; `Died`, `HealthChanged`, `StateChanged`, `Jumping`, `FreeFalling`, `Running`, `MoveToFinished`, `Touched(part, bodyPart)` |
 | Character | `HumanoidRootPart` (`Position`, `AssemblyLinearVelocity`), `Head`, `Torso`, `Left Arm`, … (`Color`, `Transparency`, `Touched`, `TouchEnded`), `:FindFirstChild`, `:WaitForChild`, `:MoveTo` |
-| Lighting | `Lighting` (ClockTime, TimeOfDay, Brightness, Ambient, OutdoorAmbient, ColorShift_Top, GlobalShadows, ShadowSoftness, ExposureCompensation, Fog*, GeographicLatitude, Technology, `:GetSunDirection()`), `PointLight`, `Enum.Technology` |
+| Lighting | `Lighting` (ClockTime, TimeOfDay, Brightness, Ambient, OutdoorAmbient, ColorShift_Top, GlobalShadows, ShadowSoftness, ExposureCompensation, Fog*, GeographicLatitude, Technology, `:GetSunDirection()`), `PointLight`, `SpotLight`, `SurfaceLight`, `Enum.Technology` |
 | Animations | `Animations` (made in the Animation Editor), `Animator:LoadAnimation`, `AnimationTrack`, `Enum.AnimationPriority` |
 | `UserInputService` | `:IsKeyDown`, `:GetKeysPressed`, `InputBegan`, `InputEnded` with `InputObject`s |
 | `task` | `wait`, `spawn`, `delay`, `defer` (later in the same frame, once the code running now is done), `cancel` (wherever the thread waits, events included), `synchronize`/`desynchronize` (which carry straight on: there are no Actors, so everything runs in series) — plus the older `wait()`, `spawn()` and `delay()` as Roblox still runs them (never under a thirtieth of a second; `spawn` a frame later) |
@@ -1467,7 +1604,8 @@ Studio extensions, beyond Roblox: `Shaders`, `Screen`, `Player` (= `LocalPlayer`
 thing straight into the workspace rather than leaving it unparented (setting `Parent`
 afterwards moves it); setting `Parent = nil` destroys;
 `Vector3.zero.Unit` is zero rather than NaN, because a NaN position makes a part
-silently vanish; type annotations are accepted but not type-checked.
+silently vanish. The editor checks Luau types; annotations remain erased at runtime
+and diagnostics do not stop Play.
 
 **Errors are meant to teach.** They name the script and your own line —
 `Spinner:12: Unable to assign property Position. Vector3 expected, got number` — with
@@ -1965,6 +2103,38 @@ What a module hands back is read from its code, without running it:
 
 A module built some other way just isn't listed.
 
+### Luau type diagnostics
+
+After a short typing pause, the editor runs Luau 0.640's official type checker on a
+background worker. Errors have dotted underlines and appear in the issue list below
+the code; click one to reveal its line, including an error in a required ModuleScript.
+The check never executes the script, changes text undo, or prevents Play.
+
+Use `--!strict` for inferred argument, return, table and optional-value checks.
+`--!nonstrict` is the default and still checks explicit annotations. `--!nocheck`
+disables type diagnostics while syntax errors remain visible.
+
+```lua
+--!strict
+local count: number = "three" -- the editor reports string where number was expected
+local part = Instance.new("Part")
+part.Anchored = true
+part.Position = Vector3.new(0, 4, 0)
+```
+
+The checker knows the implemented Studio classes, properties, methods, signals and
+service return types, the script's host, and scene ModuleScripts reached through
+`script.Parent`, `game:GetService`, child access, `WaitForChild` and local aliases.
+Editing a required module refreshes dependent diagnostics. Computed child names and
+some variadic APIs remain dynamic. Completion remains available independently.
+
+Diagnostics belong to the editor session and are neither saved nor sent over LAN.
+Old background results are discarded when text changes or a tab closes. Analysis is
+bounded to 256 KB per source, 1 MB of sources and 128 modules per scene, 4,096 scene
+nodes, 100 reported errors and a time budget per checked module. Oversized or overly
+complex input produces a diagnostic. No separate language server is required.
+Wren and Metal keep their existing tooling.
+
 ### Debugging: breakpoints, stepping, variables and watches
 
 **Click beside a line number** in a Luau script for a breakpoint (a red tag), or press
@@ -2185,7 +2355,11 @@ Sources/StudioKit/
   Scripting/WrenInterpreter.swift  the Wren VM wrapper
   Scripting/WrenModules.swift      Wren's `studio` and `math` modules
   Scripting/ScriptRuntime.swift    runs both VMs, the host calls they share, errors
-  Editor/                   lexers and completion for Luau, Wren and Metal
+  Editor/                   lexers/completion for all languages, official Luau analysis
+  Play/ViewportFrame.swift  isolated preview worlds and cameras
+  Render/WorldGuiRenderer.swift world SurfaceGui projection
+  Render/ViewportRenderer.swift 3D GUI previews
+  Model/SolidGeometry.swift bounded boolean geometry and saved source operations
   Scripting/ScriptConsole.swift    buffered output for the console, and LogService
   Render/Camera.swift       orbit + fly camera, screen→world picking rays
   Render/Mesh.swift         procedural block/sphere/cylinder/wedge/gizmo geometry

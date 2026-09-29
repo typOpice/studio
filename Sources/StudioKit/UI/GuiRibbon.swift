@@ -8,7 +8,7 @@ struct GuiRibbonGroups: View {
     @ObservedObject var editor: GuiEditController
 
     private static let bigInserts: [GuiObject.Kind] = [.screenGui, .frame, .textLabel, .textButton, .imageLabel]
-    private static let smallInserts: [GuiObject.Kind] = [.textBox, .imageButton, .scrollingFrame]
+    private static let smallInserts: [GuiObject.Kind] = [.textBox, .imageButton, .scrollingFrame, .surfaceGui]
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {

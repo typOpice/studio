@@ -11,7 +11,7 @@ enum LAN {
     /// The Bonjour service type. It must also be in each app's `NSBonjourServices`.
     static let serviceType = "_studioplay._tcp"
     /// Bumped whenever the messages change; hosts refuse players on another version.
-    static let protocolVersion = 14
+    static let protocolVersion = 15
     /// How often each player says where they are.
     static let updatesPerSecond: Double = 20
     /// A scene is one message; this is far above any real one.
@@ -63,13 +63,16 @@ struct SceneDelta: Codable, Equatable {
     var sounds: [SceneSound]?
     /// Folders, Value objects (leaderstats among them) and remotes, when any changes.
     var dataObjects: [DataObject]?
+    /// Authored and server-created world canvases; each player owns runtime handles.
+    var starterGui: [StarterGuiObject]?
+    var guiScripts: [ScriptObject]?
     /// The terrain's changed chunks, when any changes.
     var terrain: TerrainPatch?
 
     var isEmpty: Bool {
         parts.isEmpty && removed.isEmpty && groups == nil && lighting == nil && shaders == nil
             && attachments == nil && constraints == nil && screenShaders == nil && sounds == nil && dataObjects == nil
-            && terrain == nil
+            && terrain == nil && starterGui == nil && guiScripts == nil
     }
 
     /// From what was last sent to how things are now. Applying it is idempotent, so a
@@ -88,6 +91,13 @@ struct SceneDelta: Codable, Equatable {
         if now.screenShaderIDs != sent.screenShaderIDs { delta.screenShaders = now.screenShaderIDs }
         if now.sounds != sent.sounds { delta.sounds = now.sounds }
         if now.dataObjects != sent.dataObjects { delta.dataObjects = now.dataObjects }
+        if now.starterGui != sent.starterGui { delta.starterGui = now.starterGui }
+        if now.scripts.filter({ $0.host == .starterGui }) != sent.scripts.filter({ $0.host == .starterGui }) {
+            delta.guiScripts = now.scripts.filter { $0.host == .starterGui }.map {
+                var script = $0; script.breakpoints = []; script.breakpointConditions = [:]; script.breakpointLogs = [:]
+                return script
+            }
+        }
         delta.terrain = TerrainPatch.between(sent.terrain, now.terrain)
         return delta
     }
@@ -118,6 +128,8 @@ struct SceneDelta: Codable, Equatable {
         if let sounds { model.sounds = sounds + model.sounds.filter(\.local) }
         // The same for data objects: a joined player's LocalScripts' own stay.
         if let dataObjects { model.dataObjects = dataObjects + model.dataObjects.filter(\.local) }
+        if let starterGui { model.starterGui = starterGui }
+        if let guiScripts { model.scripts = model.scripts.filter { $0.host != .starterGui } + guiScripts }
         if let terrain {
             var copy = model.terrain
             terrain.apply(to: &copy)

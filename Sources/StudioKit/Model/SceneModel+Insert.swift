@@ -15,6 +15,7 @@ extension SceneModel {
         for original in incoming.parts { remapped[original.id] = UUID() }
         for original in incoming.groups { remapped[original.id] = UUID() }
         for original in incoming.attachments { remapped[original.id] = UUID() }
+        for original in incoming.starterGui { remapped[original.id] = UUID() }
         var left: [String] = []
 
         commit("Inserted \(file.name)") {
@@ -67,11 +68,13 @@ extension SceneModel {
             for original in incoming.parts {
                 var part = original
                 part.id = remapped[original.id]!
+                part.lights = part.lights.map { var light = $0; light.id = UUID(); return light }
                 part.parentID = original.parentID.flatMap { remapped[$0] }
                 // Loose parts get names of their own; inside a Model they keep theirs, as in
                 // Roblox, so the Model's scripts still find them.
                 if part.parentID == nil { part.name = uniqueName(base: original.name) }
                 part.position += offset
+                part.solid = part.solid?.reidentified()
                 // A MeshPart shows the model and picture it brought, wherever they landed.
                 if let mesh = original.mesh {
                     if let old = mesh.asset, let now = assetID[old] {
@@ -114,6 +117,20 @@ extension SceneModel {
                     }
                 }
                 scripts.append(script)
+            }
+
+            for original in incoming.starterGui {
+                var copy = original
+                copy.id = remapped[original.id]!
+                copy.parentID = original.parentID.flatMap { remapped[$0] }
+                copy.worldParent = original.worldParent.flatMap { remapped[$0] }
+                copy.viewportContent = copy.viewportContent?.reidentified()
+                if let token = copy.properties["adornee"]?.asString, token.hasPrefix("p:"),
+                   let old = UUID(uuidString: String(token.dropFirst(2))), let target = remapped[old] {
+                    copy.properties["adornee"] = .string("p:\(target)")
+                }
+                if let image = copy.properties["image"]?.asString, let now = renamed[image] { copy.properties["image"] = .string(now) }
+                starterGui.append(copy)
             }
 
             selection = newSelection

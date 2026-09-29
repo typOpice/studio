@@ -525,6 +525,28 @@ PLAN.txt has the detailed plan for the next sessions (multiplayer gaps, more GUI
    Tested alone and with a host and a joined player (the joined player sees the host walk with the place's own walk).
    New file: AnimateSelfTest.swift.
 
+The next six were built by Codex (another AI assistant) in a copy of the project on the Desktop, then checked, finished and committed by Claude. Claude fixed one bug Codex left: in a network game, a player's own GUI object under a sign's shared GUI outlived the server destroying its parent.
+
+54. The mouse: Mouse.Move, UnitRay, TargetFilter and cursor icons, 2026-09-28.
+   Player:GetMouse() now does more of what Roblox games expect: Move fires as the mouse moves, UnitRay is the ray from the camera through the pointer (there's a Ray type now), and TargetFilter makes the mouse (and clicks) look past something and everything inside it.
+   Mouse.Icon changes the pointer: a picture imported into the place, or a built-in arrow, hand, crosshair, text or resize cursor.
+
+55. SpotLights and SurfaceLights, 2026-09-28.
+   Parts can hold SpotLights (a cone, like a torch or headlight) and SurfaceLights (light from one face, like a ceiling panel) as well as PointLights, and more than one of each. Add them in Studio or with Instance.new. They work with both conventional and ray-traced lighting, and joined players see them.
+
+56. Unions: Union, Negate and Separate, 2026-09-28.
+   Model > Solid modeling: select parts and Union them into one shape. Negate a part to make it a cutter, and Union cuts it out: a doorway through a wall, say. Separate takes a union apart again, scripts and all. Scripts can do it too with UnionAsync and SubtractAsync.
+
+57. GUI on parts, and 3D previews in GUIs, 2026-09-28.
+   A SurfaceGui puts buttons, labels and pictures on a part's face: signs, scoreboards, screens you can click. A ViewportFrame shows 3D objects inside a GUI, seen through their own Camera: an item preview in a shop, say.
+
+58. Luau type checking in the editor, 2026-09-28.
+   As you type, the script editor checks your Luau with Roblox's own type checker and underlines mistakes, listed below the code. Click one to go to it. Put --!strict at the top for the strictest checks. It never stops a game from running.
+
+59. The fourth sample game: Crash Circuit, 2026-09-28.
+   A three-lap race round an oval against three NPC rivals, on the home page and in the client's game list. Cars break when they crash (panels and wheels come off), T recovers yours, and the screen shows your lap, your car's health and a 3D preview of it. It uses all of the above: headlights, a SurfaceGui countdown on the start arch, a ViewportFrame car preview, unions in the scenery, the mouse to inspect rivals, and type-checked scripts.
+   Tested alone and with a host and a joined player (everyone sees the same race; each drives their own car).
+
 THINGS TO KNOW
 
 To run two clients on one Mac, in Terminal go to the folder with the app and run twice:  open -n StudioClient.app
@@ -533,4 +555,4 @@ AGENTS.md now says every new feature must be tested in multiplayer. LANSelfTest.
 
 Studio.app.zip and StudioClient.app.zip in the project folder are the latest builds.
 If a check fails after a change, the output of the self test says which one and why.
-The project folder is a scratch workspace of the Claude app. Move it somewhere you choose if you want to keep it.
+The project folder is Studio on the Desktop.

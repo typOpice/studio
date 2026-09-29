@@ -17,7 +17,7 @@ also write Metal shaders for surfaces and full-screen effects.
 | `StudioKit` | library | Everything: model, renderer, physics, scripting, shaders, both UIs |
 | `StudioApp` | executable | 4 lines — calls `StudioEditor.run()` |
 | `StudioClient` | executable | 4 lines — calls `StudioClientApp.run()` |
-| `CLuau` | C++ target | Luau 0.640 (VM, Compiler, Ast) verbatim, plus our C shim |
+| `CLuau` | C++ target | Luau 0.640 (VM, Compiler, Ast, Analysis and support) verbatim, plus our C shims |
 | `CWren` | C target | Wren 0.4.0, verbatim (MIT) |
 
 The executables are deliberately trivial so both apps share one module and nothing
@@ -53,7 +53,7 @@ such as `"part.get"` finds both sides of the bridge — and follow it.
 
 ```bash
 swift build                          # build everything (first build compiles Luau: slow)
-swift run StudioApp --selftest       # 2993 checks — THE test suite, ~5 minutes
+swift run StudioApp --selftest       # THE full test suite, ~5 minutes
 swift run StudioApp --selftest --only Editor   # one suite while you work (see SelfTest.swift)
 swift run StudioApp                  # run the editor
 swift run StudioClient [scene.json]  # run the client
@@ -156,6 +156,7 @@ listed in §9.
 | `TerrainSelfTest.swift` | Terrain: FillBall (full, part-full, empty), Air carving, a turned FillBlock, FillCylinder, FillWedge's slope, FillRegion, ReplaceMaterial, the seven brushes, Generate (materials, the same from a seed), saved small and read back, a place without it saving as before; meshes (a flat top at its height, whole across chunks, Precise collision parts, water at its level, only the changed chunk remade, the chunks round a corner edit); played on (standing on it and a hill, swimming with no floor at 0, a block landing, Raycast hitting it as workspace.Terrain with its material and normal, its water unless IgnoreWater, filtered out, a path round a hill); from Luau (workspace.Terrain found by name and class, every Fill, Region3, ReplaceMaterial, Read/WriteVoxels, material colours, water, cells, Clouds in it, five wrong values refused); drawn; painted with a brush in Studio (a stroke one undo step, the preview, a join tool putting it down); the Hills and Lake template (a player lands on it); the README's island as written; a host's terrain and a script's edits in a joined player's game |
 | `ForceSelfTest.swift` | AlignPosition, VectorForce and NoCollisionConstraint: a Force of the block's weight holding it up (none, it falls; twice, it rises), RelativeTo Attachment0 turning with the part, off the middle turning it unless ApplyAtCenterOfMass; pulled to Attachment1 and held against gravity, not with too little MaxForce, no faster than MaxVelocity, at once with RigidityEnabled and slower at Responsiveness 5, OneAttachment to Position, following a moving target; falling through a shelf it mustn't collide with and resting on it when disabled; Studio (the Align Position and No Collision tools, Add VectorForce's hover, undo, saved with MaxVelocity's no-limit, a hinge saving as before); from Luau (all three, their enums, five wrong values refused, math.huge); the README's lift as written; a host's AlignPosition lifting a crate in a joined player's game |
 | `AnimateSelfTest.swift` | Animate: the default core script loading the built-in animations as tracks (idle standing still, Walk swinging the legs, a jump's arms up); a place's own Animate replacing it (an empty or disabled one leaving the character still, a copy with its own walk playing it, Edit a Copy walking as the default does); a built-in track a script loads (Core, looped), plays at Action priority over the rest and stops, firing Ended once faded; Humanoid.Climbing and Swimming; a joined player seeing the host walk with the place's own walk |
+| `RacingSelfTest.swift` | Crash Circuit: four complete cars, eight ordered gates and a solid start arch, the rules and dashboard scripts, saved and listed in both catalogs; a race alone (countdown holding the cars until Go, gates counted in order, laps, an NPC going round), a wall crash and a car-to-car crash breaking parts off, recovery and debris cleanup; a real loopback race (the countdown and results shared, each player driving only their own car, a late joiner getting the race); a soak without growth |
 | `ToolboxSelfTest.swift` | The Toolbox: each of its eight models going in as a Model in front of Studio's camera, standing on the Platform, selected, one step to undo; the car, boat, door and windmill bringing their scripts; a picture of each, drawn by one renderer; the boat floating high on a pond, driving forward and turning right at about TurnSpeed; the door shut in its frame, swinging open when clicked and shut again; the windmill's sails turning at 1.2 rad/s in Run mode; the campfire's fire, smoke and shadowing light, the lamp's light, the tree, the rig's Humanoid; a joined player's click opening the host's door, which they see open |
 | `CarSelfTest.swift` | Cars: Insert › Car's Model (a body, a VehicleSeat, four wheels, two knuckles; motors, servos, axles, welds and no-collisions; its Drive script; on the ground where it was put), a second car keeping its parts' names, one undo step each, a loose part still renamed; driving with the real ControlScript (W to MaxSpeed with the driver riding along, the speedometer, stopping when let go, S backwards, D and A turning, Space getting out and the controls going back to 0); VehicleSeat from Luau (its class, properties and defaults, whole-number Throttle, wrong values refused, a Part having no Throttle, a script driving a car nobody's in, in Run mode); saving (and a Seat from before); the README's circling car as written; a joined player driving the host's car (their keys reaching the host's script, the car going and them riding in it, stopping when they get out) |
 | `FloatSelfTest.swift` | Floating: in a water part, plastic about 0.7 under and still, wood about 0.35 under, metal on the bottom, staying where it fell; a welded wood-and-metal raft floating on their weight together; a plank dropped on its side settling flat; a crate sent skimming slowed by the water; nothing afloat on dry land; a crate and a log in the Terrain's water; a script turning a crate to metal (sinks) and to wood (back up); Adventure Island's driftwood and beach ball afloat on the lake; a host's crate floating in its pond in a joined player's game |
@@ -167,6 +168,11 @@ listed in §9.
 | `LANSelfTest.swift` | Animations across players (a joiner's own seen by the host; a host script playing one on a joiner, IsPlaying, Stopped); host scripts reading a joined player's velocity and MoveDirection, and reading back at once what they set on them; welds, joints and all sixteen shader parameters reaching joiners; chat (the host relays under the joined name, not back to the sender, blank dropped; the ChatScript host ↔ joiner with join/leave lines); host scripts seeing a joined player (PlayerAdded, GetPlayers, touches, kill brick, coin, speed pad, teleport, Died, respawn, PlayerRemoving); one world (host-run parts, scripts, lighting and new parts reaching the joiner; scene scripts only on the host; parts landing on joiners); players colliding unless the map says not; players seeing each other (place, colours, names, movement, death, leaving); LAN message framing, games from TXT records, a real host and players over loopback TCP (welcome with the scene, player lists, leaving, version refusal), the player profile (saved, `player.Name`, colours), the client's menu/play/host/join flow |
 | `ScriptTemplateSelfTest.swift` | The code new scripts start with: one per place (part, Model, Folder, Script Service, both StarterPlayer folders, Wren), each run where it was made — output, a debounced touch, keys, death and respawn — and again with every suggested line uncommented |
 | `DocumentTabsSelfTest.swift` | The tabs: opening, closing, cycling, following deletes/undo/new scenes, Play; scene undo keeping script text; line numbers; Output error links; ⌘Z/⌘A/⌘⌫/⌘F going to the code editor; each tab's text view surviving a switch (hosted in a real window); the hidden viewport — no keys, no drawing, but play and shader compiles keep ticking |
+| `LuauAnalysisSelfTest.swift` | Official Luau Frontend diagnostics: annotations, arguments/returns, optional values, tables, generics, modes and syntax, typed Studio values/methods/signals, scene hosts, module dependencies/edits/cycles/aliases, Unicode ranges, source/parser budgets, completion-definition parity, debounce and stale/closed-tab results, mounted editor typing/undo/dependent refresh, and annotated server/client scripts exchanging remote arguments over loopback without analysis changing the network scene. |
+| `DirectionalLightSelfTest.swift` | Identified PointLight/SpotLight/SurfaceLight children, multiple siblings, typed properties and parenting, stale wrappers, stable legacy migration, clone/model IDs, editor selection/undo/delete, conventional and ray-traced pixels, and host/join light state. |
+| `SolidSelfTest.swift` | Boolean geometry and volumes, outward manifold output, holes and triangle picking, editor Union/Negate/Separate and undo, retained operands and transformed separation, scripting and refusals, saving/model insertion, collision/rendering, and host/join operation geometry. |
+| `WorldGuiSelfTest.swift` | SurfaceGui face transforms and canvas sizing, all six faces, rotated ray input, depth/AlwaysOnTop, layout and pointer behavior, persistence/clone/model transfer, and local/shared surface state over loopback. |
+| `ViewportFrameSelfTest.swift` | Camera/ViewportFrame APIs, isolated preview ownership and geometry, camera validation, rendering/clipping/tint, template persistence and copying, clone/destroy/resource lifetime, and independent previews for host and joiner. |
 | `SyntaxSelfTest.swift` | Luau, Wren and Metal lexers, and all three completion engines (Luau's order: case typed, locals, keywords, globals; nothing while naming something; a local not on its own line); modules and the scene: reading a module (values, functions with parameters, tables, methods, `return { … }`, a constructor's objects, a nested return), `require(` listing every ModuleScript as its path (script.Parent, GetService, the script's own local, no second `)`), places listing what's in them (and only modules inside `require(`), `WaitForChild("…")` names, script.Parent, a required module's members, tables, types, methods and objects; built from a SceneModel (a part's module, a Folder's, ServerStorage's) and from Adventure Island; `GetService("` (every service, closing or not, single quotes, narrowing, the declared local's first, the script's own last, before the quote, each one run through the real `game:GetService`) |
 
 Assertions use `Checker` (`PlaySelfTest.swift`): `check("name", condition, "detail")`,
@@ -206,8 +212,17 @@ Sources/StudioKit/
                              rope, spring, prismatic), and the join/weld editor commands
   Model/SceneTree.swift      the tree: SceneGroup (Model/Folder), parentIDs, Pose (CFrame),
                              children/descendants, group/ungroup, subtree clone/delete, pivots
-  Model/Lighting.swift       LightingSettings (technology, clock, sun, sky, fog…), PointLight,
-                             the sun/moon/sky maths
+  Model/Lighting.swift       LightingSettings, identified local lights (PointLight's kind
+                             selects point/spot/surface), sun/moon/sky maths
+  Model/SceneModel+Lights.swift local-light insertion, selection and editing
+  Model/SolidGeometry.swift  bounded CPU boolean geometry
+  Model/SceneModel+Solids.swift Union/Negate/Separate, snapshots and source restoration
+  Editor/LuauAnalyzer.swift  immutable snapshots and ranged official type diagnostics
+  Editor/LuauAnalysisService.swift background checking and document revisions
+  Editor/LuauTypeDefinitions.swift Studio API definitions sharing LuauAPI's catalog
+  Play/ViewportFrame.swift   isolated preview hierarchy, cameras and saved contents
+  Render/WorldGuiRenderer.swift SurfaceGui canvas textures and world projection
+  Render/ViewportRenderer.swift reusable 3D preview rendering
   Model/AnimationObject.swift custom animations: keys per R6 joint (degrees), markers,
                              easing, sampling; the Wave example
   Model/ShaderObject.swift   a user shader, its kind and its named parameters
@@ -335,6 +350,8 @@ Sources/StudioKit/
   UI/TerrainUI.swift             the dock's Terrain Editor
   Scripting/ScriptRuntime+Forces.swift  `force.*`: the own properties of AlignPosition, VectorForce, AlignOrientation, Torque, Motor6D
   Model/SkyObjects.swift         Lighting's Sky, Atmosphere and Clouds (SkySettings and the rest)
+  Model/Racing.swift             Crash Circuit, the racing sample: the track and its four cars
+  Model/RacingScripts.swift      its RaceRules (host) and RaceDashboard (each player) Luau
   Model/ToolboxModels.swift      the Toolbox's models (car, boat, door, windmill…) built in code, as ModelFiles
   UI/ToolboxView.swift           the dock's Toolbox tab: a card per model, its picture drawn once
   Model/SceneModel+Insert.swift  inserting a ModelFile (a saved model or a Toolbox one), re-identified
@@ -435,7 +452,7 @@ SwiftUI, so 60 Hz camera motion never invalidates a view.
 
 Worth knowing before touching `Renderer.draw`, because there are two paths.
 
-First, always, `prepareLighting` works out the frame's `LightingUniforms` and point
+First, always, `prepareLighting` works out the frame's `LightingUniforms` and local
 lights, then either encodes the **shadow map** (conventional: a depth pass from the
 sun, 2048², an orthographic box around the camera's target) or builds the **instance
 acceleration structure** (ray traced). `snapshot` goes through the same step.
@@ -564,7 +581,7 @@ Roughly ordered by how much time they will cost you.
 
 7. **Swift uniform structs must match the Metal source byte-for-byte.**
    `FrameUniforms` 112, `DrawUniforms` 144, `Vertex` 32, `ShaderUniforms` 32,
-   `ScreenUniforms` 80, `LightingUniforms` 272, `PointLightData` 48, `InstanceInfo` 96.
+   `ScreenUniforms` 80, `LightingUniforms` 384, `PointLightData` 96, `InstanceInfo` 96.
    Each is asserted in the suite. Add a field on one side and you
    must add it on the other and update the test.
 
@@ -758,7 +775,7 @@ Roughly ordered by how much time they will cost you.
     compiles without ray tracing; forget the constants and `makeFunction` fails.
 
 45. **Lit fragments take `STUDIO_LIGHTING_PARAMS` and bind at fixed slots**: lighting
-    buffer 4, point lights 5, shadow map texture 0, and (ray traced) acceleration
+    buffer 4, local lights 5, shadow map texture 0, and (ray traced) acceleration
     structure 6, instance info 7, face normals 8. `Renderer.bindLighting` binds them
     all once per scene pass; primitive structures go in through `useResources`, or rays
     silently hit nothing.
@@ -1508,6 +1525,76 @@ Roughly ordered by how much time they will cost you.
     - A body skips putting its parts while nothing moved (`lastPut`), since each change
       is sent to every joined player.
 
+134. **Crash Circuit's race is its host's scripts; the cars are the Toolbox's.**
+    `Racing.state()` builds the track (`Builder`) and inserts four Toolbox cars, renamed
+    Racer1–4, anchored until Go, each with CrashSparks and DamageSmoke emitters and
+    SpotLight headlights. `RaceRules` (a Script, host-only) owns the phases (grid,
+    countdown, race, results), gates in order, laps, NPC driving along the track's
+    waypoints, damage and recovery; `RaceDashboard` (a StarterPlayer LocalScript) is
+    each player's screen, reading ReplicatedStorage's RaceState. So:
+    - A crash is decided on the host, from a contact and the two cars' speeds before it
+      (under 17 studs/s does nothing), once per pair (either assembly can report it
+      first). It disables the joints of the parts it hits, so they come off as real
+      bodies; recovery puts the same parts back and enables them again. Nothing is made
+      or destroyed, so crashes can't pile debris up.
+    - A player takes an NPC's car and gives it back when they leave; a late joiner reads
+      the RaceState as it is.
+    - `RacingSelfTest` plays it alone, in a real loopback game, and in a soak; `--render-
+      racing [crash]` draws the grid or a crash.
+
+133. **ViewportFrame content belongs to an isolated preview world.** Parts/Models,
+    assets and cameras in `ViewportContent` save with its GUI template and receive
+    fresh identities per copy. Preview ownership routes Instance calls to the preview
+    model, never into world drawing, physics, raycasts, navigation, touches or script
+    startup. Reparenting across that boundary transfers ownership once. Camera and
+    GUI changes are per player. A nil CurrentCamera draws no 3D content. Renderers
+    reuse bounded caches and destroy resources with the owning frame; never create a
+    full shader/renderer stack every frame or recurse into another GUI preview.
+
+132. **A SurfaceGui has one canvas and one corresponding world projection.** Its
+    actual face basis, CanvasSize or PixelsPerStud, and ZOffset must agree in drawing
+    and pointer-to-canvas mapping on all six faces. Reuse ordinary GUI layout/style
+    and clipping. Back-facing or occluded surfaces must not steal input from visible
+    content. `StarterGuiObject.worldParent` records world ownership; copy/remap it
+    with the part and keep local-player GUI state local. Shared host edits update
+    the authored template and reach joiners through the normal scene delta.
+
+131. **Solid operations commit atomically and retain their source tree.** Union is
+    real closed boundary geometry; negatives are editor operands, not game colliders.
+    The BSP engine validates inputs and enforces operand/triangle/work limits. A
+    rejected/empty/stale result must change no parts, assets, selection or undo entry.
+    Editor work runs off-thread and commits only against its original input snapshot;
+    scripted booleans use the same bounded engine and require server authority.
+    Saved operands are inactive, keep their scripts/data/sounds/assets, follow result
+    transforms, and have IDs/references remapped on clone/model insertion. Separate
+    restores immediate operands (including nested unions). Precise static collision
+    and picking use the result's triangles; moving results use the existing hull path.
+
+130. **Local lights have identities, including multiple lights of one class.** A
+    Part's light collection is authoritative; the old point-light accessor/decoder
+    is compatibility only. Migrating an old `light` must choose a stable ID once.
+    Reparenting preserves that identity; cloning/model insertion remaps it. A stale
+    wrapper must never bind to a replacement light. Spot/surface Face and Angle use
+    the same world basis and full-angle convention in Swift and both Metal paths;
+    changing the packed GPU record requires updating every layout assertion. Local
+    light shadows still require ray tracing, and all classes share the nearest-16
+    light budget. Disabled lights have no rendering cost.
+
+129. **Luau analysis is editor-only and uses the matching official Frontend.** The
+    unmodified Analysis, Config and EqSat trees must match CLuau's VM/compiler tag.
+    `studio_luau_analysis.cpp` owns an isolated Frontend over immutable source/node
+    snapshots; no live VM, SceneModel or AppKit object may cross that boundary.
+    The default mode is nonstrict; hot comments choose strict/nonstrict/nocheck.
+    Diagnostics never gate Play and are never encoded into SceneState or LAN data.
+    `LuauTypeDefinitions` derives properties and result types from `LuauAPI`; new
+    methods also need typed argument signatures and definition/completion tests.
+    `LuauAnalysisService` is owned by EditorSession, debounces on the main queue and
+    checks off-thread. Only the matching document revision may publish a result;
+    closing a tab invalidates queued and in-flight work. Scene module edits must
+    invalidate dependent snapshots. Luau locations are UTF-8 byte columns; convert
+    them to UTF-16 before decorating NSTextView, using temporary layout attributes
+    so analysis never changes text, caret, syntax colors or text undo.
+
 128. **The character animates only because its Animate script plays tracks.**
     `currentJoints` is the `AnimationPlayer`'s tracks over a still body; the Animate core
     script (CoreScripts, StarterCharacterScripts) plays built-in ones on the Humanoid's
@@ -1891,8 +1978,10 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   markers, and GetPlayingAnimationTracks lists only the ones the host plays. Joiners push crates
   only as the host's kinematic capsule does (no weighted `push`). The active screen
   effect isn't sent.
-- **The mouse:** no `Mouse.Move`, `TargetFilter`, `UnitRay` or cursor icons; ClickDetectors
-  only in parts (not Models), and no `RightMouseClick`; a right-click turns the camera.
+- **The mouse:** ClickDetectors are only in parts (not Models), and have no
+  `RightMouseClick`; a right-click turns the camera. Mouse.Move/UnitRay/TargetFilter/Icon
+  are supported and local to each player. Icons use built-in cursors or imported
+  studio:// images (scaled to at most 32 points), with arrow fallback; no remote assets.
 - **Tools:** their scripts all run on the host (there are no LocalScripts in tools);
   held tools aren't in the physics, so they don't push crates or report part-to-part
   Touched (bodies still touch them); `Backpack.ChildAdded/ChildRemoved` aren't there and
@@ -1934,10 +2023,13 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   the shim's `invokeTrampoline` moves the deadline on by each call's length, so the
   engine's work for a script (a big map's path grid) can't get it stopped. Wren offers
   no interrupt hook to build one from.
-- **Luau type annotations are parsed, not checked** — `Analysis` (the type checker) is
-  not vendored.
+- **Luau analysis:** editor-only, Luau-only; annotations remain erased at runtime.
+  Dynamic child names and some variadic API arguments remain `any`. Sources are
+  limited to 256 KB each, 1 MB and 128 modules per snapshot, 4,096 scene nodes, 100
+  diagnostics and a 0.2-second checking budget per module; complex input reports a
+  diagnostic. No filesystem/package requires or separately installed language server.
 - **Scripts in different languages cannot call each other**; they share the scene only.
-- **Screen GUI:** no ViewportFrame, SurfaceGui, UIScale, UIPageLayout, UITableLayout or
+- **Screen GUI:** no UIScale, UIPageLayout, UITableLayout or
   RichText; fonts are the nearest system font; text outlines (TextStroke and a Contextual
   UIStroke) are drawn with offsets; LineJoinMode only changes square corners; a
   UIGradient on a picture multiplies it but a rotated gradient runs corner to corner of a
@@ -1947,12 +2039,20 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   reset on spawn (GUIs scripts make keep going); no top-bar inset or MouseEnter/Leave.
   In Studio one GUI object is selected at a time (no multi-select, no dragging in the
   Explorer to reparent), text is edited in Properties, not in the view. Luau only.
+- **SurfaceGui:** world canvases rasterize at up to 1,024 pixels per texture axis,
+  with at most 64 visible canvases; layout and input retain logical canvas dimensions.
+  Its Face follows the rectangular part bounds, including MeshPart/union bounds.
+- **Solid modeling:** closed primitives and outward closed manifold MeshParts only;
+  at most 32 operands, 20,000 input triangles per part, 40,000 output triangles and
+  eight million split/stitch work units. Moving unions use convex hull collision.
+  Face colours are preserved; textures/materials are retained for separation but not
+  baked into result faces. Scripted booleans are server-only and keep their sources.
 - **Chat:** no filter, no commands (/whisper, /team…); bubbles are a fixed width.
 - **The Toolbox** has the eight built-in models only: no online library, no search, and
   your own saved models go in with File › Insert Model…, not from the Toolbox.
-- **Roblox divergences:** `Instance.new` makes parts, MeshParts, Models, Folders, Values, remotes, Accessories, Shirts, Pants, PointLights,
+- **Roblox divergences:** `Instance.new` makes parts, MeshParts, Models, Folders, Values, remotes, Accessories, Shirts, Pants, PointLights, SpotLights, SurfaceLights, Cameras,
   Animations, Sounds and the GUI classes, and new or cloned parts go straight into the workspace; setting
-  `Parent = nil` destroys; no `Unions`;
+  `Parent = nil` destroys;
   `Vector3.zero.Unit` is zero, not NaN.
 - **Scripts run only during play**, one fresh VM per language per session.
 - **The player:** one local player; the character's parts are not in `workspace`; no
@@ -1965,10 +2065,10 @@ ray-plane, ring radius), not mesh-based. Add a drag test modelled on
   (so two anchored parts never touch each other), and Wren has no `Touched` yet
   (Luau-first).
 - **Lighting:** no global illumination and no denoiser, so ray-traced shadows and
-  occlusion are slightly grainy (Quality trades rays for grain); 16 point lights per
-  frame (nearest the camera); conventional shadows cover ~260 studs around the camera
-  target; point-light shadows are ray-traced only; parts more than half transparent
-  cast no shadow; no spot/surface lights; Sky, Atmosphere and Clouds are drawn but
+  occlusion are slightly grainy (Quality trades rays for grain); 16 local lights per
+  frame across all three classes (nearest the camera); conventional shadows cover ~260
+  studs around the camera target; local-light shadows are ray-traced only; parts more
+  than half transparent cast no shadow; Sky, Atmosphere and Clouds are drawn but
   don't light the world (no sky-coloured ambient from the skybox); Wren has no
   Lighting API yet.
 - **Animations are R6 rotations with a root offset.** No IK, no per-limb translation,

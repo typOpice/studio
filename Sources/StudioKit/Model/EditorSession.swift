@@ -66,6 +66,7 @@ final class EditorSession: ObservableObject {
     let shaderStatus = ShaderStatusStore()
     /// Each open tab's text view, kept while another tab is in front.
     let codeViews = CodeEditorCache()
+    let analysis = LuauAnalysisService()
 
     @Published private(set) var play: PlayController?
     @Published var dockTab: DockTab = .output
@@ -178,6 +179,7 @@ final class EditorSession: ObservableObject {
             self?.closeDocuments { if case .script(let id) = $0 { return !live.contains(id) } else { return false } }
         })
         guiPreview.imageProvider = { [weak self] reference in self?.picture(named: reference) }
+        viewport.worldGui = guiPreview
         viewport.guiKeys = { [weak self] code, shift in self?.guiKey(code, shift: shift) ?? false }
         watchers.append(model.$starterGui.combineLatest(model.$selectedGui).sink { [weak self] templates, selected in
             self?.rebuildGuiPreview(templates, selected: selected)
@@ -192,7 +194,7 @@ final class EditorSession: ObservableObject {
     private func rebuildGuiPreview(_ templates: [StarterGuiObject], selected: UUID?) {
         guiPreview.removeAll()
         var copies: [UUID: Int] = [:]
-        for screen in templates where screen.parentID == nil && screen.kind == .screenGui {
+        for screen in templates where screen.parentID == nil && screen.kind.isLayer {
             copies.merge(guiPreview.copy(screen, from: templates, into: GuiStore.playerGui)) { first, _ in first }
         }
         guiPreview.highlighted = selected.flatMap { copies[$0] }
@@ -494,6 +496,7 @@ final class EditorSession: ObservableObject {
         guard let index = documents.firstIndex(of: document) else { return }
         documents.remove(at: index)
         codeViews.forget(document.id)
+        analysis.forget(document.id)
         if activeDocument == document {
             activeDocument = index > 0 ? documents[index - 1] : nil
         }

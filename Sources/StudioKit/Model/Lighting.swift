@@ -166,7 +166,17 @@ struct LightingSettings: Codable, Equatable {
 }
 
 /// A PointLight inside a part: light shining out in every direction from its centre.
-struct PointLight: Codable, Equatable {
+struct PointLight: Codable, Equatable, Identifiable {
+    enum Kind: String, Codable, CaseIterable, Identifiable {
+        case point = "PointLight", spot = "SpotLight", surface = "SurfaceLight"
+        var id: String { rawValue }
+    }
+    var id = UUID()
+    var kind = Kind.point
+    var name = "PointLight"
+    var face = ParticleEmitter.Face.front
+    /// Full emission angle in degrees.
+    var angle: Float = 90
     var enabled = true
     var color = Vec3(1, 1, 1)
     var brightness: Float = 1
@@ -179,12 +189,17 @@ struct PointLight: Codable, Equatable {
     /// Point lights per frame; the nearest to the camera win.
     static let maximumPerFrame = 16
 
-    init() {}
+    init(kind: Kind = .point) { self.kind = kind; name = kind.rawValue }
 
-    private enum CodingKeys: String, CodingKey { case enabled, color, brightness, range, shadows }
+    private enum CodingKeys: String, CodingKey { case id, kind, name, face, angle, enabled, color, brightness, range, shadows }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .point
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? kind.rawValue
+        face = try c.decodeIfPresent(ParticleEmitter.Face.self, forKey: .face) ?? .front
+        angle = min(max(try c.decodeIfPresent(Float.self, forKey: .angle) ?? 90, 0), 180)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         color = try c.decodeIfPresent(Vec3.self, forKey: .color) ?? Vec3(1, 1, 1)
         brightness = try c.decodeIfPresent(Float.self, forKey: .brightness) ?? 1

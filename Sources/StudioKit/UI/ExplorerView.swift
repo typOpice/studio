@@ -87,6 +87,16 @@ struct ExplorerView: View {
                     Button("New Tool") { model.addTool() }
                     Button("Insert Rig") { controller.insertRig() }
                     Button("Import Picture, Sound or 3D Model…") { importAssets() }
+                    Menu("New Light (in the selected part)") {
+                        ForEach(PointLight.Kind.allCases) { kind in
+                            Button(kind.rawValue) {
+                                if let part = model.selection.first {
+                                    expandedParts.insert(part); model.addLight(kind, to: part)
+                                }
+                            }
+                        }
+                    }
+                    .disabled(model.selection.count != 1 || model.selection.first.flatMap(model.part(id:)) == nil)
                     Menu("New ParticleEmitter (in the selected part)") {
                         ForEach(ParticleEmitter.Preset.allCases) { preset in
                             Button(preset.rawValue) {
@@ -170,6 +180,11 @@ struct ExplorerView: View {
                             switch row {
                             case .node(.part(let id), let depth):
                                 if let part = model.part(id: id) { partRow(part, depth: depth) }
+                            case .gui(let id, let depth):
+                                if let object = model.guiObject(id: id) {
+                                    guiRow(object, depth: depth)
+                                    if expandedParts.contains(id) { viewportChildRows(object, depth: depth) }
+                                }
                             case .node(.group(let id), let depth):
                                 if let group = model.group(id: id) { treeGroupRow(group, depth: depth) }
                             case .script(let id, let depth):
@@ -209,6 +224,14 @@ struct ExplorerView: View {
                             case .sound(let id, let depth):
                                 if let sound = model.sound(id: id) {
                                     soundRow(sound, depth: depth)
+                                }
+                            case .light(let id, let depth):
+                                if let light = model.light(id) {
+                                    fixtureRow(id: id, depth: depth, name: light.name, icon: "lightbulb.fill",
+                                               tint: Color(vec: light.color), selected: model.selectedLight == id,
+                                               detail: light.enabled ? "" : "off") {
+                                        model.selectedLight = id
+                                    } delete: { model.removeLight(id) }
                                 }
                             case .emitter(let ref, let depth):
                                 if let emitter = model.emitter(ref) {
@@ -330,6 +353,7 @@ struct ExplorerView: View {
             reveal(node: model.selectedEmitter?.part)
         }
         .onChange(of: model.selectedDataObject) { id in reveal(id) }
+        .onChange(of: model.selectedLight) { id in reveal(node: id.flatMap(model.lightParent)) }
         .onChange(of: model.selectedEmitter) { ref in reveal(node: ref?.part) }
         .onChange(of: model.selectedConstraint) { id in
             // A joint, Beam or Trail: the part (or Model) it's under.
@@ -449,7 +473,7 @@ struct ExplorerView: View {
                 .buttonStyle(.plain)
             }
 
-            Image(systemName: part.mesh != nil ? "cube.transparent" : part.shape.symbolName)
+            Image(systemName: part.negative ? "minus.square.fill" : part.solid != nil ? "square.stack.3d.up.fill" : part.mesh != nil ? "cube.transparent" : part.shape.symbolName)
                 .font(.system(size: 10))
                 .foregroundStyle(Color(vec: part.color))
                 .frame(width: 14)
@@ -479,9 +503,9 @@ struct ExplorerView: View {
             if !part.visible {
                 Image(systemName: "eye.slash").font(.system(size: 9)).foregroundStyle(Theme.textDim)
             }
-            if part.light?.enabled == true {
+            if let light = part.lights.first(where: { $0.enabled }) {
                 Image(systemName: "lightbulb.fill").font(.system(size: 9))
-                    .foregroundStyle(Color(vec: part.light!.color))
+                    .foregroundStyle(Color(vec: light.color))
             }
         }
         .padding(.vertical, 3)
@@ -550,6 +574,12 @@ struct ExplorerView: View {
                 expandedParts.insert(part.id)
                 model.addVectorForce(to: part.id)
             }
+            Menu("Add Light") {
+                ForEach(PointLight.Kind.allCases) { kind in
+                    Button(kind.rawValue) { expandedParts.insert(part.id); model.addLight(kind, to: part.id) }
+                }
+            }
+            Button("Add SurfaceGui") { expandedParts.insert(part.id); model.addSurfaceGui(to: part.id) }
             Menu("Add ParticleEmitter") {
                 ForEach(ParticleEmitter.Preset.allCases) { preset in
                     Button(preset.rawValue) {
@@ -1064,7 +1094,7 @@ struct ExplorerView: View {
     private var guiRows: [(object: StarterGuiObject, depth: Int)] {
         var rows: [(StarterGuiObject, Int)] = []
         func walk(_ parent: UUID?, _ depth: Int) {
-            for object in model.guiChildren(of: parent) {
+            for object in model.guiChildren(of: parent) where object.worldParent == nil {
                 rows.append((object, depth))
                 if expandedParts.contains(object.id) { walk(object.id, depth + 1) }
             }
@@ -1078,7 +1108,7 @@ struct ExplorerView: View {
         groupRow(title: "StarterGui",
                  icon: "rectangle.on.rectangle",
                  tint: Color(red: 0.55, green: 0.8, blue: 0.95),
-                 count: model.guiChildren(of: nil).count,
+                 count: model.guiChildren(of: nil).filter { $0.worldParent == nil }.count,
                  expanded: $starterGuiExpanded) {
             model.selectedGui = nil
         }
@@ -1096,6 +1126,7 @@ struct ExplorerView: View {
             ForEach(guiRows, id: \.object.id) { row in
                 guiRow(row.object, depth: row.depth)
                 if expandedParts.contains(row.object.id) {
+                    viewportChildRows(row.object, depth: row.depth)
                     ForEach(model.guiScripts(in: row.object.id)) { script in
                         scriptRow(script, indent: 40 + CGFloat(row.depth + 1) * 14)
                     }
@@ -1107,9 +1138,27 @@ struct ExplorerView: View {
         }
     }
 
+    @ViewBuilder private func viewportChildRows(_ object: StarterGuiObject, depth: Int) -> some View {
+        if let content = object.viewportContent {
+            ForEach(content.parts) { part in
+                fixtureRow(id: part.id, depth: depth + 1, name: part.name, icon: part.shape.symbolName,
+                           tint: Theme.accent, selected: model.selectedGui == object.id && model.selectedViewportMember == part.id, detail: "preview") {
+                    model.selectedGui = object.id; model.selectedViewportMember = part.id
+                } delete: { model.editViewport(object.id, label: "Deleted preview part") { $0.parts.removeAll { $0.id == part.id } } }
+            }
+            ForEach(content.cameras) { camera in
+                fixtureRow(id: camera.id, depth: depth + 1, name: camera.name, icon: "camera", tint: Theme.accent,
+                           selected: model.selectedGui == object.id && model.selectedViewportMember == camera.id, detail: "preview") {
+                    model.selectedGui = object.id; model.selectedViewportMember = camera.id
+                } delete: { model.editViewport(object.id, label: "Deleted preview camera") { $0.cameras.removeAll { $0.id == camera.id }; if $0.currentCamera == camera.id { $0.currentCamera = nil } } }
+            }
+        }
+    }
+
     private func guiRow(_ object: StarterGuiObject, depth: Int) -> some View {
         let selected = model.selectedGui == object.id && model.selection.isEmpty
         let hasInside = !model.guiChildren(of: object.id).isEmpty || !model.guiScripts(in: object.id).isEmpty
+            || object.viewportContent?.parts.isEmpty == false || object.viewportContent?.cameras.isEmpty == false
         return HStack(spacing: 6) {
             Button { toggleExpanded(object.id) } label: {
                 Image(systemName: expandedParts.contains(object.id) ? "chevron.down" : "chevron.right")
@@ -1208,7 +1257,12 @@ struct ExplorerView: View {
                     if let script = model.script(id: id) { scriptRow(script, indent: 40 + CGFloat(depth) * 14) }
                 case .sound(let id, let depth):
                     if let sound = model.sound(id: id) { soundRow(sound, depth: depth + 1) }
-                case .attachment, .constraint, .data, .emitter:
+                case .gui(let id, let depth):
+                    if let object = model.guiObject(id: id) {
+                        guiRow(object, depth: depth + 1)
+                        if expandedParts.contains(id) { viewportChildRows(object, depth: depth + 1) }
+                    }
+                case .attachment, .constraint, .data, .emitter, .light:
                     EmptyView()
                 }
             }
@@ -1391,6 +1445,8 @@ enum ExplorerTreeRow: Hashable {
     case data(UUID, depth: Int)
     /// A ParticleEmitter in a part.
     case emitter(EmitterRef, depth: Int)
+    case light(UUID, depth: Int)
+    case gui(UUID, depth: Int)
 }
 
 extension ExplorerView {
@@ -1430,6 +1486,15 @@ extension ExplorerView {
 
         var rows: [ExplorerTreeRow] = []
         var visited: Set<UUID> = []
+        func guis(_ objects: [StarterGuiObject], depth: Int) {
+            for object in objects {
+                rows.append(.gui(object.id, depth: depth))
+                if expandedParts.contains(object.id) {
+                    guis(model.guiChildren(of: object.id), depth: depth + 1)
+                    for script in model.guiScripts(in: object.id) { rows.append(.script(script.id, depth: depth + 1)) }
+                }
+            }
+        }
         // Data objects, and what's inside them (a Folder's Values), all showing.
         func data(in parent: DataParent, depth: Int) {
             for object in model.dataObjects(in: parent) where visited.insert(object.id).inserted {
@@ -1452,6 +1517,8 @@ extension ExplorerView {
                     for sound in model.sounds(in: child.id) where model.part(id: child.id) != nil {
                         rows.append(.sound(sound.id, depth: depth + 1))
                     }
+                    for light in model.part(id: child.id)?.lights ?? [] { rows.append(.light(light.id, depth: depth + 1)) }
+                    guis(model.starterGui.filter { $0.worldParent == child.id }, depth: depth + 1)
                     for emitter in model.part(id: child.id)?.emitters ?? [] {
                         rows.append(.emitter(EmitterRef(part: child.id, emitter: emitter.id), depth: depth + 1))
                     }
@@ -1478,6 +1545,8 @@ extension ExplorerView {
                 case .constraint(let id, let depth): return .constraint(id, depth: depth + 1)
                 case .data(let id, let depth): return .data(id, depth: depth + 1)
                 case .emitter(let ref, let depth): return .emitter(ref, depth: depth + 1)
+                case .light(let id, let depth): return .light(id, depth: depth + 1)
+                case .gui(let id, let depth): return .gui(id, depth: depth + 1)
                 }
             }
             for script in model.scripts where script.host == .scene && script.parentID == tool.id {
@@ -1495,6 +1564,8 @@ extension ExplorerView {
             || model.sounds.contains { $0.parentID == id }
             || !model.dataObjects(in: .node(id)).isEmpty
             || model.part(id: id)?.emitters.isEmpty == false
+            || model.part(id: id)?.lights.isEmpty == false
+            || model.starterGui.contains { $0.worldParent == id }
     }
 
     /// Adds a Humanoid, Folder or Value inside a Model, and shows it.

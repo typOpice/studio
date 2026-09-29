@@ -16,9 +16,14 @@ final class StudioMTKView: MTKView {
         didSet {
             typingWatch = nil
             captureWatch = nil
+            cursorWatch = nil
+            cursorAssetsWatch = nil
             if player == nil {
                 releaseMouse()
+                oldValue?.mouseCaptured = false
+                wantsCapture = false
                 oldValue?.releaseAllKeys()
+                NSCursor.arrow.set()
             } else {
                 syncViewSize()
                 // Keys reach a TextBox through this view, so it takes the keyboard when
@@ -29,16 +34,55 @@ final class StudioMTKView: MTKView {
                 }
                 // First person, shift lock, or a script's MouseBehavior holds the pointer.
                 if let hud = player?.hud {
+                    cursorWatch = hud.$cursorIcon.sink { [weak self] name in
+                        self?.cursorName = name
+                        self?.refreshCursor()
+                    }
                     captureWatch = hud.$firstPerson.combineLatest(hud.$mouseLock, hud.$shiftLock)
                         .sink { [weak self] firstPerson, locked, shiftLock in
                             self?.wantsCapture = firstPerson || locked || shiftLock
                         }
                 }
+                cursorAssetsWatch = player?.model.$assets.sink { [weak self] _ in
+                    DispatchQueue.main.async { [weak self] in self?.refreshCursor() }
+                }
             }
+            window?.invalidateCursorRects(for: self)
         }
     }
     private var typingWatch: AnyCancellable?
     private var captureWatch: AnyCancellable?
+    private var cursorWatch: AnyCancellable?
+    private var cursorAssetsWatch: AnyCancellable?
+    private var windowFocusWatch: NSObjectProtocol?
+    private let cursorImages = MouseCursor()
+    private var cursorName = ""
+    private var pointerInside = false
+
+    var playCursor: NSCursor {
+        guard showsWorld, let player else { return .arrow }
+        return cursorImages.resolve(cursorName, assets: player.model.assets)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if showsWorld && player != nil { addCursorRect(bounds, cursor: playCursor) }
+    }
+
+    private func refreshCursor() {
+        window?.invalidateCursorRects(for: self)
+        if pointerInside && window?.isKeyWindow == true && !mouseCaptured { playCursor.set() }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        pointerInside = true
+        refreshCursor()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        pointerInside = false
+        if !mouseCaptured { NSCursor.arrow.set() }
+    }
     /// Whether play wants the pointer held now; Escape lets go until the next click.
     private var wantsCapture = false {
         didSet {
@@ -77,6 +121,7 @@ final class StudioMTKView: MTKView {
             } else {
                 // Let go of everything held, so nothing is stuck down on return.
                 releaseMouse()
+                NSCursor.arrow.set()
                 player?.releaseAllKeys()
                 editor?.clearFlyKeys()
                 editor?.orbiting = false
@@ -98,10 +143,19 @@ final class StudioMTKView: MTKView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if let windowFocusWatch { NotificationCenter.default.removeObserver(windowFocusWatch) }
+        windowFocusWatch = nil
         guard window != nil else {
+            releaseMouse()
             stopRenderLoop()
             return
         }
+        windowFocusWatch = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification,
+            object: window, queue: .main) { [weak self] _ in
+                self?.releaseMouse()
+                self?.player?.releaseAllKeys()
+                NSCursor.arrow.set()
+            }
         if showsWorld {
             window?.makeFirstResponder(self)
         } else {
@@ -113,6 +167,7 @@ final class StudioMTKView: MTKView {
     }
 
     deinit {
+        if let windowFocusWatch { NotificationCenter.default.removeObserver(windowFocusWatch) }
         releaseMouse()
         renderTimer?.invalidate()
     }
@@ -210,6 +265,7 @@ final class StudioMTKView: MTKView {
         CGAssociateMouseAndMouseCursorPosition(1)
         NSCursor.unhide()
         player?.mouseCaptured = false
+        refreshCursor()
     }
 
     /// Converts an AppKit event into top-left origin view coordinates.
@@ -225,9 +281,13 @@ final class StudioMTKView: MTKView {
     }
 
     /// Where the pointer is, for the Mouse and ClickDetectors.
-    private func trackPointer(_ event: NSEvent) {
+    private func trackPointer(_ event: NSEvent, moved: Bool = false) {
         player?.viewSize = SIMD2<Float>(Float(bounds.width), Float(bounds.height))
-        player?.pointer = viewPoint(event)
+        if moved {
+            player?.mousePointerMoved(to: viewPoint(event))
+        } else {
+            player?.pointer = viewPoint(event)
+        }
     }
 
     // MARK: - Mouse
@@ -235,6 +295,9 @@ final class StudioMTKView: MTKView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         if let player {
+            player.viewSize = SIMD2(Float(bounds.width), Float(bounds.height))
+            let surfacePoint = mouseCaptured ? player.viewSize / 2 : viewPoint(event)
+            if player.clickSurface(at: surfacePoint) { return }
             // A click on the game, not the GUI, stops typing, as in Roblox.
             if player.isTyping { player.gui.releaseFocus(enterPressed: false) }
             // A pointer let go of with Escape is taken back by a click, not used.
@@ -256,8 +319,9 @@ final class StudioMTKView: MTKView {
         if let player {
             if mouseCaptured {
                 player.look(deltaX: Float(event.deltaX), deltaY: Float(event.deltaY))
+                player.mousePointerMoved(to: nil, delta: SIMD2(Float(event.deltaX), Float(event.deltaY)))
             } else {
-                trackPointer(event)
+                trackPointer(event, moved: true)
             }
             return
         }
@@ -283,8 +347,9 @@ final class StudioMTKView: MTKView {
         if let player {
             if mouseCaptured {
                 player.look(deltaX: Float(event.deltaX), deltaY: Float(event.deltaY))
+                player.mousePointerMoved(to: nil, delta: SIMD2(Float(event.deltaX), Float(event.deltaY)))
             } else {
-                trackPointer(event)
+                trackPointer(event, moved: true)
             }
             return
         }
@@ -309,6 +374,7 @@ final class StudioMTKView: MTKView {
     override func rightMouseDragged(with event: NSEvent) {
         if let player {
             player.look(deltaX: Float(event.deltaX), deltaY: Float(event.deltaY))
+            player.mousePointerMoved(to: nil, delta: SIMD2(Float(event.deltaX), Float(event.deltaY)))
             return
         }
         if event.modifierFlags.contains(.shift) {
@@ -345,6 +411,7 @@ final class StudioMTKView: MTKView {
                                  by: CGSize(width: event.scrollingDeltaX * scale, height: event.scrollingDeltaY * scale)) {
                 return
             }
+            if player.scrollSurface(at: point, by: CGSize(width: event.scrollingDeltaX * scale, height: event.scrollingDeltaY * scale)) { return }
         }
         let amount = Float(event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 8 : event.scrollingDeltaY)
         if let player { player.zoom(amount) } else { editor?.zoom(amount) }

@@ -45,6 +45,8 @@ struct GuiObject: Equatable {
     enum Kind: String, CaseIterable, Codable {
         case screenGui = "ScreenGui"
         case billboardGui = "BillboardGui"
+        case surfaceGui = "SurfaceGui"
+        case viewportFrame = "ViewportFrame"
         case frame = "Frame"
         case scrollingFrame = "ScrollingFrame"
         case textLabel = "TextLabel"
@@ -74,7 +76,7 @@ struct GuiObject: Equatable {
                                            .uiAspectRatioConstraint, .uiSizeConstraint, .uiTextSizeConstraint]
         /// A layer of its own: a ScreenGui over the screen, a BillboardGui over a point
         /// in the world.
-        var isLayer: Bool { self == .screenGui || self == .billboardGui }
+        var isLayer: Bool { self == .screenGui || self == .billboardGui || self == .surfaceGui }
     }
 
     let id: Int
@@ -83,6 +85,11 @@ struct GuiObject: Equatable {
     /// `GuiStore.playerGui` (0) for the top of the screen; nil for nowhere yet, where
     /// Instance.new leaves a new object until its Parent is set.
     var parent: Int?
+    /// Stable template identity, independent of each player's runtime handle.
+    var templateID = UUID()
+    var worldParent: UUID?
+    var localOnly = false
+    var persistentProperties: [String: ScriptValue] = [:]
 
     var position = UDim2()
     var size = UDim2(xOffset: 100, yOffset: 100)
@@ -122,6 +129,10 @@ struct GuiObject: Equatable {
     var textEditable = true
 
     /// ImageLabel and ImageButton: an asset ("studio://Name"), tinted and faded.
+    var currentCamera: UUID?
+    var viewportAmbient = Vec3(repeating: 0.3)
+    var viewportLightColor = Vec3(repeating: 1)
+    var viewportLightDirection = Vec3(-1, -1, -1)
     var image = ""
     var imageColor = Vec3(1, 1, 1)
     var imageTransparency: Float = 0
@@ -201,6 +212,13 @@ struct GuiObject: Equatable {
     var studsOffset = Vec3.zero
     var alwaysOnTop = false
     var maxDistance: Float = .infinity
+    var face = "Front"
+    var surfaceCanvasSize = SIMD2<Float>(800, 600)
+    var sizingMode = "PixelsPerStud"
+    var pixelsPerStud: Float = 50
+    var lightInfluence: Float = 0
+    var brightness: Float = 1
+    var zOffset: Float = 0
 
     /// ScreenGui only: made afresh for each new character, and drawn above lower orders.
     var resetOnSpawn = true
@@ -299,7 +317,73 @@ final class GuiStore: ObservableObject {
     /// The parent that means "on the screen": the PlayerGui.
     static let playerGui = 0
 
+    var viewportWorlds: [Int: ViewportWorld] = [:]
+    var previewCameras: [UUID: PreviewCamera] = [:]
     @Published private(set) var objects: [Int: GuiObject] = [:]
+    // Canonical copies of shared world widgets with local overrides. Stable IDs let
+    // server scripts keep addressing a widget a LocalScript removed from its view.
+    private var sharedWorldObjects: [Int: GuiObject] = [:]
+
+    func preserveSharedWorld(containing id: Int) {
+        guard sharedWorldObjects[id] == nil, let object = objects[id], !object.localOnly else { return }
+        var root = object
+        while root.worldParent == nil, let parent = root.parent, let next = objects[parent] { root = next }
+        guard root.worldParent != nil else { return }
+        for member in [root.id] + descendants(of: root.id) {
+            if let value = objects[member], !value.localOnly, sharedWorldObjects[member] == nil {
+                sharedWorldObjects[member] = value
+            }
+        }
+    }
+
+    func withSharedWorld<T>(_ body: () -> T) -> T {
+        guard !sharedWorldObjects.isEmpty else { return body() }
+        let before = sharedWorldObjects
+        let local = objects
+        let localOrder = order
+        for (id, object) in before { objects[id] = object }
+        for (id, object) in local where object.localOnly { objects[id] = nil }
+        order = Array(Set(order).union(before.keys)).sorted()
+        let result = body()
+        let canonical = objects
+        for (id, prior) in before {
+            guard let updated = canonical[id] else { sharedWorldObjects[id] = nil; objects[id] = nil; continue }
+            sharedWorldObjects[id] = updated
+            guard var shown = local[id] else { objects[id] = nil; continue }
+            for key in Set(prior.persistentProperties.keys).union(updated.persistentProperties.keys)
+                where prior.persistentProperties[key] != updated.persistentProperties[key] {
+                _ = PlayController.setGuiProperty(&shown, key, PlayController.guiProperty(updated, key))
+            }
+            shown.persistentProperties = updated.persistentProperties
+            if prior.name != updated.name { shown.name = updated.name }
+            if prior.parent != updated.parent || prior.worldParent != updated.worldParent {
+                shown.parent = updated.parent; shown.worldParent = updated.worldParent
+            }
+            objects[id] = shown
+        }
+        for (id, object) in local where object.localOnly { objects[id] = object }
+        // A local object whose shared parent the server just destroyed goes with it, as
+        // everything under a destroyed object does.
+        var orphaned: Set<Int> = []
+        var found = true
+        while found {
+            found = false
+            for (id, object) in local where object.localOnly && !orphaned.contains(id) {
+                guard let parent = object.parent, parent != Self.playerGui,
+                      objects[parent] == nil || orphaned.contains(parent) else { continue }
+                orphaned.insert(id)
+                found = true
+            }
+        }
+        for id in orphaned {
+            if focused == id { releaseFocus(enterPressed: false) }
+            destroyViewport(id)
+            objects[id] = nil
+            surfaceSizes[id] = nil
+        }
+        order = Array(Set(localOrder).union(order)).filter { objects[$0] != nil }.sorted()
+        return result
+    }
     /// The TextBox the keyboard types into, if any.
     @Published private(set) var focused: Int?
     /// Where the caret is in the focused TextBox's text, in characters, and whether all
@@ -313,6 +397,8 @@ final class GuiStore: ObservableObject {
     var billboardPlacer: ((GuiObject, CGSize) -> (center: CGPoint, pointsPerStud: CGFloat)?)?
     /// An image for ImageLabels by its Image, from the scene's assets.
     var imageProvider: ((String) -> NSImage?)?
+    /// Canvas sizes last drawn on each world surface, used for absolute geometry.
+    var surfaceSizes: [Int: CGSize] = [:]
     /// The screen size layout last ran at, for AbsoluteSize and scrolling.
     private(set) var lastScreen = CGSize(width: 800, height: 600)
 
@@ -360,7 +446,7 @@ final class GuiStore: ObservableObject {
                 walk = objects[at]?.parent
             }
         }
-        update(id) { $0.parent = parent }
+        update(id) { $0.parent = parent; $0.worldParent = nil }
         return true
     }
 
@@ -368,7 +454,7 @@ final class GuiStore: ObservableObject {
     func destroy(_ id: Int) {
         let doomed = descendants(of: id) + [id]
         if let focused, doomed.contains(focused) { releaseFocus(enterPressed: false) }
-        for gone in doomed { objects[gone] = nil }
+        for gone in doomed { destroyViewport(gone); objects[gone] = nil; surfaceSizes[gone] = nil }
         order.removeAll { doomed.contains($0) }
     }
 
@@ -506,6 +592,8 @@ final class GuiStore: ObservableObject {
         let made = template.object(id: id)
         update(id) { $0 = made }
         setParent(id, to: parent)
+        update(id) { $0.worldParent = template.worldParent; if template.worldParent != nil { $0.parent = nil } }
+        if let content = template.viewportContent { installViewport(content, in: id) }
         var copies = [template.id: id]
         for child in all where child.parentID == template.id {
             copies.merge(copy(child, from: all, into: id)) { first, _ in first }
@@ -516,9 +604,12 @@ final class GuiStore: ObservableObject {
     /// Empties the store: every object goes.
     func removeAll() {
         if focused != nil { releaseFocus(enterPressed: false) }
+        for id in Array(viewportWorlds.keys) { destroyViewport(id) }
+        previewCameras = [:]
         objects = [:]
         order = []
         events = []
+        surfaceSizes = [:]
     }
 
     /// The object Studio has selected, outlined in its preview of StarterGui.
@@ -567,7 +658,7 @@ final class GuiStore: ObservableObject {
         guard let parent = objects[id]?.parent else { return nil }
         let whole = CGRect(origin: .zero, size: screen)
         guard parent != Self.playerGui, let holder = objects[parent] else { return whole }
-        if holder.kind == .screenGui { return whole }
+        if holder.kind == .screenGui || holder.kind == .surfaceGui { return whole }
         guard let item = layout(in: screen).first(where: { $0.id == parent }) else { return nil }
         guard holder.kind == .scrollingFrame else { return item.content }
         let canvas = canvasSize(of: holder, content: item.content)
@@ -579,7 +670,13 @@ final class GuiStore: ObservableObject {
 
     /// AbsolutePosition and AbsoluteSize: where an object was last drawn.
     func absoluteFrame(of id: Int) -> CGRect? {
-        layout(in: lastScreen).first { $0.id == id }?.frame
+        var root = objects[id]
+        while let parent = root?.parent, parent != Self.playerGui { root = objects[parent] }
+        if let root, root.kind == .surfaceGui, let size = surfaceSizes[root.id] {
+            if id == root.id { return CGRect(origin: .zero, size: size) }
+            return layout(root: root.id, in: size).first { $0.id == id }?.frame
+        }
+        return layout(in: lastScreen).first { $0.id == id }?.frame
     }
 
     // MARK: - Layout
@@ -627,6 +724,33 @@ final class GuiStore: ObservableObject {
             place(childrenOf: root.id, in: whole, clip: nil, into: &placed)
         }
         return placed
+    }
+
+    /// The same layout engine on a world face, with the canvas edge as its clip.
+    func layout(root: Int, in size: CGSize) -> [Placed] {
+        surfaceSizes[root] = size
+        var placed: [Placed] = []
+        let area = CGRect(origin: .zero, size: size)
+        place(childrenOf: root, in: area, clip: area, into: &placed)
+        return placed
+    }
+
+    func hit(root: Int, at point: CGPoint, size: CGSize) -> Int? {
+        layout(root: root, in: size).last {
+            $0.object.kind.isInteractive && $0.frame.contains(point) && ($0.clip?.contains(point) ?? true)
+        }?.id
+    }
+
+    func scroll(root: Int, at point: CGPoint, size: CGSize, by delta: CGSize) -> Bool {
+        guard let hit = layout(root: root, in: size).last(where: {
+            $0.object.kind == .scrollingFrame && $0.object.scrollingEnabled && $0.frame.contains(point)
+                && ($0.clip?.contains(point) ?? true)
+        }), let range = hit.scrollRange else { return false }
+        update(hit.id) {
+            $0.canvasPosition = SIMD2(Float(min(max(CGFloat($0.canvasPosition.x) - delta.width, 0), range.width)),
+                                     Float(min(max(CGFloat($0.canvasPosition.y) - delta.height, 0), range.height)))
+        }
+        return true
     }
 
     private func place(childrenOf parent: Int, in area: CGRect, clip: CGRect?, into placed: inout [Placed]) {

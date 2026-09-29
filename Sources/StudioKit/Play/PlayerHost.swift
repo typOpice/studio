@@ -60,6 +60,7 @@ enum PlayerHost {
         case "players.character": return .number(0)
         case "input.down": return .bool(false)
         case "input.mousebehavior": return .string("Default")
+        case "input.icon": return .string("")
         case "input.mouse": return .list([.number(0), .number(0), .number(0), .string(""),
                                           .number(0), .number(0), .number(0), .number(0)])
         case "track.playing": return .list([])
@@ -312,6 +313,14 @@ extension PlayController {
 
         case "input.mouse":
             return mouseState()
+
+        case "input.filter":
+            mouseFilter = arguments.first?.asString
+            return .nothing
+
+        case "input.icon":
+            if let name = arguments.first?.asString { hud.cursorIcon = name }
+            return .string(hud.cursorIcon)
 
         case "input.mousebehavior":
             if let behavior = arguments.first?.asString, ["Default", "LockCenter", "LockCurrentPosition"].contains(behavior) {

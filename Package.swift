@@ -35,6 +35,9 @@ let package = Package(
                 .headerSearchPath("luau/Compiler/include"),
                 .headerSearchPath("luau/Compiler/src"),
                 .headerSearchPath("luau/Ast/include"),
+                .headerSearchPath("luau/Analysis/include"),
+                .headerSearchPath("luau/Config/include"),
+                .headerSearchPath("luau/EqSat/include"),
                 .headerSearchPath("luau/Common/include"),
                 .unsafeFlags(["-std=c++17"])
             ]

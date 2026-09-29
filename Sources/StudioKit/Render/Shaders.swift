@@ -141,7 +141,7 @@ static float4 studio_scene_color(float3 worldPosition, float3 normal, float2 pix
         if (reflectivity > 0.01) {
             float3 r = reflect(-v, n);
             float fresnel = reflectivity + (1.0 - reflectivity) * pow(1.0 - saturate(dot(n, v)), 5.0) * 0.5;
-            float3 seen = studio_ray_reflection(worldPosition, n, r, lighting, accel, instances, faceNormals);
+            float3 seen = studio_ray_reflection(worldPosition, n, r, lighting, pointLights, accel, instances, faceNormals);
             color = mix(color, seen * mix(float3(1.0), base, 0.5), saturate(fresnel));
         }
     }
@@ -199,6 +199,30 @@ fragment float4 terrain_fragment(RasterTerrain in [[stage_in]],
     float vary = studio_value_noise(p * 0.07) * 0.6 + studio_value_noise(p * 0.45 + 13.0) * 0.4;
     float3 base = in.color * (0.86 + 0.26 * vary);
     return studio_scene_color(in.worldPosition, in.normal, in.clipPosition.xy, base, frame, draw,
+                              STUDIO_LIGHTING_ARGS);
+}
+
+// Boolean faces carry the color of the operand that created them.
+vertex RasterTerrain solid_vertex(uint vid [[vertex_id]],
+                                  device const TerrainVertexData *vertices [[buffer(0)]],
+                                  constant FrameUniforms &frame [[buffer(1)]],
+                                  constant DrawUniforms &draw [[buffer(2)]])
+{
+    TerrainVertexData v = vertices[vid];
+    RasterTerrain out;
+    float4 world = draw.model * float4(v.position, 1.0);
+    out.clipPosition = frame.viewProjection * world;
+    out.worldPosition = world.xyz;
+    out.normal = normalize(draw.normalMatrix * v.normal);
+    out.color = v.color.rgb;
+    return out;
+}
+fragment float4 solid_fragment(RasterTerrain in [[stage_in]],
+                                constant FrameUniforms &frame [[buffer(1)]],
+                                constant DrawUniforms &draw [[buffer(2)]]
+                                STUDIO_LIGHTING_PARAMS)
+{
+    return studio_scene_color(in.worldPosition, in.normal, in.clipPosition.xy, in.color, frame, draw,
                               STUDIO_LIGHTING_ARGS);
 }
 

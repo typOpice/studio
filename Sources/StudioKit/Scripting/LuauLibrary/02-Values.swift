@@ -238,6 +238,45 @@ Vector3 = table.freeze({
 })
 
 --------------------------------------------------------------------------------
+-- Ray
+do
+	local meta = {}
+	local methods = {}
+	local function ray(origin, direction)
+		checkOther(origin, "Vector3", "Ray.new")
+		checkOther(direction, "Vector3", "Ray.new")
+		local value = setmetatable({ origin, direction }, meta)
+		typeTags[value] = "Ray"
+		return value
+	end
+	meta.__index = function(self, key)
+		if key == "Origin" then return self[1] end
+		if key == "Direction" then return self[2] end
+		if key == "Unit" then return ray(self[1], self[2].Unit) end
+		if methods[key] then return methods[key] end
+		raise(tostring(key) .. " is not a valid member of Ray", 2)
+	end
+	meta.__eq = function(a, b) return a[1] == b[1] and a[2] == b[2] end
+	meta.__newindex = function(_, key) raise(tostring(key) .. " cannot be assigned to", 2) end
+	meta.__tostring = function(self) return "{" .. tostring(self[1]) .. "}, {" .. tostring(self[2]) .. "}" end
+	meta.__metatable = LOCKED
+	function methods.ClosestPoint(self, point)
+		checkSelf(self, "Ray", "ClosestPoint")
+		checkOther(point, "Vector3", "ClosestPoint")
+		local direction = self[2]
+		local squared = direction:Dot(direction)
+		local t = if squared > 0 then math.max(0, (point - self[1]):Dot(direction) / squared) else 0
+		return self[1] + direction * t
+	end
+	function methods.Distance(self, point)
+		checkSelf(self, "Ray", "Distance")
+		return (point - methods.ClosestPoint(self, point)).Magnitude
+	end
+	Ray = table.freeze({ new = function(origin, direction)
+		return ray(origin or vector(0, 0, 0), direction or vector(0, 0, 0))
+	end })
+end
+
 -- Color3
 
 local Color3Meta = {}
@@ -434,6 +473,7 @@ Enum = table.freeze({
 	AnimationPriority = makeEnum("AnimationPriority", { "Core", "Idle", "Movement", "Action" }),
 	Technology = makeEnum("Technology", { "Conventional", "RayTraced" }),
 	NormalId = makeEnum("NormalId", { "Right", "Top", "Back", "Left", "Bottom", "Front" }),
+	SurfaceGuiSizingMode = makeEnum("SurfaceGuiSizingMode", { "FixedSize", "PixelsPerStud" }),
 	TextureMode = makeEnum("TextureMode", { "Stretch", "Wrap" }),
 	PositionAlignmentMode = makeEnum("PositionAlignmentMode", { "OneAttachment", "TwoAttachment" }),
 	OrientationAlignmentMode = makeEnum("OrientationAlignmentMode", { "OneAttachment", "TwoAttachment" }),

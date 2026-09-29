@@ -40,6 +40,14 @@ local function inLocalScript()
 	return threadLocal[coroutine.running()] == true
 end
 
+gui.rawInvoke = invoke
+invoke = function(name, ...)
+	if string.sub(name, 1, 4) == "gui." or string.sub(name, 1, 5) == "tree." then
+		return gui.rawInvoke("gui.scoped", inLocalScript(), name, ...)
+	end
+	return gui.rawInvoke(name, ...)
+end
+
 local function report(message, thread)
 	local trace = ""
 	if thread ~= nil then

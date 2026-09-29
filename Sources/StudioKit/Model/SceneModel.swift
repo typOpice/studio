@@ -23,6 +23,7 @@ final class SceneModel: ObservableObject {
     /// accessor: changing one part changes it in place, where a `@Published` array is
     /// copied whole by every change.
     let index = SceneIndex()
+    @Published var solidBusy = false
 
     var parts: [Part] {
         get { partStore }
@@ -42,10 +43,10 @@ final class SceneModel: ObservableObject {
     @Published var constraints: [SceneConstraint] = []
     /// A weld or joint open in the Properties panel.
     @Published var selectedConstraint: UUID? {
-        didSet { if selectedConstraint != nil { leaveStarterPlayer() } }
+        didSet { if selectedConstraint != nil { selectedLight = nil; leaveStarterPlayer() } }
     }
     @Published var selectedAttachment: UUID? {
-        didSet { if selectedAttachment != nil { leaveStarterPlayer() } }
+        didSet { if selectedAttachment != nil { selectedLight = nil; leaveStarterPlayer() } }
     }
     @Published var scripts: [ScriptObject] = []
     @Published var shaders: [ShaderObject] = []
@@ -58,6 +59,7 @@ final class SceneModel: ObservableObject {
     @Published var localScreenRemoved: Set<UUID> = []
     /// GUIs made in Studio (StarterGui), and the one selected in the Explorer.
     @Published var starterGui: [StarterGuiObject] = []
+    @Published var selectedViewportMember: UUID?
     @Published var selectedGui: UUID? {
         didSet { if selectedGui != nil { leaveOthers(for: \.selectedGui) } }
     }
@@ -90,6 +92,9 @@ final class SceneModel: ObservableObject {
     }
     @Published var selectedSound: UUID? {
         didSet { if selectedSound != nil { leaveOthers(for: \.selectedSound) } }
+    }
+    @Published var selectedLight: UUID? {
+        didSet { if selectedLight != nil { leaveOthers(for: \.selectedLight) } }
     }
     /// A ParticleEmitter picked in the Explorer.
     @Published var selectedEmitter: EmitterRef? {
@@ -154,9 +159,10 @@ final class SceneModel: ObservableObject {
         if picked != \SceneModel.selectedSound, selectedSound != nil { selectedSound = nil }
         if picked != \SceneModel.selectedAsset, selectedAsset != nil { selectedAsset = nil }
         if picked != \SceneModel.selectedDataObject, selectedDataObject != nil { selectedDataObject = nil }
+        if picked != \SceneModel.selectedLight, selectedLight != nil { selectedLight = nil }
         if picked != \SceneModel.selectedEmitter, selectedEmitter != nil { selectedEmitter = nil }
         if picked == \SceneModel.selectedGui || picked == \SceneModel.selectedSound || picked == \SceneModel.selectedAsset
-            || picked == \SceneModel.selectedDataObject || picked == \SceneModel.selectedEmitter {
+            || picked == \SceneModel.selectedDataObject || picked == \SceneModel.selectedEmitter || picked == \SceneModel.selectedLight {
             if !selection.isEmpty { selection = [] }
             if selectedConstraint != nil { selectedConstraint = nil }
             if selectedAttachment != nil { selectedAttachment = nil }
@@ -179,6 +185,7 @@ final class SceneModel: ObservableObject {
         selectedAsset = nil
         selectedDataObject = nil
         selectedEmitter = nil
+        selectedLight = nil
         selectedScript = nil
         selectedShader = nil
         selectedConstraint = nil
@@ -190,12 +197,13 @@ final class SceneModel: ObservableObject {
     /// Whether anything at all is selected.
     var hasAnySelection: Bool {
         !selection.isEmpty || selectedGui != nil || selectedSound != nil || selectedAsset != nil || selectedDataObject != nil
-            || selectedEmitter != nil || selectedScript != nil || selectedShader != nil || selectedConstraint != nil || selectedAttachment != nil
+            || selectedLight != nil || selectedEmitter != nil || selectedScript != nil || selectedShader != nil || selectedConstraint != nil || selectedAttachment != nil
             || lightingSelected || starterPlayerSelected || selectedCoreScript != nil || joinTool != nil
     }
 
     /// Shows StarterPlayer's settings in the inspector.
     func selectStarterPlayer() {
+        selectedLight = nil
         selection = []
         selectedScript = nil
         selectedShader = nil
@@ -206,6 +214,7 @@ final class SceneModel: ObservableObject {
 
     /// Shows the Lighting settings in the inspector.
     func selectLighting() {
+        selectedLight = nil
         selection = []
         selectedScript = nil
         selectedShader = nil
@@ -216,6 +225,7 @@ final class SceneModel: ObservableObject {
 
     /// Opens one of the built-in scripts, read-only.
     func selectCoreScript(named name: String) {
+        selectedLight = nil
         selection = []
         selectedScript = nil
         selectedShader = nil
@@ -279,6 +289,7 @@ final class SceneModel: ObservableObject {
                          placeID: placeID, terrain: terrain, watches: watches) }
         set {
             parts = newValue.parts
+            if let id = selectedLight, light(id) == nil { selectedLight = nil }
             groups = newValue.groups
             attachments = newValue.attachments
             constraints = newValue.constraints
@@ -494,7 +505,8 @@ final class SceneModel: ObservableObject {
         // With no parts selected, what the Properties panel shows: a Sound, a picture or
         // sound file, or a GUI object.
         if selection.isEmpty {
-            if let id = selectedSound, sound(id: id) != nil { deleteSound(id) }
+            if let id = selectedLight, light(id) != nil { removeLight(id) }
+            else if let id = selectedSound, sound(id: id) != nil { deleteSound(id) }
             else if let id = selectedAsset, asset(id: id) != nil { deleteAsset(id) }
             else if let id = selectedGui, guiObject(id: id) != nil { deleteGuiObject(id) }
             return

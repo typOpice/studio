@@ -276,13 +276,17 @@ extension SceneState {
             id = UUID()
             seen.insert(id)
         }
-        for index in state.parts.indices { unique(&state.parts[index].id) }
+        for index in state.parts.indices {
+            unique(&state.parts[index].id)
+            for light in state.parts[index].lights.indices { unique(&state.parts[index].lights[light].id) }
+        }
         for index in state.groups.indices { unique(&state.groups[index].id) }
         for index in state.scripts.indices { unique(&state.scripts[index].id) }
         for index in state.shaders.indices { unique(&state.shaders[index].id) }
         for index in state.animations.indices { unique(&state.animations[index].id) }
         for index in state.attachments.indices { unique(&state.attachments[index].id) }
         for index in state.constraints.indices { unique(&state.constraints[index].id) }
+        for index in state.starterGui.indices { unique(&state.starterGui[index].id) }
         return state
     }
 }

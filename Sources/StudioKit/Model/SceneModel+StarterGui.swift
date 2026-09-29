@@ -10,6 +10,9 @@ struct StarterGuiObject: Codable, Equatable, Identifiable {
     var id = UUID()
     /// The object it is in; nil at the top of StarterGui, where the ScreenGuis are.
     var parentID: UUID?
+    /// A world SurfaceGui belongs to this part; other roots belong to StarterGui.
+    var worldParent: UUID?
+    var viewportContent: ViewportContent?
     var kind: GuiObject.Kind
     var name: String
     var properties: [String: ScriptValue] = [:]
@@ -23,6 +26,8 @@ struct StarterGuiObject: Codable, Equatable, Identifiable {
     /// As a GUI object with its properties set, for reading them and for copies.
     func object(id: Int = 0) -> GuiObject {
         var object = GuiObject(id: id, kind: kind)
+        object.templateID = self.id
+        object.worldParent = worldParent
         object.name = name
         for (key, value) in properties.sorted(by: { $0.key < $1.key }) {
             _ = PlayController.setGuiProperty(&object, key, value)
@@ -35,6 +40,44 @@ struct StarterGuiObject: Codable, Equatable, Identifiable {
 
 extension SceneModel {
     func guiObject(id: UUID) -> StarterGuiObject? { starterGui.first { $0.id == id } }
+
+    @discardableResult
+    func addSurfaceGui(to part: UUID) -> UUID? {
+        guard self.part(id: part) != nil else { return nil }
+        var object = StarterGuiObject(kind: .surfaceGui)
+        object.worldParent = part
+        commit("Added SurfaceGui") {
+            starterGui.append(object)
+            selection = []
+            selectedGui = object.id
+        }
+        return object.id
+    }
+
+    /// Carries world GUI templates and their scripts with copied parts. References
+    /// within the copy follow it; references outside it keep their original target.
+    func cloneWorldGui(remap nodes: [UUID: UUID]) {
+        let roots = starterGui.filter { $0.worldParent.map { nodes[$0] != nil } ?? false }
+        let ids = Set(roots.flatMap { guiSubtree($0.id) })
+        var remap = nodes
+        for id in ids { remap[id] = UUID() }
+        for original in starterGui where ids.contains(original.id) {
+            var copy = original
+            copy.id = remap[original.id]!
+            copy.parentID = original.parentID.flatMap { remap[$0] }
+            copy.worldParent = original.worldParent.flatMap { remap[$0] }
+            copy.viewportContent = copy.viewportContent?.reidentified()
+            if let token = copy.properties["adornee"]?.asString, token.hasPrefix("p:"),
+               let old = UUID(uuidString: String(token.dropFirst(2))), let target = remap[old] {
+                copy.properties["adornee"] = .string("p:\(target)")
+            }
+            starterGui.append(copy)
+        }
+        for original in scripts where original.host == .starterGui && (original.parentID.map(ids.contains) ?? false) {
+            var copy = original; copy.id = UUID(); copy.parentID = original.parentID.flatMap { remap[$0] }
+            scripts.append(copy)
+        }
+    }
 
     /// In the order they were made; nil for the top of StarterGui.
     func guiChildren(of parent: UUID?) -> [StarterGuiObject] { starterGui.filter { $0.parentID == parent } }
@@ -56,7 +99,7 @@ extension SceneModel {
     @discardableResult
     func addGuiObject(_ kind: GuiObject.Kind, in parent: UUID?) -> UUID? {
         // Only ScreenGuis stand at the top; only they can't go inside something.
-        guard (parent == nil) == (kind == .screenGui), parent.map({ guiObject(id: $0) != nil }) ?? true else { return nil }
+        guard (parent == nil) == kind.isLayer, parent.map({ guiObject(id: $0) != nil }) ?? true else { return nil }
         let taken = guiChildren(of: parent).map(\.name)
         var object = StarterGuiObject(kind: kind, name: Self.unique(kind.rawValue, among: taken), parentID: parent)
         // Somewhere to be seen: a new object sits in from the corner.
@@ -133,7 +176,7 @@ enum GuiAlignment: String, CaseIterable, Identifiable {
 extension GuiObject.Kind {
     /// Holds other objects when something is inserted with it selected; anything else
     /// gets a sibling instead.
-    var isContainer: Bool { self == .screenGui || self == .frame || self == .scrollingFrame || self == .billboardGui }
+    var isContainer: Bool { isLayer || self == .frame || self == .scrollingFrame || self == .viewportFrame }
     /// A modifier that only means something on a drawn object, not on a ScreenGui.
     var needsGuiObject: Bool { isModifier && self != .uiListLayout && self != .uiGridLayout && self != .uiPadding }
 }
@@ -154,7 +197,7 @@ extension SceneModel {
     /// Where the ribbon would put a new object of a kind, given what is selected: nil
     /// when it can't go anywhere (a modifier with nothing selected).
     func guiInsertTarget(for kind: GuiObject.Kind) -> (parent: UUID?, needsScreen: Bool)? {
-        if kind == .screenGui { return (nil, false) }
+        if kind.isLayer { return (nil, false) }
         // A modifier is looked past, to what it modifies.
         var anchor = selectedGui.flatMap(guiObject(id:))
         if let current = anchor, current.kind.isModifier { anchor = current.parentID.flatMap(guiObject(id:)) }
@@ -193,6 +236,7 @@ extension SceneModel {
         }
         let siblings = parent.map(guiChildren(of:)) ?? guiChildren(of: nil)
         var object = StarterGuiObject(kind: kind, name: Self.unique(kind.rawValue, among: siblings.map(\.name)), parentID: parent)
+        if kind == .surfaceGui { object.worldParent = selection.first.flatMap { part(id: $0)?.id } }
         if !kind.isModifier && kind != .screenGui {
             // Each new one a little further in than the last, so none hides another.
             let step = Double(20 * (siblings.filter { !$0.kind.isModifier }.count % 10))
@@ -259,6 +303,7 @@ extension SceneModel {
         for member in guiSubtree(id) {
             guard var copy = guiObject(id: member) else { continue }
             copy.id = remap[member]!
+            copy.viewportContent = copy.viewportContent?.reidentified()
             copy.parentID = member == id ? original.parentID : copy.parentID.flatMap { remap[$0] }
             copies.append(copy)
         }

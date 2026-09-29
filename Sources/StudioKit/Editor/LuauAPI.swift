@@ -39,6 +39,7 @@ enum LuauAPI {
         "ColorSequenceKeypoint": [method("new", "time, color", "ColorSequenceKeypoint")],
         "NumberSequence": [method("new", "value0, value1", "NumberSequence")],
         "RaycastParams": [method("new", "", "RaycastParams")],
+        "Ray": [method("new", "origin, direction", "Ray")],
         "NumberSequenceKeypoint": [method("new", "time, value, envelope", "NumberSequenceKeypoint")],
         "NumberRange": [method("new", "min, max", "NumberRange")],
         "Region3": [method("new", "min, max", "Region3")],
@@ -54,6 +55,7 @@ enum LuauAPI {
             property("Technology", "Enum.Technology"), property("ActuatorType", "Enum.ActuatorType"),
             property("TextXAlignment", "Enum.TextXAlignment"), property("PlaybackState", "Enum.PlaybackState"),
             property("MouseBehavior", "Enum.MouseBehavior"), property("NormalId", "Enum.NormalId"),
+            property("SurfaceGuiSizingMode", "Enum.SurfaceGuiSizingMode"), property("CollisionFidelity", "Enum.CollisionFidelity"),
             property("TextureMode", "Enum.TextureMode"),
             property("PositionAlignmentMode", "Enum.PositionAlignmentMode"),
             property("OrientationAlignmentMode", "Enum.OrientationAlignmentMode"),
@@ -78,6 +80,8 @@ enum LuauAPI {
         "Enum.TextXAlignment": enumItems(["Left", "Right", "Center"]),
         "Enum.PlaybackState": enumItems(["Begin", "Delayed", "Playing", "Paused", "Completed", "Cancelled"]),
         "Enum.MouseBehavior": enumItems(["Default", "LockCenter", "LockCurrentPosition"]),
+        "Enum.SurfaceGuiSizingMode": enumItems(["FixedSize", "PixelsPerStud"]),
+        "Enum.CollisionFidelity": enumItems(["Default", "Hull", "Box", "PreciseConvexDecomposition"]),
         "Enum.NormalId": enumItems(["Right", "Top", "Back", "Left", "Bottom", "Front"]),
         "Enum.TextureMode": enumItems(["Stretch", "Wrap"]),
         "Enum.PositionAlignmentMode": enumItems(["OneAttachment", "TwoAttachment"]),
@@ -162,13 +166,27 @@ enum LuauAPI {
             property("Occupant", "Humanoid"), property("Disabled", "boolean"), property("ClickDetector", "ClickDetector"),
             property("Touched", "RBXScriptSignal"), property("TouchEnded", "RBXScriptSignal"),
             property("PointLight", "PointLight"),
+            method("UnionAsync", "parts, collisionFidelity", "UnionOperation"),
+            method("SubtractAsync", "parts, collisionFidelity", "UnionOperation"),
             method("FindFirstChildOfClass", "className", "PointLight"),
             method("Destroy", "", "()"), method("Clone", "", "Part"), method("IsA", "className", "boolean"),
             method("GetFullName", "", "string"), method("FindFirstChild", "name", "Instance"),
             method("GetChildren", "", "table")
     ]
 
+    private static let lightMembers: [CompletionItem] = [
+        property("Name", "string"), property("ClassName", "string"), property("Parent", "Part"),
+        property("Enabled", "boolean"), property("Brightness", "number"), property("Color", "Color3"),
+        property("Range", "number"), property("Shadows", "boolean"),
+        method("Destroy", "", "()"), method("IsA", "className", "boolean")
+    ]
+    private static let operationMembers: [CompletionItem] = partMembers.filter { !$0.label.hasPrefix("Clone(") } + [
+        property("UsePartColor", "boolean"), property("CollisionFidelity", "EnumItem")
+    ]
+
     static let instanceMembers: [String: [CompletionItem]] = [
+        "Ray": [property("Origin", "Vector3"), property("Direction", "Vector3"), property("Unit", "Ray"),
+                method("ClosestPoint", "point", "Vector3"), method("Distance", "point", "number")],
         "UDim": [property("Scale", "number"), property("Offset", "number")],
         "UDim2": [property("X", "UDim"), property("Y", "UDim"), property("Width", "UDim"), property("Height", "UDim")],
         "Vector2": [property("X", "number"), property("Y", "number"), property("Magnitude", "number")],
@@ -177,6 +195,20 @@ enum LuauAPI {
             method("GetChildren", "", "table")
         ],
         "ScreenGui": guiInstance + [property("Enabled", "boolean")],
+        "SurfaceGui": guiInstance + [
+            property("Adornee", "Part"), property("Face", "EnumItem"), property("CanvasSize", "Vector2"),
+            property("SizingMode", "EnumItem"), property("PixelsPerStud", "number"), property("Enabled", "boolean"),
+            property("AlwaysOnTop", "boolean"), property("LightInfluence", "number"), property("Brightness", "number"),
+            property("ZOffset", "number"), property("MaxDistance", "number")
+        ],
+        "ViewportFrame": guiObject + [
+            property("CurrentCamera", "Camera"), property("Ambient", "Color3"), property("LightColor", "Color3"),
+            property("LightDirection", "Vector3"), property("ImageColor3", "Color3"), property("ImageTransparency", "number")
+        ],
+        "Camera": guiInstance + [
+            property("CFrame", "CFrame"), property("Focus", "CFrame"), property("FieldOfView", "number"),
+            method("Clone", "", "Camera")
+        ],
         "Frame": guiObject,
         "TextLabel": guiText,
         "TextButton": guiText + [
@@ -275,7 +307,11 @@ enum LuauAPI {
             property("R", "number"), property("G", "number"), property("B", "number"),
             method("Lerp", "goal, alpha", "Color3"), method("ToHSV", "", "number"), method("ToHex", "", "string")
         ],
+        "BasePart": partMembers,
         "Part": partMembers,
+        "PartOperation": operationMembers + [method("Clone", "", "PartOperation")],
+        "UnionOperation": operationMembers + [method("Clone", "", "UnionOperation")],
+        "NegateOperation": operationMembers + [method("Clone", "", "NegateOperation")],
         "MeshPart": partMembers + [
             property("MeshId", "string"), property("TextureID", "string"),
             property("CollisionFidelity", "EnumItem"), property("MeshSize", "Vector3")
@@ -513,11 +549,10 @@ enum LuauAPI {
             property("ServoMaxForce", "number"), property("CurrentPosition", "number"),
             method("Destroy", "", "()"), method("IsA", "className", "boolean")
         ],
-        "PointLight": [
-            property("Enabled", "boolean"), property("Brightness", "number"), property("Color", "Color3"),
-            property("Range", "number"), property("Shadows", "boolean"), property("Parent", "Part"),
-            method("Destroy", "", "()"), method("IsA", "className", "boolean")
-        ],
+        "Light": lightMembers + [method("Clone", "", "Light")],
+        "PointLight": lightMembers + [method("Clone", "", "PointLight")],
+        "SpotLight": lightMembers + [method("Clone", "", "SpotLight"), property("Face", "EnumItem"), property("Angle", "number")],
+        "SurfaceLight": lightMembers + [method("Clone", "", "SurfaceLight"), property("Face", "EnumItem"), property("Angle", "number")],
         "Animations": [
             method("FindFirstChild", "name", "Animation"), method("WaitForChild", "name", "Animation"),
             method("GetChildren", "", "table")
@@ -554,6 +589,7 @@ enum LuauAPI {
             method("GetMouseLocation", "", "Vector2")
         ],
         "Mouse": [
+            property("UnitRay", "Ray"), property("TargetFilter", "Instance"), property("Move", "RBXScriptSignal"),
             property("Hit", "CFrame"), property("Target", "Part"), property("X", "number"), property("Y", "number"),
             property("ViewSizeX", "number"), property("ViewSizeY", "number"), property("Icon", "string"),
             property("Button1Down", "RBXScriptSignal"), property("Button1Up", "RBXScriptSignal"),

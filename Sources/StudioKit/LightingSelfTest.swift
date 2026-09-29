@@ -107,7 +107,7 @@ enum LightingSelfTest {
     private static func testUniformLayout(_ check: Checker) {
         check("LightingUniforms is 384 bytes", MemoryLayout<LightingUniforms>.stride == 384,
               "\(MemoryLayout<LightingUniforms>.stride)")
-        check("PointLightData is 48 bytes", MemoryLayout<PointLightData>.stride == 48)
+        check("PointLightData is 96 bytes", MemoryLayout<PointLightData>.stride == 96)
         check("InstanceInfo is 96 bytes", MemoryLayout<InstanceInfo>.stride == 96)
         var settings = LightingSettings()
         settings.exposureCompensation = 1
@@ -167,7 +167,7 @@ enum LightingSelfTest {
         check("Instance.new(\"PointLight\", part) lights it",
               out.count > 5 && out[5] == "true true 12 PointLight 1", "\(out)")
         check("…settings made before parenting carry over", out.count > 6 && out[6] == "4", "\(out)")
-        check("one PointLight per part", out.count > 7 && out[7].contains("already has a PointLight"), "\(out)")
+        check("multiple PointLights per part", out.count > 7 && out[7] == "true", "\(out)")
         check("PointLight properties are type-checked", out.count > 8 && out[8].contains("number expected"), "\(out)")
         check("Destroy takes it out, keeping its settings", out.count > 9 && out[9] == "nil 12", "\(out)")
         check("the lights are in the scene",
@@ -229,7 +229,7 @@ enum LightingSelfTest {
 
     /// Renders and returns a function giving the brightness (0–1) and colour at a
     /// world point.
-    private struct Frame {
+    struct Frame {
         let pixels: [UInt8]
         let width: Int
         let height: Int
@@ -260,7 +260,7 @@ enum LightingSelfTest {
         }
     }
 
-    private static func render(_ model: SceneModel, camera: Camera) -> (Frame, Bool)? {
+    static func render(_ model: SceneModel, camera: Camera) -> (Frame, Bool)? {
         guard let device = MTLCreateSystemDefaultDevice() else { return nil }
         let width = 480, height = 320
         let source = Source(model: model, camera: camera)

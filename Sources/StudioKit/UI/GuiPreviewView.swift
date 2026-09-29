@@ -11,13 +11,13 @@ struct GuiPreviewArea: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let layout = GuiPreviewGeometry(view: geometry.size, device: editor.device)
             let editing = session.editingGui
+            let layout = GuiPreviewGeometry(view: geometry.size, device: editor.device, canvas: editing ? editor.surfaceSize : nil)
             ZStack(alignment: .topLeading) {
-                if editor.device != .window {
+                if editor.device != .window || (editing && editor.surfaceRoot != nil) {
                     DeviceFrame(layout: layout, view: geometry.size, dimmed: editing, title: editor.device.title)
                 }
-                GuiLayer(store: store, interactive: false, outlinesSelection: !editing)
+                GuiLayer(store: store, interactive: false, outlinesSelection: !editing, root: editing ? editor.surfaceRoot : nil)
                     .frame(width: layout.screen.width, height: layout.screen.height)
                     .clipped()
                     .scaleEffect(layout.scale, anchor: .topLeading)
@@ -77,7 +77,7 @@ private struct GuiEditOverlay: View {
     @State private var pressing = false
 
     var body: some View {
-        let placed = store.layout(in: layout.screen)
+        let placed = editor.surfaceRoot.map { store.layout(root: $0, in: layout.screen) } ?? store.layout(in: layout.screen)
         let selected = editor.selectedCopy
         let chosen = placed.first { $0.id == selected }
         let hovering = placed.first { $0.id == editor.hovered && $0.id != selected }

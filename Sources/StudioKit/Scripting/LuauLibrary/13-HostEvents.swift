@@ -75,6 +75,8 @@ local function dispatch(event)
 		if began and exists() then
 			fire(record.signals.Touched, part, limb)
 		end
+	elseif kind == "MouseMove" then
+		fire(mouseKit.buttons.Move)
 	elseif kind == "Input" then
 		local signal = if event[2] == "Began" then inputBegan else inputEnded
 		fire(signal, inputObject(event[3], event[4], if event[2] == "Began" then "Begin" else "End"), false)

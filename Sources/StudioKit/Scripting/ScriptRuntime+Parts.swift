@@ -8,6 +8,9 @@ extension ScriptRuntime {
     /// Host calls for `part.*` and `workspace.*`: parts, and making and finding them.
     func partsCall(_ name: String, _ arguments: [ScriptValue]) -> ScriptValue {
         switch name {
+        case "part.boolean":
+            return solidCall(arguments)
+
         case "part.exists":
             return .bool(partID(arguments.first ?? .nothing) != nil)
 
@@ -99,7 +102,9 @@ extension ScriptRuntime {
             case "throttlefloat": return .number(Double(control.throttle))
             default: return .number(Double(control.steer))
             }
-        case "ismeshpart": return .bool(part.mesh != nil)
+        case "solidclass": return .string(part.negative ? "NegateOperation" : part.solid != nil ? "UnionOperation" : "")
+        case "usepartcolor": return part.solid.map { _ in .bool(part.usePartColor) } ?? .nothing
+        case "ismeshpart": return .bool(part.mesh != nil && part.solid == nil)
         case "meshid": return part.mesh.map { .string($0.meshId) } ?? .nothing
         case "textureid": return part.mesh.map { .string($0.textureId) } ?? .nothing
         case "collisionfidelity": return part.mesh.map { .string($0.collisionFidelity.robloxName) } ?? .nothing
@@ -150,6 +155,8 @@ extension ScriptRuntime {
         let meshAsset = property == "meshid" ? value.asString.flatMap(model.asset(named:)).flatMap { $0.kind == .mesh ? $0.id : nil } : nil
         model.update(id: id) { part in
             switch property {
+            case "usepartcolor":
+                if let flag = value.asBool, part.solid != nil { part.usePartColor = flag }
             case "name":
                 if let name = value.asString { part.name = name }
             case "shape":

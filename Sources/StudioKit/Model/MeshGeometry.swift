@@ -328,6 +328,14 @@ final class MeshLibrary {
 
     /// A part's mesh, if it is a MeshPart whose file is here and readable.
     func geometry(for part: Part) -> MeshGeometry? {
+        if let deformation = part.solidDeformation {
+            if let cached = made[deformation.id] { return cached }
+            if let geometry = deformation.geometry() { made[deformation.id] = geometry; return geometry }
+        }
+        if let solid = part.solid {
+            if let cached = made[solid.mesh.id] { return cached }
+            if let geometry = solid.mesh.geometry() { made[solid.mesh.id] = geometry; return geometry }
+        }
         guard let mesh = part.mesh else { return nil }
         return geometry(mesh.asset)
     }

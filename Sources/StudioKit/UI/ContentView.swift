@@ -342,6 +342,14 @@ struct RibbonView: View {
 
         divider
 
+        group("Solid modeling") {
+            RibbonButton(title: "Union", icon: "square.stack.3d.up.fill", enabled: model.canUnionSelection && !session.isPlaying) { model.unionSelected() }
+            RibbonButton(title: "Negate", icon: "minus.square", enabled: !model.selectedParts.isEmpty && !model.solidBusy && !session.isPlaying) { model.negateSelected() }
+            RibbonButton(title: "Separate", icon: "square.on.square", enabled: model.canSeparateSelection && !session.isPlaying) { model.separateSelected() }
+        }
+
+        divider
+
         group("Select") {
             RibbonButton(title: "All", icon: "checkmark.square") { model.selectAll() }
             RibbonButton(title: "None", icon: "xmark.square", enabled: !model.selection.isEmpty) {

@@ -330,23 +330,23 @@ Vector2 = table.freeze({
 -- GUI objects
 
 gui.classes = {
-	ScreenGui = true, BillboardGui = true, Frame = true, ScrollingFrame = true, TextLabel = true,
+	ScreenGui = true, BillboardGui = true, SurfaceGui = true, ViewportFrame = true, Frame = true, ScrollingFrame = true, TextLabel = true,
 	TextButton = true, TextBox = true, ImageLabel = true, ImageButton = true,
 	UICorner = true, UIPadding = true, UIListLayout = true, UIStroke = true, UIGradient = true, UIGridLayout = true,
 	UIAspectRatioConstraint = true, UISizeConstraint = true, UITextSizeConstraint = true,
 }
-gui.isGuiObject = { Frame = true, ScrollingFrame = true, TextLabel = true, TextButton = true, TextBox = true,
+gui.isGuiObject = { ViewportFrame = true, Frame = true, ScrollingFrame = true, TextLabel = true, TextButton = true, TextBox = true,
 	ImageLabel = true, ImageButton = true }
 gui.isText = { TextLabel = true, TextButton = true, TextBox = true }
 gui.isImage = { ImageLabel = true, ImageButton = true }
-gui.isLayer = { ScreenGui = true, BillboardGui = true }
+gui.isLayer = { ScreenGui = true, BillboardGui = true, SurfaceGui = true }
 gui.isLayout = { UIListLayout = true, UIGridLayout = true }
-gui.hasEnabled = { ScreenGui = true, BillboardGui = true, UIStroke = true, UIGradient = true }
+gui.hasEnabled = { ScreenGui = true, BillboardGui = true, SurfaceGui = true, UIStroke = true, UIGradient = true }
 gui.isConstraint = { UIAspectRatioConstraint = true, UISizeConstraint = true, UITextSizeConstraint = true }
-gui.isSized = { Frame = true, ScrollingFrame = true, TextLabel = true, TextButton = true, TextBox = true,
+gui.isSized = { ViewportFrame = true, Frame = true, ScrollingFrame = true, TextLabel = true, TextButton = true, TextBox = true,
 	ImageLabel = true, ImageButton = true, BillboardGui = true }
 -- Properties whose values are Enum items, by the enum's name.
-gui.enumKinds = { TextXAlignment = true, TextYAlignment = true, AutomaticSize = true, Font = true, ScaleType = true,
+gui.enumKinds = { NormalId = true, SurfaceGuiSizingMode = true, TextXAlignment = true, TextYAlignment = true, AutomaticSize = true, Font = true, ScaleType = true,
 	FillDirection = true, SortOrder = true, HorizontalAlignment = true, VerticalAlignment = true,
 	ApplyStrokeMode = true, LineJoinMode = true, StartCorner = true, AspectType = true, DominantAxis = true }
 -- Reading a BillboardGui's Adornee back: filled in with the character (part 10).
@@ -354,6 +354,10 @@ gui.bodyPartOf = setmetatable({}, { __mode = "k" })
 
 -- Each property: its type, and the classes that have it.
 gui.properties = {
+    CurrentCamera = { "Camera", { ViewportFrame = true } },
+    Ambient = { "Color3", { ViewportFrame = true } },
+    LightColor = { "Color3", { ViewportFrame = true } },
+    LightDirection = { "Vector3", { ViewportFrame = true } },
 	Position = { "UDim2", gui.isGuiObject },
 	Size = { "UDim2", gui.isSized },
 	AnchorPoint = { "Vector2", gui.isGuiObject },
@@ -367,7 +371,7 @@ gui.properties = {
 	AbsoluteSize = { "Vector2", gui.isGuiObject, readOnly = true },
 	AbsolutePosition = { "Vector2", gui.isGuiObject, readOnly = true },
 	Enabled = { "boolean", gui.hasEnabled },
-	ResetOnSpawn = { "boolean", { ScreenGui = true } },
+	ResetOnSpawn = { "boolean", gui.isLayer },
 	DisplayOrder = { "number", { ScreenGui = true } },
 	Text = { "string", gui.isText },
 	TextColor3 = { "Color3", gui.isText },
@@ -385,8 +389,8 @@ gui.properties = {
 	TextEditable = { "boolean", { TextBox = true } },
 	CursorPosition = { "number", { TextBox = true } },
 	Image = { "string", gui.isImage },
-	ImageColor3 = { "Color3", gui.isImage },
-	ImageTransparency = { "number", gui.isImage },
+	ImageColor3 = { "Color3", { ImageLabel = true, ImageButton = true, ViewportFrame = true } },
+	ImageTransparency = { "number", { ImageLabel = true, ImageButton = true, ViewportFrame = true } },
 	ScaleType = { "ScaleType", gui.isImage },
 	FillDirection = { "FillDirection", gui.isLayout },
 	Padding = { "UDim", { UIListLayout = true } },
@@ -412,15 +416,21 @@ gui.properties = {
 	MaxSize = { "Vector2", { UISizeConstraint = true } },
 	MinTextSize = { "number", { UITextSizeConstraint = true } },
 	MaxTextSize = { "number", { UITextSizeConstraint = true } },
-	CanvasSize = { "UDim2", { ScrollingFrame = true } },
+	CanvasSize = { "UDim2", { ScrollingFrame = true, SurfaceGui = true }, byClass = { SurfaceGui = "Vector2" } },
+	Face = { "NormalId", { SurfaceGui = true } },
+	SizingMode = { "SurfaceGuiSizingMode", { SurfaceGui = true } },
+	PixelsPerStud = { "number", { SurfaceGui = true } },
+	LightInfluence = { "number", { SurfaceGui = true } },
+	Brightness = { "number", { SurfaceGui = true } },
+	ZOffset = { "number", { SurfaceGui = true } },
 	CanvasPosition = { "Vector2", { ScrollingFrame = true } },
 	ScrollBarThickness = { "number", { ScrollingFrame = true } },
 	ScrollingEnabled = { "boolean", { ScrollingFrame = true } },
 	AutomaticCanvasSize = { "AutomaticSize", { ScrollingFrame = true } },
-	Adornee = { "Adornee", { BillboardGui = true } },
+	Adornee = { "Adornee", { BillboardGui = true, SurfaceGui = true } },
 	StudsOffset = { "Vector3", { BillboardGui = true } },
-	AlwaysOnTop = { "boolean", { BillboardGui = true } },
-	MaxDistance = { "number", { BillboardGui = true } },
+	AlwaysOnTop = { "boolean", { BillboardGui = true, SurfaceGui = true } },
+	MaxDistance = { "number", { BillboardGui = true, SurfaceGui = true } },
 	CornerRadius = { "UDim", { UICorner = true } },
 	PaddingLeft = { "UDim", { UIPadding = true } },
 	PaddingRight = { "UDim", { UIPadding = true } },
@@ -479,6 +489,8 @@ function gui.read(kind, raw)
 		return toVector(raw)
 	elseif kind == "CFrame" then
 		return cframeMath.cframeFromList(raw)
+	elseif kind == "Camera" then
+		return previewKit.wrapCamera(raw)
 	elseif kind == "Adornee" then
 		return gui.adorneeFrom(raw)
 	elseif kind == "ColorSequence" then
@@ -510,6 +522,7 @@ function gui.adorneeFrom(token)
 end
 
 function gui.write(kind, value)
+	if kind == "Camera" then return previewKit.cameraId[value] end
 	if kind == "ColorSequence" or kind == "NumberSequence" then
 		if typeof(value) ~= kind then
 			return nil
@@ -559,23 +572,22 @@ function gui.write(kind, value)
 end
 
 function gui.childrenOf(parent)
-	local list = {}
-	for _, id in invoke("gui.children", parent) do
-		table.insert(list, gui.wrap(id))
-	end
-	return list
+    local list = {}
+    for _, id in invoke("gui.children", parent) do table.insert(list, gui.wrap(id)) end
+    for _, token in invoke("viewport.children", parent) or {} do table.insert(list, wrapToken(token)) end
+    return list
 end
 
 function gui.childNamed(parent, name)
-	for _, id in invoke("gui.children", parent) do
-		if invoke("gui.get", id, "name") == name then
-			return gui.wrap(id)
-		end
-	end
-	return nil
+    for _, child in gui.childrenOf(parent) do if child.Name == name then return child end end
+    return nil
 end
 
 function gui.setParent(id, parent)
+	if partIdOf[parent] ~= nil and invoke("gui.class", id) == "SurfaceGui" then
+		if not invoke("gui.worldParent", id, partIdOf[parent]) then raise("Invalid SurfaceGui parent", 3) end
+		return
+	end
 	local target
 	if parent == nil then
 		target = -1
@@ -612,6 +624,7 @@ function gui.wrap(id)
 				return invoke("gui.get", id, "name")
 			elseif key == "Parent" then
 				local parent = invoke("gui.parent", id)
+				if type(parent) == "string" then return wrapToken(parent) end
 				return if parent == 0 then gui.playerGui else gui.wrap(parent)
 			end
 			local property = gui.properties[key]
@@ -643,7 +656,7 @@ function gui.wrap(id)
 				if type(value) ~= "string" then
 					raise("Unable to assign property Name. string expected, got " .. typeof(value), 2)
 				end
-				invoke("gui.set", id, "name", value)
+				invoke("gui.set", id, "name", value, inLocalScript())
 				return
 			end
 			local property = gui.properties[key]
@@ -651,8 +664,8 @@ function gui.wrap(id)
 				raise(string.format("%s is not a valid member of %s", tostring(key), className), 2)
 			elseif property.readOnly then
 				raise(string.format("Unable to assign property %s. Property is read only", key), 2)
-			elseif property[1] == "Adornee" and value == nil then
-				invoke("gui.set", id, "adornee", nil)
+			elseif (property[1] == "Adornee" or property[1] == "Camera") and value == nil then
+				invoke("gui.set", id, string.lower(key), nil, inLocalScript())
 				return
 			end
 			local kind = property.byClass and property.byClass[className] or property[1]
@@ -660,7 +673,7 @@ function gui.wrap(id)
 			if converted == nil then
 				raise(string.format("Unable to assign property %s. %s expected, got %s", key, kind, typeof(value)), 2)
 			end
-			if invoke("gui.set", id, string.lower(key), converted) == false then
+			if invoke("gui.set", id, string.lower(key), converted, inLocalScript()) == false then
 				raise(string.format("Unable to assign property %s. %s is out of range", key, tostring(value)), 2)
 			end
 		end,
@@ -724,6 +737,49 @@ function gui.methods.GetChildren(self)
 	return gui.childrenOf(guiId(self, "GetChildren"))
 end
 
+function gui.methods.GetDescendants(self)
+    local result = {}
+    local function walk(object)
+        for _, child in object:GetChildren() do table.insert(result, child); walk(child) end
+    end
+    walk(self)
+    return result
+end
+
+function gui.methods.GetFullName(self)
+    local names = {}
+    local current = self
+    while current do
+        table.insert(names, 1, current.Name)
+        if current == gui.playerGui or current == workspace_ then break end
+        current = current.Parent
+    end
+    return table.concat(names, ".")
+end
+
+function gui.methods.IsDescendantOf(self, ancestor)
+    local current = self.Parent
+    while current do
+        if current == ancestor then return true end
+        if current == gui.playerGui or current == workspace_ then break end
+        current = current.Parent
+    end
+    return false
+end
+function gui.methods.IsAncestorOf(self, descendant)
+    return descendant ~= nil and descendant:IsDescendantOf(self)
+end
+function gui.methods.FindFirstAncestor(self, name)
+    local current = self.Parent
+    while current do
+        if current.Name == name then return current end
+        if current == gui.playerGui or current == workspace_ then break end
+        current = current.Parent
+    end
+    return nil
+end
+
+
 function gui.methods.ClearAllChildren(self)
 	for _, child in gui.childrenOf(guiId(self, "ClearAllChildren")) do
 		child:Destroy()
@@ -734,8 +790,8 @@ function gui.methods.IsA(self, className)
 	local own = invoke("gui.class", guiId(self, "IsA"))
 	return className == own or className == "Instance"
 		or (className == "GuiObject" and gui.isGuiObject[own] == true)
-		or (className == "GuiBase2d" and (gui.isGuiObject[own] or own == "ScreenGui") == true)
-		or (className == "LayerCollector" and own == "ScreenGui")
+		or (className == "GuiBase2d" and (gui.isGuiObject[own] or gui.isLayer[own]) == true)
+		or (className == "LayerCollector" and gui.isLayer[own] == true)
 		or (className == "GuiButton" and (own == "TextButton" or own == "ImageButton"))
 		or (className == "UIComponent" and string.sub(own, 1, 2) == "UI")
 		or (className == "UIConstraint" and gui.isConstraint[own] == true)
@@ -756,7 +812,7 @@ function gui.methods.IsFocused(self)
 end
 
 function gui.new(className, parent)
-	local object = gui.wrap(invoke("gui.create", className))
+	local object = gui.wrap(invoke("gui.create", className, dataKit.isLocal and dataKit.isLocal() or false))
 	if object == nil then
 		raise(string.format("Unable to create an Instance of type \"%s\"", tostring(className)), 3)
 	end
@@ -764,6 +820,58 @@ function gui.new(className, parent)
 		object.Parent = parent
 	end
 	return object
+end
+
+-- Cameras and isolated preview roots.
+previewKit.cameraId = setmetatable({}, { __mode = "k" })
+previewKit.cameras = setmetatable({}, { __mode = "v" })
+previewKit.wrapGui = gui.wrap
+previewKit.guiId = function(object) return gui.idOf[object] end
+function previewKit.wrapCamera(id)
+    if id == nil then return nil end
+    if previewKit.cameras[id] then return previewKit.cameras[id] end
+    local camera = setmetatable({}, {
+        __index = function(self, key)
+            if key == "ClassName" then return "Camera" end
+            if key == "Parent" then return gui.wrap(invoke("viewport.cameraGet", id, "parent")) end
+            if key == "IsA" then return function(_, name) return name == "Camera" or name == "Instance" end end
+            if key == "Destroy" then return function() invoke("viewport.cameraDestroy", id) end end
+            if key == "Clone" then return function() return previewKit.wrapCamera(invoke("viewport.cameraClone", id)) end end
+            if key == "GetFullName" or key == "IsDescendantOf" or key == "IsAncestorOf" or key == "FindFirstAncestor" then return gui.methods[key] end
+            if key == "GetChildren" or key == "GetDescendants" then return function() return {} end end
+            if key == "FindFirstChild" or key == "FindFirstChildOfClass" then return function() return nil end end
+            if key == "Name" or key == "FieldOfView" then return invoke("viewport.cameraGet", id, string.lower(key)) end
+            if key == "CFrame" or key == "Focus" then return gui.read("CFrame", invoke("viewport.cameraGet", id, string.lower(key))) end
+            raise(tostring(key) .. " is not a valid member of Camera", 2)
+        end,
+        __newindex = function(_, key, value)
+            local raw = value
+            if key == "Parent" then
+                if value ~= nil then
+                    raw = gui.idOf[value]
+                    if raw == nil or invoke("gui.class", raw) ~= "ViewportFrame" then raise("Camera.Parent must be a ViewportFrame", 2) end
+                end
+            elseif key == "CFrame" or key == "Focus" then
+                raw = gui.write("CFrame", value)
+                if raw == nil then raise("CFrame expected", 2) end
+            elseif key == "FieldOfView" then checkNumber(value, 1, key)
+            elseif key == "Name" then if type(value) ~= "string" then raise("string expected", 2) end
+            else raise(tostring(key) .. " is not a valid member of Camera", 2) end
+            if not invoke("viewport.cameraSet", id, string.lower(key), raw) then raise("Invalid Camera." .. key, 2) end
+        end,
+        __tostring = function() return invoke("viewport.cameraGet", id, "name") or "Camera" end,
+        __metatable = LOCKED,
+    })
+    previewKit.cameraId[camera] = id; previewKit.cameras[id] = camera; typeTags[camera] = "Instance"
+    return camera
+end
+function previewKit.newCamera(parent)
+    local camera = previewKit.wrapCamera(invoke("viewport.cameraCreate"))
+    if parent ~= nil then camera.Parent = parent end
+    return camera
+end
+function gui.methods.Clone(self)
+    return gui.wrap(invoke("viewport.cloneGui", guiId(self, "Clone"), dataKit.isLocal and dataKit.isLocal() or false))
 end
 
 -- The player's screen: LocalPlayer.PlayerGui.

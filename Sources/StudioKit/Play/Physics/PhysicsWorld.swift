@@ -176,7 +176,7 @@ final class PhysicsWorld {
         case .wedge: volume = s.x * s.y * s.z / 2
         }
         // A MeshPart weighs what its outline holds (its box, collided as one).
-        if let mesh = part.mesh, let geometry = MeshLibrary.shared.geometry(for: part) {
+        if let mesh = part.collisionMesh, let geometry = MeshLibrary.shared.geometry(for: part) {
             volume = mesh.collisionFidelity == .box ? s.x * s.y * s.z : geometry.hullVolume * s.x * s.y * s.z
         }
         return (max(volume * density(part.material), 0.01), volume)
@@ -190,7 +190,7 @@ final class PhysicsWorld {
         let h = part.size * 0.5
         func uniform(_ a: Float, _ b: Float) -> Bool { abs(a - b) <= max(a, b) * 0.01 }
         // A MeshPart: its box, its hull, or — held still — its exact triangles.
-        if let mesh = part.mesh, let geometry = MeshLibrary.shared.geometry(for: part) {
+        if let mesh = part.collisionMesh, let geometry = MeshLibrary.shared.geometry(for: part) {
             let s = simd_max(part.size, Vec3(repeating: 0.05))
             switch mesh.collisionFidelity {
             case .box:
@@ -278,8 +278,8 @@ final class PhysicsWorld {
                 hasher.combine(part.anchored)
                 hasher.combine(part.isSolid)
                 // A MeshPart's model, how it collides, and whether that model has loaded.
-                hasher.combine(part.mesh?.asset)
-                hasher.combine(part.mesh?.collisionFidelity)
+                hasher.combine(part.collisionMesh?.asset)
+                hasher.combine(part.collisionMesh?.collisionFidelity)
                 hasher.combine(MeshLibrary.shared.geometry(for: part) != nil)
             }
             let fingerprint = hasher.finalize()

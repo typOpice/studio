@@ -101,10 +101,15 @@ protocol ViewportSource: AnyObject {
     var renderCamera: Camera { get }
     var editorOverlay: EditorOverlay? { get }
     var avatars: [AvatarPose] { get }
+    var worldGui: GuiStore? { get }
     /// Compile results for user shaders, surfaced to the editor UI.
     var shaderStatus: ShaderStatusStore { get }
     /// Where shader diagnostics go.
     var shaderConsole: ScriptConsole { get }
     /// Called once per frame before drawing, for input-driven simulation.
     func stepFrame()
+}
+
+extension ViewportSource {
+    var worldGui: GuiStore? { nil }
 }

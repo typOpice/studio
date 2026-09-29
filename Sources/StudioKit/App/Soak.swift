@@ -31,7 +31,7 @@ enum Soak {
 
     static func template(named game: String) -> PlaceTemplate? {
         ["adventure": .adventure, "nightfall": .nightfall, "obby": .megaObby, "megaobby": .megaObby,
-         "starter": .starter][game.lowercased()]
+         "starter": .starter, "racing": .racing][game.lowercased()]
     }
 
     /// Plays a running game for `seconds` of game time with a player running about,
@@ -47,7 +47,9 @@ enum Soak {
             seed = seed &* 1_664_525 &+ 1_013_904_223
             return Int(seed >> 16) % count
         }
-        let keys = ["W", "A", "S", "D"]
+        let racing = model.placeID == Racing.placeID
+        let keys = racing ? ["A", "D"] : ["W", "A", "S", "D"]
+        if racing { session.key("W", pressed: true) }
         var held: String?
         var samples: [Sample] = []
         var elapsed = 0.0, lastReport = 0.0
@@ -58,15 +60,17 @@ enum Soak {
                 held = keys[roll(keys.count)]
                 session.key(held!, pressed: true)
             }
-            if total % 150 == 0 { session.key("Space", pressed: true) }
-            if total % 150 == 5 { session.key("Space", pressed: false) }
+            if racing && total % 1200 == 900 { session.key("T", pressed: true) }
+            if racing && total % 1200 == 905 { session.key("T", pressed: false) }
+            if !racing && total % 150 == 0 { session.key("Space", pressed: true) }
+            if !racing && total % 150 == 5 { session.key("Space", pressed: false) }
             if total == 30 { session.key("One", pressed: true) }
             if total == 32 { session.key("One", pressed: false) }
             if total % 40 == 0 { session.mouseButton(1, pressed: true) }
             if total % 40 == 3 { session.mouseButton(1, pressed: false) }
-            if total % 3600 == 1800 { session.humanoid.takeDamage(1000) }
+            if !racing && total % 3600 == 1800 { session.humanoid.takeDamage(1000) }
             // Wander no further than the game's own ground.
-            if simd_length(SIMD2(session.character.position.x, session.character.position.z)) > 150 {
+            if !racing && simd_length(SIMD2(session.character.position.x, session.character.position.z)) > 150 {
                 session.character.position = Vec3(0, 5, 0)
             }
             let started = Date()
@@ -98,12 +102,13 @@ enum Soak {
             }
         }
         if let held { session.key(held, pressed: false) }
+        if racing { session.key("W", pressed: false); session.key("T", pressed: false) }
         return (samples, session.console.lines.filter { $0.kind == .error }.map(\.text))
     }
 
     static func run(game: String, seconds: Double, render: Bool = false, audio: Bool = false) -> Bool {
         guard let template = template(named: game) else {
-            print("No game called \(game): adventure, nightfall, obby or starter")
+            print("No game called \(game): adventure, nightfall, obby, racing or starter")
             return false
         }
         if !audio { SoundSystem.makeOutput = { RecordingOutput() } }
@@ -137,7 +142,7 @@ enum Soak {
     /// drawables, the renderer driving the game in real time — drawn as fast as it will
     /// go. A frame that doesn't come back within five seconds is reported as stuck.
     static func runInWindow(game: String, seconds: Double) -> Bool {
-        let templates: [String: PlaceTemplate] = ["adventure": .adventure, "nightfall": .nightfall, "obby": .megaObby]
+        let templates: [String: PlaceTemplate] = ["adventure": .adventure, "nightfall": .nightfall, "obby": .megaObby, "racing": .racing]
         guard let template = templates[game.lowercased()], let device = MTLCreateSystemDefaultDevice() else { return false }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)

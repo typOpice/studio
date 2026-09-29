@@ -189,6 +189,8 @@ do
 			return "terrain"
 		elseif soundKit.idOf[object] then
 			return "s:" .. soundKit.idOf[object]
+		elseif lights.idOf[object] then
+			return "l:" .. lights.idOf[object]
 		elseif emitterKit.idOf[object] then
 			return "e:" .. emitterKit.idOf[object]
 		elseif attachmentIdOf[object] then

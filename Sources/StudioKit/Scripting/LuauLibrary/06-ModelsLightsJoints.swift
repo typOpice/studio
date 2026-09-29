@@ -189,166 +189,91 @@ end
 GroupMeta.__metatable = LOCKED
 
 --------------------------------------------------------------------------------
--- PointLight: light from the middle of a part. One per part; made with
--- Instance.new("PointLight", part), or by setting Parent to a part.
-
--- PointLight's internals, in one table (the top-level local budget).
-local lights = {}
-lights.PointLightMeta = {}
-lights.lightData = setmetatable({}, { __mode = "k" })
-lights.lightForPart = setmetatable({}, { __mode = "v" })
-
-lights.lightProperties = {
-	Enabled = { host = "enabled", kind = "boolean", default = true },
-	Brightness = { host = "brightness", kind = "number", default = 1 },
-	Range = { host = "range", kind = "number", default = 8 },
-	Shadows = { host = "shadows", kind = "boolean", default = false },
-	Color = { host = "color", kind = "Color3" },
+-- PointLight, SpotLight and SurfaceLight have stable identities across parenting.
+lights.Meta = {}
+lights.idOf = setmetatable({}, { __mode = "k" })
+lights.byId = setmetatable({}, { __mode = "v" })
+lights.saved = setmetatable({}, { __mode = "k" })
+lights.properties = {
+    Name = { "name", "string" }, Enabled = { "enabled", "boolean" },
+    Brightness = { "brightness", "number" }, Range = { "range", "number" },
+    Shadows = { "shadows", "boolean" }, Color = { "color", "Color3" },
+    Face = { "face", "NormalId" }, Angle = { "angle", "number" },
 }
-
-function lights.wrapLight(partId)
-	local existing = lights.lightForPart[partId]
-	if existing ~= nil then
-		return existing
-	end
-	local object = setmetatable({}, lights.PointLightMeta)
-	lights.lightData[object] = { part = partId }
-	lights.lightForPart[partId] = object
-	typeTags[object] = "Instance"
-	return object
+function lights.wrap(id)
+    if id == nil then return nil end
+    if lights.byId[id] then return lights.byId[id] end
+    local object = setmetatable({}, lights.Meta)
+    lights.idOf[object] = id
+    lights.byId[id] = object
+    typeTags[object] = "Instance"
+    return object
 end
-
-pointLightOf = function(partId)
-	if partId == nil or not invoke("light.has", partId) then
-		return nil
-	end
-	return lights.wrapLight(partId)
+function lights.new(className)
+    return lights.wrap(invoke("light.create", className))
 end
-
-function lights.newPointLight()
-	local object = setmetatable({}, lights.PointLightMeta)
-	lights.lightData[object] = { pending = {} }
-	typeTags[object] = "Instance"
-	return object
-end
-
-function lights.checkLightValue(key, value)
-	local property = lights.lightProperties[key]
-	local ok = if property.kind == "Color3" then isColor(value) else type(value) == property.kind
-	if not ok then
-		raise(string.format("Unable to assign property %s. %s expected, got %s",
-			key, if property.kind == "boolean" then "bool" else property.kind, typeof(value)), 3)
-	end
-	if property.kind == "Color3" then
-		return { value[1], value[2], value[3] }
-	end
-	return value
-end
-
--- Puts a light into a part, carrying over anything set before it had one.
 function lights.parentLight(object, part)
-	local data = lights.lightData[object]
-	local partId = partIdOf[part]
-	if partId == nil then
-		raise("PointLight.Parent must be a Part", 3)
-	end
-	if data.part == partId then
-		return
-	end
-	if invoke("light.has", partId) then
-		raise("That part already has a PointLight", 3)
-	end
-	if data.part ~= nil then
-		invoke("light.destroy", data.part)
-		lights.lightForPart[data.part] = nil
-	end
-	invoke("light.create", partId)
-	for key, value in data.pending or {} do
-		invoke("light.set", partId, lights.lightProperties[key].host, value)
-	end
-	data.pending = nil
-	data.part = partId
-	lights.lightForPart[partId] = object
+    if lights.saved[object] then raise("attempt to parent a destroyed light", 3) end
+    if part ~= nil and not partIdOf[part] then raise("Light.Parent must be a Part", 3) end
+    if not invoke("light.parent", lights.idOf[object], if part then partIdOf[part] else nil) then
+        raise("attempt to parent a destroyed light", 3)
+    end
 end
-
-function lights.unparentLight(object)
-	local data = lights.lightData[object]
-	if data.part == nil then
-		return
-	end
-	-- Keep its settings, as a Roblox light keeps its properties out of the world.
-	local pending = {}
-	for key, property in lights.lightProperties do
-		pending[key] = invoke("light.get", data.part, property.host)
-	end
-	invoke("light.destroy", data.part)
-	lights.lightForPart[data.part] = nil
-	data.part = nil
-	data.pending = pending
+lights.Meta.__index = function(object, key)
+    local id = lights.idOf[object]
+    local saved = lights.saved[object]
+    local class = if saved then saved.class else invoke("light.get", id, "class")
+    if key == "ClassName" then return class end
+    if key == "Parent" then return if saved then nil else wrapToken(invoke("light.get", id, "parent")) end
+    if key == "IsA" then return function(_, name) return name == class or name == "Light" or name == "Instance" end end
+    if key == "Clone" then return function(self)
+        if lights.saved[self] then raise("attempt to clone a destroyed light", 2) end
+        return lights.wrap(invoke("light.clone", lights.idOf[self]))
+    end end
+    if key == "Destroy" then return function(self)
+        if lights.saved[self] then return end
+        local keep = { class = invoke("light.get", id, "class") }
+        for _, property in lights.properties do keep[property[1]] = invoke("light.get", id, property[1]) end
+        lights.saved[self] = keep
+        invoke("light.destroy", id)
+    end end
+    if key == "GetChildren" or key == "GetDescendants" then return function() return {} end end
+    if key == "FindFirstChild" or key == "FindFirstChildOfClass" then return function() return nil end end
+    local property = lights.properties[key]
+    if property and (class ~= "PointLight" or (key ~= "Face" and key ~= "Angle")) then
+        local raw = if saved then saved[property[1]] else invoke("light.get", id, property[1])
+        if property[2] == "Color3" then return color(raw[1], raw[2], raw[3]) end
+        if property[2] == "NormalId" then return Enum.NormalId[raw] end
+        return raw
+    end
+    raise(string.format("%s is not a valid member of %s", tostring(key), class or "Light"), 2)
 end
-
-lights.PointLightMeta.__index = function(object, key)
-	local data = lights.lightData[object]
-	local property = lights.lightProperties[key]
-	if property ~= nil then
-		local raw
-		if data.part ~= nil then
-			raw = invoke("light.get", data.part, property.host)
-		else
-			raw = data.pending[key]
-		end
-		if raw == nil then
-			if property.kind == "Color3" then return color(1, 1, 1) end
-			return property.default
-		end
-		if property.kind == "Color3" then
-			return color(raw[1], raw[2], raw[3])
-		end
-		return raw
-	end
-	if key == "Name" or key == "ClassName" then
-		return "PointLight"
-	elseif key == "Parent" then
-		return if data.part ~= nil and invoke("part.exists", data.part) then wrapPart(data.part) else nil
-	elseif key == "Destroy" then
-		return function(self)
-			lights.unparentLight(self)
-		end
-	elseif key == "IsA" then
-		return function(_, className)
-			return className == "PointLight" or className == "Light" or className == "Instance"
-		end
-	end
-	raise(string.format("%s is not a valid member of PointLight", tostring(key)), 2)
+lights.Meta.__newindex = function(object, key, value)
+    if key == "Parent" then lights.parentLight(object, value); return end
+    if lights.saved[object] then raise("attempt to change a destroyed light", 2) end
+    local property = lights.properties[key]
+    local class = invoke("light.get", lights.idOf[object], "class")
+    if property == nil or (class == "PointLight" and (key == "Face" or key == "Angle")) then
+        raise(string.format("%s is not a valid member of %s", tostring(key), class or "Light"), 2)
+    end
+    local kind = property[2]
+    if kind == "Color3" then
+        if not isColor(value) then raise("Color3 expected", 2) end
+        value = { value[1], value[2], value[3] }
+    elseif kind == "NormalId" then
+        local valid = false
+        for _, item in Enum.NormalId:GetEnumItems() do if item == value then valid = true; break end end
+        if not valid then raise("Enum.NormalId expected", 2) end
+        value = value.Name
+    elseif type(value) ~= kind then
+        raise(string.format("Unable to assign property %s. %s expected, got %s", key, kind, typeof(value)), 2)
+    end
+    if not invoke("light.set", lights.idOf[object], property[1], value) then
+        raise("Invalid value for " .. key, 2)
+    end
 end
-
-lights.PointLightMeta.__newindex = function(object, key, value)
-	local data = lights.lightData[object]
-	if key == "Parent" then
-		if value == nil then
-			lights.unparentLight(object)
-		else
-			lights.parentLight(object, value)
-		end
-		return
-	end
-	local property = lights.lightProperties[key]
-	if property == nil then
-		raise(string.format("%s is not a valid member of PointLight", tostring(key)), 2)
-	end
-	local converted = lights.checkLightValue(key, value)
-	if data.part ~= nil then
-		invoke("light.set", data.part, property.host, converted)
-	else
-		data.pending[key] = converted
-	end
-end
-
-lights.PointLightMeta.__tostring = function()
-	return "PointLight"
-end
-
-lights.PointLightMeta.__metatable = LOCKED
+lights.Meta.__tostring = function(object) return object.Name end
+lights.Meta.__metatable = LOCKED
 
 --------------------------------------------------------------------------------
 -- ClickDetector: clicking its part fires MouseClick(player) — on the host, for whoever

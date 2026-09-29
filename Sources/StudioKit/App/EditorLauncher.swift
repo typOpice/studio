@@ -185,6 +185,9 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         add(to: editMenu, "Group as Model", #selector(groupModel), "g")
         add(to: editMenu, "Group as Folder", #selector(groupFolder), "g", modifiers: [.command, .option])
         add(to: editMenu, "Ungroup", #selector(ungroupSelection), "u", modifiers: [.command, .shift])
+        add(to: editMenu, "Union", #selector(unionSelection), "")
+        add(to: editMenu, "Negate", #selector(negateSelection), "")
+        add(to: editMenu, "Separate", #selector(separateSelection), "")
         editMenu.addItem(.separator())
         add(to: editMenu, "Weld", #selector(weldTool), "j")
         add(to: editMenu, "Hinge", #selector(joinHinge), "j", modifiers: [.command, .shift])
@@ -345,6 +348,9 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
     @objc private func groupModel() {
         if !TextCommand.perform(.findNext, in: keyResponder) { model.groupSelection(kind: .model) }
     }
+    @objc private func unionSelection() { if !session.isPlaying { model.unionSelected() } }
+    @objc private func negateSelection() { if !session.isPlaying { model.negateSelected() } }
+    @objc private func separateSelection() { if !session.isPlaying { model.separateSelected() } }
     @objc private func weldSelection() { model.weldSelection() }
     @objc private func unjoinSelection() { model.unjoinSelection() }
     @objc private func weldTool() { join(.weld) }
@@ -388,6 +394,9 @@ final class EditorAppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValida
         case #selector(focusSelection): item.title = inCode ? "Find…" : "Focus Selection"
         case #selector(groupModel): item.title = inCode ? "Find Next" : "Group as Model"
         case #selector(deleteSelection): item.title = inCode ? "Delete to Start of Line" : "Delete"
+        case #selector(unionSelection): return !session.isPlaying && model.canUnionSelection
+        case #selector(separateSelection): return !session.isPlaying && model.canSeparateSelection
+        case #selector(negateSelection): return !session.isPlaying && !model.solidBusy && !model.selectedParts.isEmpty
         case #selector(closeTab): return session.activeDocument != nil
         case #selector(debugContinue), #selector(debugStepOver), #selector(debugStepInto), #selector(debugStepOut):
             return session.debugPause != nil
@@ -616,10 +625,10 @@ public enum StudioEditor {
         if let flag = CommandLine.arguments.firstIndex(of: "--make-place") {
             // A sample game as a scene file: adventure, nightfall, obby or starter.
             let arguments = Array(CommandLine.arguments[(flag + 1)...])
-            let games: [String: PlaceTemplate] = ["adventure": .adventure, "nightfall": .nightfall, "obby": .megaObby,
+            let games: [String: PlaceTemplate] = ["adventure": .adventure, "nightfall": .nightfall, "obby": .megaObby, "racing": .racing,
                                                   "starter": .starter]
             guard let game = arguments.first.flatMap({ games[$0.lowercased()] }), arguments.count > 1 else {
-                print("--make-place adventure|nightfall|obby|starter <file>")
+                print("--make-place adventure|nightfall|obby|racing|starter <file>")
                 exit(1)
             }
             let model = MainActor.assumeIsolated { () -> SceneModel in
@@ -677,6 +686,12 @@ public enum StudioEditor {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])
             let path = arguments.first ?? "shiftlock.png"
             exit(AvatarSnapshot.renderShiftLock(to: URL(fileURLWithPath: path), on: !arguments.contains("off")) ? 0 : 1)
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--render-racing") {
+            let arguments = Array(CommandLine.arguments[(flag + 1)...])
+            let path = arguments.first ?? "racing.png"
+            let ok = MainActor.assumeIsolated { RacingSnapshot.render(to: URL(fileURLWithPath: path), crash: arguments.contains("crash")) }
+            exit(ok ? 0 : 1)
         }
         if let flag = CommandLine.arguments.firstIndex(of: "--render-obby") {
             let arguments = Array(CommandLine.arguments[(flag + 1)...])

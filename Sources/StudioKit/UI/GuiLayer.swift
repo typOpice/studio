@@ -12,6 +12,8 @@ struct GuiLayer: View {
     var interactive = true
     /// Whether the object Studio has selected is outlined; the GUI tab draws its own handles.
     var outlinesSelection = true
+    /// Studio edits a selected world canvas flat while its world copy stays visible.
+    var root: Int? = nil
 
     var body: some View {
         if store.hasBillboards {
@@ -24,9 +26,9 @@ struct GuiLayer: View {
     private var content: some View {
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
-                ForEach(store.layout(in: geometry.size)) { placed in
+                ForEach(root.map { store.layout(root: $0, in: geometry.size) } ?? store.layout(in: geometry.size)) { placed in
                     GuiElement(placed: placed, focused: store.focused == placed.id, cursor: store.cursor,
-                               selectedAll: store.selectedAll, image: image(for: placed.object),
+                               selectedAll: store.selectedAll, image: image(for: placed.object, size: placed.frame.size),
                                highlighted: outlinesSelection && store.highlighted == placed.id) {
                         store.click(placed.id)
                     }
@@ -37,13 +39,14 @@ struct GuiLayer: View {
         }
     }
 
-    private func image(for object: GuiObject) -> NSImage? {
+    private func image(for object: GuiObject, size: CGSize) -> NSImage? {
+        if object.kind == .viewportFrame { return store.viewportImage(object, size: size) }
         guard object.kind.showsImage, !object.image.isEmpty else { return nil }
         return store.imageProvider?(object.image)
     }
 }
 
-private struct GuiElement: View {
+struct GuiElement: View {
     let placed: GuiStore.Placed
     let focused: Bool
     let cursor: Int

@@ -22,8 +22,8 @@ enum SelfTest {
         // still has to pass before a change is done.
         if let flag = CommandLine.arguments.firstIndex(of: "--only"), flag + 1 < CommandLine.arguments.count {
             let suites: [String: (Checker) -> Void] = [
-                "Adventure": AdventureSelfTest.run, "Remotes": RemotesSelfTest.run, "Wardrobe": WardrobeSelfTest.run,
-                "Mesh": MeshSelfTest.run, "Audio": AudioSelfTest.run, "Hud": HudSelfTest.run, "LAN": LANSelfTest.run,
+                "Analysis": LuauAnalysisSelfTest.run, "Adventure": AdventureSelfTest.run, "Remotes": RemotesSelfTest.run, "Wardrobe": WardrobeSelfTest.run,
+                "Racing": RacingSelfTest.run, "RacingLAN": RacingSelfTest.together, "Solid": SolidSelfTest.run, "Mesh": MeshSelfTest.run, "Audio": AudioSelfTest.run, "Hud": HudSelfTest.run, "LAN": LANSelfTest.run,
                 "Gui": GuiSelfTest.run, "Player": PlayerSelfTest.run, "Script": ScriptSelfTest.run,
                 "Editor": { check in EditorSelfTest.run(check: check) }, "Syntax": { check in SyntaxSelfTest.run(check: check) },
                 "Utils": UtilsSelfTest.run, "Home": HomeSelfTest.run, "Nightfall": NightfallSelfTest.run,
@@ -33,11 +33,13 @@ enum SelfTest {
                 "Engine": EngineSelfTest.run, "Index": SceneIndexSelfTest.run,
                 "Soak": SoakSelfTest.run, "Stats": FrameStatsSelfTest.run,
                 "NPC": NPCSelfTest.run,
-                "Particles": ParticleSelfTest.run,
+                "Particles": ParticleSelfTest.run, "Lighting": LightingSelfTest.run, "DirectionalLights": DirectionalLightSelfTest.run, "ViewportFrame": ViewportFrameSelfTest.run,
                 "Ribbons": RibbonSelfTest.run,
                 "Sky": SkySelfTest.run,
                 "Forces": ForceSelfTest.run, "Motors": MotorSelfTest.run, "Floating": FloatSelfTest.run, "Cars": CarSelfTest.run, "Toolbox": ToolboxSelfTest.run, "Animate": AnimateSelfTest.run,
                 "Terrain": TerrainSelfTest.run,
+                "Mouse": { check in MouseSelfTest.run(check: check) },
+                "WorldGui": { check in WorldGuiSelfTest.run(check: check) },
             ]
             guard let suite = suites[CommandLine.arguments[flag + 1]] else {
                 print("No suite called \(CommandLine.arguments[flag + 1]): \(suites.keys.sorted().joined(separator: ", "))")
@@ -47,6 +49,7 @@ enum SelfTest {
             print(failures == 0 ? "\nAll of it passed." : "\n\(failures) FAILED.")
             return failures == 0 ? 0 : 1
         }
+        LuauAnalysisSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         testRenderLoop()
         testShaderCompilation()
         testUniformLayout()
@@ -70,6 +73,8 @@ enum SelfTest {
         PlayerSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         AvatarSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         AnimationSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        ViewportFrameSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        DirectionalLightSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         LightingSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         HierarchySelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         PhysicsSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
@@ -85,9 +90,12 @@ enum SelfTest {
         MovementSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         SplitAndEffectsSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         GuiEditorSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        WorldGuiSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         SelectionSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         HudSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         AudioSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        RacingSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
+        SolidSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         MeshSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         WardrobeSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })
         RemotesSelfTest.run(check: Checker { name, condition, detail in check(name, condition, detail) })

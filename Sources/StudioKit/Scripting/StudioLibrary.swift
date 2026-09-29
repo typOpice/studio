@@ -34,6 +34,7 @@ enum LuauLibrary {
         hostEvents,
         extras,
         data,
+        solids,
         entryPoints
     ]
 }

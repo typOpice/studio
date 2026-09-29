@@ -94,6 +94,15 @@ extension SceneModel {
         }
         state.groups.removeAll { hidden.contains($0.id) }
         state.parts.removeAll { hidden.contains($0.id) }
+        var hiddenGui = Set(state.starterGui.filter { $0.worldParent.map(hidden.contains) ?? false }.map(\.id))
+        var guiChanged = true
+        while guiChanged {
+            let oldCount = hiddenGui.count
+            for object in state.starterGui where object.parentID.map(hiddenGui.contains) == true { hiddenGui.insert(object.id) }
+            guiChanged = oldCount != hiddenGui.count
+        }
+        state.starterGui.removeAll { hiddenGui.contains($0.id) }
+        state.scripts.removeAll { $0.host == .starterGui && ($0.parentID.map(hiddenGui.contains) ?? false) }
         state.scripts.removeAll { $0.host == .serverStorage || ($0.parentID.map(hidden.contains) ?? false) }
         state.sounds.removeAll { $0.parentID.map(hidden.contains) ?? false }
         let hiddenAttachments = Set(state.attachments.filter { hidden.contains($0.parentID) }.map(\.id))

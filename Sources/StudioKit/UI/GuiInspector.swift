@@ -44,7 +44,7 @@ struct GuiTemplateInspector: View {
             }
         }
         let isObject = !kind.isModifier && !kind.isLayer
-        if kind == .screenGui || kind == .billboardGui {
+        if kind.isLayer {
             add("Screen", [Field(label: "Enabled", key: "enabled", editor: .toggle)])
         }
         if kind == .screenGui {
@@ -87,6 +87,13 @@ struct GuiTemplateInspector: View {
                          Field(label: "ClearTextOnFocus", key: "cleartextonfocus", editor: .toggle),
                          Field(label: "TextEditable", key: "texteditable", editor: .toggle)])
         }
+        if kind == .viewportFrame {
+            add("Viewport", [Field(label: "Ambient", key: "ambient", editor: .color),
+                             Field(label: "LightColor", key: "lightcolor", editor: .color),
+                             Field(label: "LightDirection", key: "lightdirection", editor: .vector3),
+                             Field(label: "ImageColor3", key: "imagecolor3", editor: .color),
+                             Field(label: "ImageTransparency", key: "imagetransparency", editor: .number(0...1))])
+        }
         if kind.showsImage {
             add("Image", [Field(label: "Image", key: "image", editor: .text),
                           Field(label: "ImageColor3", key: "imagecolor3", editor: .color),
@@ -99,6 +106,19 @@ struct GuiTemplateInspector: View {
                 Field(label: "AutomaticCanvasSize", key: "automaticcanvassize", editor: .choice(["None", "X", "Y", "XY"])),
                 Field(label: "ScrollBarThickness", key: "scrollbarthickness", editor: .number(0...40)),
                 Field(label: "ScrollingEnabled", key: "scrollingenabled", editor: .toggle),
+            ])
+        }
+        if kind == .surfaceGui {
+            add("Surface", [
+                Field(label: "Face", key: "face", editor: .choice(["Front", "Back", "Left", "Right", "Top", "Bottom"])),
+                Field(label: "SizingMode", key: "sizingmode", editor: .choice(["PixelsPerStud", "FixedSize"])),
+                Field(label: "CanvasSize", key: "canvassize", editor: .vector2),
+                Field(label: "PixelsPerStud", key: "pixelsperstud", editor: .number(1...1024)),
+                Field(label: "AlwaysOnTop", key: "alwaysontop", editor: .toggle),
+                Field(label: "LightInfluence", key: "lightinfluence", editor: .number(0...1)),
+                Field(label: "Brightness", key: "brightness", editor: .number(0...10)),
+                Field(label: "ZOffset", key: "zoffset", editor: .number(-100...100)),
+                Field(label: "MaxDistance", key: "maxdistance", editor: .number(0...10000)),
             ])
         }
         let section = kind.rawValue
@@ -186,6 +206,7 @@ struct GuiTemplateInspector: View {
                         row(field, value: PlayController.guiProperty(object, field.key))
                     }
                 }
+                if template.kind == .viewportFrame { ViewportContentEditor(model: model, template: template) }
                 Divider().overlay(Theme.stroke)
                 HStack(spacing: 6) {
                     if !template.kind.isModifier {

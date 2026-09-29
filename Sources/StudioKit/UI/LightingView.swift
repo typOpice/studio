@@ -183,66 +183,73 @@ struct LightingInspector: View {
     }
 }
 
-/// The Light section of a part's properties: its PointLight, if any.
+/// Lights in the selected part; choosing one opens its own inspector.
 struct PointLightEditor: View {
     @ObservedObject var model: SceneModel
     let part: Part
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("LIGHT")
-                .font(.system(size: 9, weight: .bold))
-                .tracking(0.7)
-                .foregroundStyle(Theme.textDim.opacity(0.9))
-            Toggle("PointLight", isOn: Binding(get: { part.light != nil }, set: { on in
-                model.commit(on ? "Added PointLight" : "Removed PointLight") {
-                    model.updateSelected { $0.light = on ? ($0.light ?? PointLight()) : nil }
-                }
-            }))
-            if let light = part.light {
-                Toggle("Enabled", isOn: binding(light.enabled) { $0.enabled = $1 })
-                HStack {
-                    Text("Color").font(.system(size: 11)).foregroundStyle(Theme.textDim)
-                    Spacer()
-                    ColorPicker("", selection: Binding(get: { Color(vec: light.color) }, set: { value in
-                        model.commit("Light colour") { model.updateSelected { $0.light?.color = value.vec } }
-                    }), supportsOpacity: false)
-                    .labelsHidden()
-                }
-                numberRow("Brightness", light.brightness, 0...100) { value in
-                    model.updateSelected { $0.light?.brightness = value }
-                }
-                numberRow("Range", light.range, 0...PointLight.maximumRange) { value in
-                    model.updateSelected { $0.light?.range = value }
-                }
-                Toggle("Shadows", isOn: binding(light.shadows) { $0.shadows = $1 })
-                    .help("Ray-traced lighting only: other parts block this light")
+            Text("LIGHTS").font(.system(size: 9, weight: .bold)).tracking(0.7).foregroundStyle(Theme.textDim)
+            ForEach(part.lights) { light in
+                Button { model.selectedLight = light.id } label: {
+                    HStack {
+                        Image(systemName: "lightbulb.fill").foregroundStyle(Color(vec: light.color))
+                        Text(light.name); Spacer()
+                        Text(light.enabled ? light.kind.rawValue : "off").foregroundStyle(Theme.textDim)
+                    }
+                }.buttonStyle(.plain)
             }
-        }
-        .toggleStyle(.checkbox)
-        .font(.system(size: 11))
-        .foregroundStyle(Theme.text)
+            Menu("Add Light") {
+                ForEach(PointLight.Kind.allCases) { kind in
+                    Button(kind.rawValue) { model.addLight(kind, to: part.id) }
+                }
+            }
+        }.font(.system(size: 11)).foregroundStyle(Theme.text)
     }
+}
 
-    private func binding(_ value: Bool, _ set: @escaping (inout PointLight, Bool) -> Void) -> Binding<Bool> {
-        Binding(get: { value }, set: { newValue in
-            model.commit("Changed PointLight") {
-                model.updateSelected { part in
-                    if part.light != nil { set(&part.light!, newValue) }
-                }
-            }
+/// A selected identified light. Every edit is a scene edit and one undo operation.
+struct LightInspector: View {
+    @ObservedObject var model: SceneModel
+    let light: PointLight
+
+    private func binding<T>(_ key: WritableKeyPath<PointLight, T>) -> Binding<T> {
+        Binding(get: { model.light(light.id)?[keyPath: key] ?? light[keyPath: key] }, set: { value in
+            model.commit("Changed Light") { model.updateLight(light.id) { $0[keyPath: key] = value } }
         })
     }
 
-    private func numberRow(_ label: String, _ value: Float, _ range: ClosedRange<Float>,
-                           set: @escaping (Float) -> Void) -> some View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(light.kind.rawValue, systemImage: "lightbulb.fill").font(.headline)
+                TextField("Name", text: binding(\.name))
+                Toggle("Enabled", isOn: binding(\.enabled))
+                ColorPicker("Color", selection: Binding(get: { Color(vec: light.color) }, set: { color in
+                    model.commit("Light color") { model.updateLight(light.id) { $0.color = color.vec } }
+                }), supportsOpacity: false)
+                number("Brightness", light.brightness, 0...100, \.brightness)
+                number("Range", light.range, 0...PointLight.maximumRange, \.range)
+                if light.kind != .point {
+                    Picker("Face", selection: binding(\.face)) {
+                        ForEach(ParticleEmitter.Face.allCases) { face in Text(face.rawValue).tag(face) }
+                    }
+                    number("Angle", light.angle, 0...180, \.angle)
+                }
+                Toggle("Shadows", isOn: binding(\.shadows))
+                    .help("Requires ray-traced lighting")
+                Button("Delete \(light.kind.rawValue)") { model.removeLight(light.id) }
+            }.font(.system(size: 11)).toggleStyle(.checkbox).padding(12)
+        }
+    }
+
+    private func number(_ name: String, _ value: Float, _ range: ClosedRange<Float>,
+                        _ key: WritableKeyPath<PointLight, Float>) -> some View {
         HStack {
-            Text(label).font(.system(size: 11)).foregroundStyle(Theme.textDim)
-            Spacer()
-            NumericField(label: "", tint: .clear, range: range, value: value) { newValue in
-                model.commit("Light \(label.lowercased())") { set(newValue) }
-            }
-            .frame(width: 70)
+            Text(name); Spacer()
+            NumericField(label: "", tint: .clear, range: range, value: value) { value in
+                model.commit("Light \(name)") { model.updateLight(light.id) { $0[keyPath: key] = value } }
+            }.frame(width: 75)
         }
     }
 }

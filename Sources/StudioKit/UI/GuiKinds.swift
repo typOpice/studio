@@ -6,6 +6,8 @@ extension GuiObject.Kind {
         switch self {
         case .screenGui: return "rectangle.on.rectangle"
         case .billboardGui: return "text.bubble"
+        case .surfaceGui: return "rectangle.portrait.on.rectangle.portrait"
+        case .viewportFrame: return "cube.transparent"
         case .frame: return "square"
         case .scrollingFrame: return "scroll"
         case .textLabel: return "textformat"
@@ -29,6 +31,8 @@ extension GuiObject.Kind {
         switch self {
         case .screenGui: return "ScreenGui"
         case .billboardGui: return "Billboard"
+        case .surfaceGui: return "SurfaceGui"
+        case .viewportFrame: return "ViewportFrame"
         case .frame: return "Frame"
         case .scrollingFrame: return "Scrolling"
         case .textLabel: return "Text"
@@ -49,7 +53,7 @@ extension GuiObject.Kind {
     }
 
     /// What can be inserted inside a GUI object from the Explorer and the ribbon.
-    static let insertableObjects: [GuiObject.Kind] = [.frame, .textLabel, .textButton, .textBox, .imageLabel,
+    static let insertableObjects: [GuiObject.Kind] = [.viewportFrame, .frame, .textLabel, .textButton, .textBox, .imageLabel,
                                                       .imageButton, .scrollingFrame]
     static let insertableModifiers: [GuiObject.Kind] = [.uiCorner, .uiPadding, .uiStroke, .uiGradient, .uiListLayout,
                                                         .uiGridLayout, .uiAspectRatioConstraint, .uiSizeConstraint,

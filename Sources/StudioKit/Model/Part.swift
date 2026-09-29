@@ -66,7 +66,7 @@ struct Part: Identifiable, Equatable, Codable {
     /// top of the tree only); its parts are parked meanwhile.
     var storage: StoragePlace?
     /// Drawn, collided with and touched: visible, and not parked in a Tool.
-    var inWorld: Bool { visible && !parked }
+    var inWorld: Bool { visible && !parked && !negative }
     var locked: Bool = false
     /// Whether the player's character collides with it. Off, it can be walked through —
     /// a trigger zone or a pickup — and still reports touches.
@@ -75,8 +75,16 @@ struct Part: Identifiable, Equatable, Codable {
     var canTouch: Bool = true
     /// The user shader this part draws with, or nil for the built-in shading.
     var shaderID: UUID?
-    /// A PointLight inside the part, if it has one.
-    var light: PointLight?
+    /// Identified children. The legacy accessor keeps existing point-light callers working.
+    var lights: [PointLight] = []
+    var light: PointLight? {
+        get { lights.first { $0.kind == .point } }
+        set {
+            if let index = lights.firstIndex(where: { $0.kind == .point }) {
+                if let newValue { lights[index] = newValue } else { lights.remove(at: index) }
+            } else if let newValue { lights.append(newValue) }
+        }
+    }
     /// ParticleEmitters in the part (ParticleEmitter.swift).
     var emitters: [ParticleEmitter] = []
     /// A ClickDetector: clicking the part fires its MouseClick. One per part, like a light.
@@ -86,9 +94,17 @@ struct Part: Identifiable, Equatable, Codable {
     /// Makes the part a MeshPart: an imported 3D file, stretched to its Size. Without
     /// the file it is drawn and collided as its `shape`.
     var mesh: MeshSettings?
+    var solid: SolidOperation?
+    /// Exact boundary after a separated operand acquires shear from a resized union.
+    var solidDeformation: SolidMesh?
+    var collisionMesh: MeshSettings? {
+        solidDeformation.map { MeshSettings(asset: $0.id, collisionFidelity: mesh?.collisionFidelity ?? .precise) } ?? mesh
+    }
+    var negative = false
+    var usePartColor = false
 
     /// Something a character is kept out of: in the world, colliding, and not water.
-    var isSolid: Bool { inWorld && canCollide && material != .water }
+    var isSolid: Bool { inWorld && canCollide && !negative && material != .water }
     /// The Model, Folder or part this one is inside; nil for the Workspace.
     var parentID: UUID?
 
@@ -119,16 +135,18 @@ struct Part: Identifiable, Equatable, Codable {
             && lhs.material == rhs.material && lhs.anchored == rhs.anchored
             && lhs.visible == rhs.visible && lhs.parked == rhs.parked && lhs.locked == rhs.locked
             && lhs.canCollide == rhs.canCollide && lhs.canTouch == rhs.canTouch
-            && lhs.shaderID == rhs.shaderID && lhs.light == rhs.light && lhs.parentID == rhs.parentID
+            && lhs.shaderID == rhs.shaderID && lhs.lights == rhs.lights && lhs.parentID == rhs.parentID
             && lhs.clickDetector == rhs.clickDetector && lhs.seat == rhs.seat && lhs.mesh == rhs.mesh
             && lhs.storage == rhs.storage && lhs.emitters == rhs.emitters
+            && lhs.solid == rhs.solid && lhs.solidDeformation == rhs.solidDeformation && lhs.negative == rhs.negative && lhs.usePartColor == rhs.usePartColor
     }
 
     // MARK: - Codable (simd_quatf needs manual handling)
 
     private enum CodingKeys: String, CodingKey {
+        case solid, solidDeformation, negative, usePartColor
         case id, name, shape, position, orientation, size, color, transparency, material, anchored, visible, locked, shaderID
-        case canCollide, canTouch, light, parentID, parked, clickDetector, seat, mesh, storage, emitters
+        case canCollide, canTouch, light, lights, parentID, parked, clickDetector, seat, mesh, storage, emitters
     }
 
     init() {}
@@ -151,12 +169,23 @@ struct Part: Identifiable, Equatable, Codable {
         canCollide = try c.decodeIfPresent(Bool.self, forKey: .canCollide) ?? true
         canTouch = try c.decodeIfPresent(Bool.self, forKey: .canTouch) ?? true
         shaderID = try c.decodeIfPresent(UUID.self, forKey: .shaderID)
-        light = try c.decodeIfPresent(PointLight.self, forKey: .light)
+        lights = try c.decodeIfPresent([PointLight].self, forKey: .lights) ?? []
+        if !c.contains(.lights), var old = try c.decodeIfPresent(PointLight.self, forKey: .light) {
+            // Derived from the containing part, so reopening the same old place never changes identity.
+            var bytes = id.uuid
+            bytes.0 ^= 0x4c; bytes.1 ^= 0x69; bytes.2 ^= 0x67; bytes.3 ^= 0x68
+            old.id = UUID(uuid: bytes)
+            lights = [old]
+        }
         parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
         parked = try c.decodeIfPresent(Bool.self, forKey: .parked) ?? false
         clickDetector = try c.decodeIfPresent(ClickDetector.self, forKey: .clickDetector)
         seat = try c.decodeIfPresent(SeatSettings.self, forKey: .seat)
         mesh = try c.decodeIfPresent(MeshSettings.self, forKey: .mesh)
+        solid = try c.decodeIfPresent(SolidOperation.self, forKey: .solid)
+        solidDeformation = try c.decodeIfPresent(SolidMesh.self, forKey: .solidDeformation)
+        negative = try c.decodeIfPresent(Bool.self, forKey: .negative) ?? false
+        usePartColor = try c.decodeIfPresent(Bool.self, forKey: .usePartColor) ?? false
         storage = try c.decodeIfPresent(StoragePlace.self, forKey: .storage)
         emitters = try c.decodeIfPresent([ParticleEmitter].self, forKey: .emitters) ?? []
     }
@@ -178,12 +207,16 @@ struct Part: Identifiable, Equatable, Codable {
         try c.encode(canCollide, forKey: .canCollide)
         try c.encode(canTouch, forKey: .canTouch)
         try c.encodeIfPresent(shaderID, forKey: .shaderID)
-        try c.encodeIfPresent(light, forKey: .light)
+        if !lights.isEmpty { try c.encode(lights, forKey: .lights) }
         try c.encodeIfPresent(parentID, forKey: .parentID)
         if parked { try c.encode(parked, forKey: .parked) }
         try c.encodeIfPresent(clickDetector, forKey: .clickDetector)
         try c.encodeIfPresent(seat, forKey: .seat)
         try c.encodeIfPresent(mesh, forKey: .mesh)
+        try c.encodeIfPresent(solid, forKey: .solid)
+        try c.encodeIfPresent(solidDeformation, forKey: .solidDeformation)
+        if negative { try c.encode(true, forKey: .negative) }
+        if usePartColor { try c.encode(true, forKey: .usePartColor) }
         try c.encodeIfPresent(storage, forKey: .storage)
         if !emitters.isEmpty { try c.encode(emitters, forKey: .emitters) }
     }

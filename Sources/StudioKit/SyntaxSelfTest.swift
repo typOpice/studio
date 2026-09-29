@@ -24,6 +24,28 @@ enum SyntaxSelfTest {
         testLuauCompletion(check)
         testModules(check)
         testServices(check)
+        testNewFeatureAPI(check)
+    }
+
+    private static func testNewFeatureAPI(_ check: Checker) {
+        print("\nCompletion: lights, solids and world GUI")
+        let probes: [(String, String)] = [
+            ("local lamp = Instance.new('SpotLight')\nlamp.", "Angle"),
+            ("local lamp = Instance.new('SurfaceLight')\nlamp.", "Face"),
+            ("local p = Instance.new('Part')\np:", "UnionAsync(parts, collisionFidelity)"),
+            ("local p: UnionOperation = workspace.Result\np.", "UsePartColor"),
+            ("local p: NegateOperation = workspace.Cutter\np.", "CollisionFidelity"),
+            ("local gui = Instance.new('SurfaceGui')\ngui.", "PixelsPerStud"),
+            ("local gui = Instance.new('SurfaceGui')\ngui.", "CanvasSize"),
+            ("local view = Instance.new('ViewportFrame')\nview.", "CurrentCamera"),
+            ("local camera = Instance.new('Camera')\ncamera.", "FieldOfView"),
+            ("Enum.SurfaceGuiSizingMode.", "PixelsPerStud"),
+            ("Enum.CollisionFidelity.", "PreciseConvexDecomposition")
+        ]
+        for (source, expected) in probes {
+            let labels = LuauCompletion.items(in: source, caret: (source as NSString).length).map(\.label)
+            check("completion offers \(expected) for \(source.components(separatedBy: "\n").first ?? source)", labels.contains(expected), "\(labels)")
+        }
     }
 
     private static func testServices(_ check: Checker) {

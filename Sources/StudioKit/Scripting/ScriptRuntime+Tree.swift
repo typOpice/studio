@@ -197,10 +197,16 @@ extension ScriptRuntime {
     func extras(of parent: UUID?) -> [(token: String, name: String)] {
         var list: [(String, String)] = []
         if let parent {
+            for row in player?.playerInvoke("gui.worldChildren", [.string(parent.uuidString)]).asList ?? [] {
+                if let values = row.asList, values.count == 2, let token = values[0].asString, let name = values[1].asString {
+                    list.append((token, name))
+                }
+            }
             for a in model.attachments where a.parentID == parent { list.append(("a:" + a.id.uuidString, a.name)) }
         }
         for c in model.constraints where c.parentID == parent { list.append(("c:" + c.id.uuidString, c.name)) }
         if let parent {
+            for light in model.part(id: parent)?.lights ?? [] { list.append(("l:" + light.id.uuidString, light.name)) }
             for e in model.part(id: parent)?.emitters ?? [] {
                 list.append(("e:" + parent.uuidString + ":" + e.id.uuidString, e.name))
             }
@@ -223,9 +229,21 @@ extension ScriptRuntime {
         runScripts(inside: copy)
     }
 
-    /// Starts the scene scripts inside something that has just come into the world.
+    /// Parenting can continue in the current Luau turn (for example, a storage clone
+    /// immediately enters a ViewportFrame). Start only once its ownership has settled.
     func runScripts(inside id: UUID) {
-        let inside = Set([id] + model.descendants(of: id).map(\.id))
+        if runsSceneScripts && !isViewportHost { pendingWorldScriptStarts.insert(id) }
+    }
+
+    func startPendingWorldScripts() {
+        let pending = pendingWorldScriptStarts
+        pendingWorldScriptStarts.removeAll()
+        guard runsSceneScripts else { return }
+        var inside: Set<UUID> = []
+        for id in pending where model.exists(id) {
+            guard !model.isParked(id) else { continue }
+            inside.formUnion([id] + model.descendants(of: id).map(\.id))
+        }
         let scripts = model.scripts.filter {
             $0.host == .scene && !$0.isModule && $0.enabled && ($0.parentID.map(inside.contains) ?? false)
         }

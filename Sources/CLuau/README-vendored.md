@@ -1,9 +1,11 @@
 # Vendored Luau
 
 Luau 0.640 (https://luau.org, https://github.com/luau-lang/luau), MIT licensed — see
-`LICENSE-luau.txt`. `luau/` holds the `VM`, `Compiler`, `Ast` and `Common` trees
-copied verbatim; `Analysis` (the type checker) and `CodeGen` (the JIT) are left out,
-so type annotations parse and are ignored rather than checked.
+`LICENSE-luau.txt`. `luau/` holds the `VM`, `Compiler`, `Ast`, `Common`, `Analysis`, `Config` and `EqSat` trees
+copied verbatim from https://github.com/luau-lang/luau/releases/tag/0.640.
+`CodeGen` (the JIT) is left out. Analysis is editor-only; annotations remain
+erased by the runtime compiler. The analysis bridge lives in
+`include/studio_luau_analysis.h` and `shim/studio_luau_analysis.cpp`.
 
 Nothing under `luau/` is modified. To update, drop in a newer release's trees.
 

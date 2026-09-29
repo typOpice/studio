@@ -1494,7 +1494,15 @@ function mouseKit.mouse()
 			return state()[8]
 		end,
 		Icon = function()
-			return mouseKit.icon or ""
+			return invoke("input.icon") or ""
+		end,
+		TargetFilter = function()
+			return mouseKit.filter
+		end,
+		UnitRay = function()
+			local s = state()
+			local origin, direction = s[9] or {0, 0, 0}, s[10] or {0, 0, -1}
+			return Ray.new(vector(origin[1], origin[2], origin[3]), vector(direction[1], direction[2], direction[3]))
 		end,
 	}
 	for name, signal in mouseKit.buttons do
@@ -1508,7 +1516,15 @@ function mouseKit.mouse()
 		end,
 	}, function(key, value)
 		if key == "Icon" then
-			mouseKit.icon = value
+			if type(value) ~= "string" then raise("Unable to assign property Icon. string expected, got " .. typeof(value), 3) end
+			invoke("input.icon", value)
+			return true
+		elseif key == "TargetFilter" then
+			if value ~= nil and typeof(value) ~= "Instance" then
+				raise("Unable to assign property TargetFilter. Instance expected, got " .. typeof(value), 3)
+			end
+			mouseKit.filter = value
+			invoke("input.filter", if value ~= nil then nodeId(value) else nil)
 			return true
 		end
 		return false

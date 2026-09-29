@@ -79,14 +79,35 @@ struct LightingUniforms {
     }
 }
 
-/// Mirrors `PointLightData` (48 bytes).
+/// Mirrors `PointLightData` (96 bytes), shared by every local-light class.
 struct PointLightData {
     /// xyz: where, w: range.
     var positionRange: Vec4 = .zero
     /// rgb: colour, w: brightness.
     var colorBrightness: Vec4 = .zero
-    /// x: 1 when it casts ray-traced shadows.
+    /// x: ray-traced shadows, y: kind (point=0, spot=1, surface=2).
     var options: Vec4 = .zero
+    /// xyz: outward face normal, w: cosine of the half-angle.
+    var directionAngle: Vec4 = .zero
+    /// Face tangent axes with half-extents in w.
+    var surfaceU: Vec4 = .zero
+    var surfaceV: Vec4 = .zero
+
+    init() {}
+    init(part: Part, light: PointLight) {
+        let normal = light.face.normal
+        let localU: Vec3 = abs(normal.y) > 0.5 ? Vec3(1, 0, 0) : abs(normal.x) > 0.5 ? Vec3(0, 0, 1) : Vec3(1, 0, 0)
+        let localV = simd_cross(normal, localU)
+        let halfSize = simd_abs(part.size) * 0.5
+        let direction = part.orientation.act(normal)
+        let center = part.position + part.orientation.act(normal * halfSize) + direction * 0.025
+        positionRange = Vec4(light.kind == .point ? part.position : center, min(light.range, PointLight.maximumRange))
+        colorBrightness = Vec4(light.color, light.brightness)
+        options = Vec4(light.shadows ? 1 : 0, light.kind == .point ? 0 : light.kind == .spot ? 1 : 2, 0, 0)
+        directionAngle = Vec4(direction, cos(min(max(light.angle, 0), 180) * .pi / 360))
+        surfaceU = Vec4(part.orientation.act(localU), simd_dot(simd_abs(localU), halfSize))
+        surfaceV = Vec4(part.orientation.act(localV), simd_dot(simd_abs(localV), halfSize))
+    }
 }
 
 /// Mirrors `InstanceInfo` (96 bytes): what a ray needs to shade what it hits.
@@ -133,6 +154,9 @@ struct PointLightData {
     float4 positionRange;
     float4 colorBrightness;
     float4 options;
+    float4 directionAngle;
+    float4 surfaceU;
+    float4 surfaceV;
 };
 
 #if STUDIO_RAYTRACING
@@ -159,6 +183,12 @@ struct InstanceInfo {
 
 #define STUDIO_LIGHTING_PARAMS , constant LightingUniforms &lighting [[buffer(4)]], constant PointLightData *pointLights [[buffer(5)]], depth2d<float> shadowMap [[texture(0)]] STUDIO_RT_PARAMS
 #define STUDIO_LIGHTING_ARGS lighting, pointLights, shadowMap STUDIO_RT_ARGS
+
+static float3 studio_point_lights(float3 position, float3 normal, float3 view, float3 base,
+                                  float specular, float shininess,
+                                  constant LightingUniforms &lighting, constant PointLightData *pointLights
+                                  STUDIO_RT_DECL);
+
 
 // Instance masks: parts that hold a light are left out of that light's shadow rays.
 constant uint studioMaskSolid = 1;
@@ -380,7 +410,7 @@ static float studio_ray_occlusion(float3 position, float3 normal, constant Light
 
 // The colour seen along a reflected ray: another part, the ground, or the sky.
 static float3 studio_ray_reflection(float3 position, float3 normal, float3 direction,
-                                    constant LightingUniforms &lighting,
+                                    constant LightingUniforms &lighting, constant PointLightData *pointLights,
                                     instance_acceleration_structure accel,
                                     device const InstanceInfo *instances,
                                     device const float4 *faceNormals) {
@@ -410,6 +440,8 @@ static float3 studio_ray_reflection(float3 position, float3 normal, float3 direc
         float sky = 0.5 + 0.5 * n.y;
         float3 ambient = lighting.ambient.rgb * 0.8 + lighting.outdoorAmbient.rgb * 0.6 * sky;
         float3 color = info.color.rgb * (ambient + lit * lighting.sunColor.rgb);
+        color += studio_point_lights(point, n, -direction, info.color.rgb, info.shading.x, info.shading.y,
+                                     lighting, pointLights STUDIO_RT_ARGS);
         return mix(color, info.color.rgb * 1.35, info.shading.z);
     }
     if (groundDistance < INFINITY) {
@@ -418,6 +450,8 @@ static float3 studio_ray_reflection(float3 position, float3 normal, float3 direc
         if (shadows && lit > 0.0 && studio_blocked(point + float3(0, 0.03, 0), toLight, 2000.0, 0xFF, accel)) { lit = 0.0; }
         float3 ground = float3(0.19, 0.205, 0.23);
         float3 color = ground * (lighting.ambient.rgb * 0.8 + lighting.outdoorAmbient.rgb * 0.6 + lit * lighting.sunColor.rgb);
+        color += studio_point_lights(point, float3(0, 1, 0), -direction, ground, 0.1, 8.0,
+                                     lighting, pointLights STUDIO_RT_ARGS);
         float fade = saturate(groundDistance / 400.0);
         return mix(color, studio_sky(direction, lighting), fade);
     }
@@ -459,25 +493,42 @@ static float3 studio_point_lights(float3 position, float3 normal, float3 view, f
     int count = int(lighting.outdoorAmbient.w);
     for (int i = 0; i < count; i++) {
         PointLightData light = pointLights[i];
-        float3 toLight = light.positionRange.xyz - position;
-        float distance = length(toLight);
-        float range = light.positionRange.w;
-        if (distance >= range || distance < 1e-4) { continue; }
-        float3 l = toLight / distance;
-        float ndotl = max(dot(normal, l), 0.0);
-        if (ndotl <= 0.0) { continue; }
-        float falloff = 1.0 - distance / range;
-        falloff *= falloff;
+        int samples = light.options.y > 1.5 ? 9 : 1;
+        for (int sample = 0; sample < samples; sample++) {
+            float3 emitter = light.positionRange.xyz;
+            if (samples > 1) {
+                // Fixed nine-point quadrature covers the face, including near its edges.
+                float2 uv = float2(float(sample % 3) - 1.0, float(sample / 3) - 1.0) * 0.75;
+                emitter += light.surfaceU.xyz * light.surfaceU.w * uv.x + light.surfaceV.xyz * light.surfaceV.w * uv.y;
+            }
+            float3 toLight = emitter - position;
+            float distance = length(toLight);
+            float range = light.positionRange.w;
+            if (distance >= range || distance < 1e-4) { continue; }
+            float3 l = toLight / distance;
+            float emission = 1.0;
+            if (light.options.y > 0.5) {
+                float cosine = dot(-l, light.directionAngle.xyz);
+                float edge = light.directionAngle.w;
+                if (cosine <= edge || edge >= 0.999999) { continue; }
+                emission = smoothstep(edge, min(1.0, edge + max((1.0 - edge) * 0.12, 0.001)), cosine);
+            }
+            float ndotl = max(dot(normal, l), 0.0);
+            if (ndotl <= 0.0) { continue; }
+            float falloff = 1.0 - distance / range;
+            falloff *= falloff;
 #if STUDIO_RAYTRACING
-        if (studioRayTraced && light.options.x > 0.5 &&
-            studio_blocked(position + normal * 0.03, l, distance - 0.05, studioMaskSolid, accel)) {
-            continue;
-        }
+            // Directional emitters sit just outside their own face: all intervening
+            // geometry, including another lamp's housing, can block them.
+            uint mask = light.options.y > 0.5 ? 0xFF : studioMaskSolid;
+            if (studioRayTraced && light.options.x > 0.5 &&
+                studio_blocked(position + normal * 0.03, l, max(distance - 0.05, 0.0), mask, accel)) { continue; }
 #endif
-        float3 energy = light.colorBrightness.rgb * light.colorBrightness.w * 1.4 * falloff;
-        float3 h = normalize(l + view);
-        float spec = pow(max(dot(normal, h), 0.0), max(shininess, 1.0)) * specular;
-        total += energy * (base * ndotl + spec * ndotl);
+            float3 energy = light.colorBrightness.rgb * light.colorBrightness.w * 1.4 * falloff * emission / float(samples);
+            float3 h = normalize(l + view);
+            float spec = pow(max(dot(normal, h), 0.0), max(shininess, 1.0)) * specular;
+            total += energy * (base * ndotl + spec * ndotl);
+        }
     }
     return total;
 }
